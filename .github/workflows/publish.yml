@@ -1,0 +1,163 @@
+# Publishes this repository's seeds as a catalog, one channel per branch.
+#
+# The branch *is* the channel. That is the reason this lives here rather than
+# in the control plane's Publish button: with a publisher that reads a setting
+# instead of the branch, nothing stops a catalog built from `develop` being
+# published to the stable channel, and promotion by merge would mean nothing.
+# Here, `develop` publishes edge and a merge into `qa` or `main` promotes it,
+# exactly as the source repository's own branch strategy works.
+#
+# A release tag can have exactly one writer (ADR-081). This is it — so leave
+# `seeds.publish_repo` unset on every control plane, which keeps the UI's
+# Publish button inert rather than making it a second writer aimed at these
+# same tags.
+name: Publish seed catalog
+
+on:
+  push:
+    branches: [develop, qa, main]
+    paths:
+      - "seeds/**"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+# Publishing to this repository's own releases, so the built-in token is
+# enough. That is most of why the branch model is worth having: no personal
+# access token to mint, store, rotate, or leak.
+permissions:
+  contents: write
+
+concurrency:
+  # A floating tag is deleted and recreated, so two runs on one branch would
+  # race to define what the channel holds. Queue rather than cancel: the loser
+  # of a cancelled race would leave the channel reflecting the older commit.
+  group: publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve the channel for this branch
+        id: channel
+        run: |
+          set -euo pipefail
+          case "${{ github.ref_name }}" in
+            develop) tag=seeds-develop-latest; title="Seeds (edge)"; prerelease=true ;;
+            qa)      tag=seeds-qa-latest;      title="Seeds (QA)";   prerelease=true ;;
+            main)    tag=seeds-release-latest; title="Seeds";        prerelease=false ;;
+            *) echo "unexpected branch ${{ github.ref_name }}" >&2; exit 1 ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the packer
+        # ygg-seed is downloaded rather than built: this repository holds seeds,
+        # not Go source, and the source repository is private — so building it
+        # here would mean a read credential for a private repo sitting in a
+        # public repo's CI, which is the token this whole model avoids.
+        #
+        # Trust is HTTPS plus the published SHA256SUMS, the same level an
+        # operator is told to use for yggd itself and the same one a control
+        # plane uses for these very bundles.
+        #
+        # Pinned to the stable channel by default: the packer that decides what
+        # a catalog looks like should not track edge, whichever branch is being
+        # published. The PACKER_CHANNEL repository variable overrides it, which
+        # exists for exactly one situation — ygg-seed reaching release-latest
+        # only once the change that publishes it is promoted to main, so until
+        # then this repo sets PACKER_CHANNEL=develop-latest and removes it
+        # afterwards. A variable rather than a silent fallback: taking edge
+        # without being asked is the drift the default is here to prevent.
+        env:
+          RELEASES_REPO: arasoi/yggdrasil-releases
+          RELEASE_TAG: ${{ vars.PACKER_CHANNEL || 'release-latest' }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/$RELEASES_REPO/releases/download/$RELEASE_TAG"
+          curl -fsSL -o ygg-seed "$base/ygg-seed-linux-amd64"
+          curl -fsSL -o SHA256SUMS.bin "$base/SHA256SUMS"
+
+          # grep the one line rather than `sha256sum -c` the whole file, which
+          # would fail on every asset not downloaded here.
+          grep ' ygg-seed-linux-amd64$' SHA256SUMS.bin \
+            | sed 's| ygg-seed-linux-amd64$| ygg-seed|' > ygg-seed.sha256
+          sha256sum -c ygg-seed.sha256
+
+          chmod +x ygg-seed
+
+      - name: Validate every bundle
+        # The strict gate, and the packer's smoke test in one: this calls the
+        # same loader a control plane does, so a bundle that fails here is one
+        # that would have failed on somebody's control plane instead.
+        run: ./ygg-seed validate seeds
+
+      - name: Lint every bundle
+        # Advice, never a gate: these are rules the loader deliberately does not
+        # enforce, because it is applied to bundles older releases wrote. A
+        # stale version or a backup.include naming nothing is worth seeing on
+        # the change that introduced it without failing a publish over it.
+        run: ./ygg-seed lint seeds || true
+
+      - name: Pack the catalog
+        # Runs to completion before anything on the remote is touched. The
+        # packer loads every bundle through the real loader and refuses a
+        # version version.Compare cannot order, so a catalog nobody could
+        # install fails here while the existing release is still intact —
+        # deleting it first and then discovering that would leave the channel
+        # empty, which is worse than not having published.
+        run: |
+          set -euo pipefail
+          ./ygg-seed pack \
+            -seeds seeds \
+            -out dist \
+            -channel "${{ github.ref_name }}" \
+            -repository "${{ github.repository }}"
+          ls -la dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.channel.outputs.tag }}
+          TITLE: ${{ steps.channel.outputs.title }}
+          PRERELEASE: ${{ steps.channel.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          # find rather than ls or grep: it exits 0 with no matches, so an empty
+          # result cannot kill the run under set -e/pipefail.
+          seed_count=$(find dist -name '*.tar.gz' | wc -l | tr -d ' ')
+          if [ "$seed_count" -eq 0 ]; then
+            echo "::error::packed no seeds; refusing to replace $TAG with an empty catalog" >&2
+            exit 1
+          fi
+
+          notes=$(mktemp)
+          cat > "$notes" <<EOF
+          Seed definitions for Yggdrasil, published from \`${GITHUB_REF_NAME}\` at ${GITHUB_SHA}.
+
+          A control plane with \`seed_channel: ${GITHUB_REF_NAME}\` reads this release's
+          \`seeds.json\` and offers each seed's updates on its Seeds page. Bundles are
+          checksum-verified against \`SHA256SUMS\` and validated before they replace anything.
+
+          Catalog: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/seeds.json
+          EOF
+
+          args=(--repo "$GITHUB_REPOSITORY" --title "$TITLE — $seed_count seeds" --notes-file "$notes")
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+
+          # The tag floats: there is exactly one catalog per channel and it is
+          # always current, so replacing means deleting first — GitHub will not
+          # re-point an existing release's assets, and leaving the old ones
+          # behind would publish a seeds.json naming bundles beside stale ones
+          # it does not name.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          fi
+
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" "${args[@]}"

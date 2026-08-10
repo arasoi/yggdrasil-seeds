@@ -1,0 +1,141 @@
+id: ark-survival-ascended
+schema: 3
+name: ARK Survival Ascended
+icon: "🦖"
+description: >
+  ARK Survival Ascended exercises shared installs and clusters: one SteamCMD
+  install per node, writable server state for saves and config, and a shared
+  cluster volume for map transfers and cluster identity. ARK ASA has no
+  native Linux dedicated server, so the primary container runs the Windows
+  binary under GE-Proton via the ygg-proton helper in
+  images/base-steamcmd-proton (ADR-047).
+version: "4.1.0"
+
+# The bundled target is the x86_64 Windows dedicated server, run under
+# Proton. The architecture here is the *node's*, not the binary's.
+architectures: [amd64]
+
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container rather than on the node host, so the
+  # seed names which one (ADR-057). This is the image the agent was already
+  # using by default; naming it makes what runs visible here instead of in a
+  # constant inside the installer.
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 2430930
+
+server:
+  writable_paths:
+    - { from: saved, to: /game/ShooterGame/Saved }
+    - { from: config, to: /game/ShooterGame/Saved/Config }
+    # HOME for the container's steam user. Everything Proton keeps per
+    # server lives under here — the Wine prefix (compatdata), the native
+    # steamclient.so ygg-proton stages into .steam/sdk64, and Proton's own
+    # scratch state — so it must be per-server and writable, never part of
+    # the shared read-only install (ADR-018).
+    - { from: home, to: /home/steam }
+
+cluster:
+  supported: true
+  mount: /cluster
+  args: ["-clusterid={{.ClusterID}}", "-ClusterDirOverride=/cluster"]
+
+containers:
+  - role: game
+    primary: true
+    # base-steamcmd-proton directly, not a dedicated yggdrasil/ark-asa
+    # image: nothing ARK-specific is baked in, so the same image serves any
+    # Steam-distributed Windows-only dedicated server.
+    image: ghcr.io/arasoi/base-steamcmd-proton:release-latest
+    # ygg-proton handles the Proton invocation details that are easy to get
+    # wrong and fail obscurely (prefix directory creation, the native
+    # steamclient.so staging, absolute-path resolution, and using
+    # waitforexitandrun so the container does not exit while the game is
+    # still starting). See that script for why each step exists.
+    command: "ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}"
+    workdir: /game
+    env:
+      HOME: /home/steam
+      # The image always takes ownership of HOME; these are the seed's own
+      # writable mounts that also have to belong to the container's user.
+      # Unreal fails softly without it — unable to create ShooterGame.log it
+      # falls back to Wine's stubbed Windows event log and dies with nothing
+      # to read (ADR-047).
+      YGG_PROTON_CHOWN_DIRS: "/game/ShooterGame/Saved /cluster"
+      # Must end in the Steam app id — Proton's protonfixes parses it back
+      # out of this path with a regex.
+      STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/2430930
+      STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
+      # Without this ARK crashes instantly in VKD3D-Proton's D3D12 path
+      # (dxgi -> d3d12core -> d3d12, null-pointer access violation), which
+      # passing -nullrhi does not prevent. Forcing Wine's own D3D
+      # implementation avoids it. Confirmed against the real binary.
+      PROTON_USE_WINED3D: "1"
+      # ARK's depot ships its own Windows steamclient64.dll, and the
+      # Windows DLL search order prefers the application directory, so that
+      # native copy wins over anything Proton stages into the prefix. It
+      # then blocks forever waiting for a Steam client that does not exist
+      # — the server reached exactly this point and hung indefinitely,
+      # with or without network access. Forcing the builtin makes the load
+      # fail fast instead, and the server boots.
+      #
+      # The cost is real and not yet fully assessed: the server logs
+      # "Steam Subsystem initialized: FAILED". ARK ASA lists servers
+      # through Epic Online Services rather than the Steam master server,
+      # so this is expected not to prevent players joining — but that has
+      # NOT been verified with a real game client. Revisit before treating
+      # this seed as production-ready.
+      WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
+    ports:
+      - { name: game, protocol: udp, default: 7777 }
+      - { name: query, protocol: udp, default: 27015 }
+      - { name: rcon, protocol: tcp, default: 27020 }
+
+variables:
+  # ASA's maps carry a "_WP" suffix (Unreal Engine 5 World Partition).
+  # Plain "TheIsland" is the ASE name and does not exist in ASA's install.
+  - { name: map, default: TheIsland_WP, editable: true }
+  - { name: session_name, default: YggdrasilARK, editable: true }
+  - { name: max_players, default: "70", editable: true }
+  # RCON only actually binds its port when an admin password is set —
+  # verified live: without this the server starts normally but nothing
+  # listens on the RCON port at all. Change it before exposing a server;
+  # it is also the in-game EnableCheats password.
+  - { name: admin_password, default: changeme, editable: true }
+
+# Readiness is a declared mode now, not a substring, and the pattern is a Go
+# regular expression. This one is verified verbatim against a live server:
+#   Server: "Yggdrasil ARK" has successfully started!
+# An earlier rule ("Server has completed startup") never matched — it was
+# written from the schema sketch rather than from real output.
+#
+# The timeout is generous because ARK genuinely is: a real depot boots in about
+# 18 seconds once installed, but a cold Wine prefix takes considerably longer.
+# on_timeout defaults to reporting running anyway with a reason, so a pattern
+# that stops matching after a game update delays this server rather than
+# stranding it.
+ready:
+  mode: log
+  pattern: "has successfully started!"
+  timeout: 900s
+
+# No crash block, and the candidate stays a comment: `crash: {mode: log}` is
+# implemented now, and a match KILLS THE POD so the ordinary exit path can restart
+# it. That raises the bar well above readiness's -- a wrong readiness pattern
+# delays a server, a wrong crash pattern stops a healthy one -- and "Fatal error"
+# has never been checked against a running ARK server for how often it appears
+# without being terminal.
+#
+# Worth noting what this would and would not have caught: ADR-047's Crashpad hang,
+# the failure that motivates the whole mode, printed no distinctive line at all. So
+# even a verified pattern here is not the fix for that; a readiness timeout is.
+#
+# crash:
+#   mode: log
+#   pattern: "Fatal error"
+
+backup:
+  include: [saved, config]

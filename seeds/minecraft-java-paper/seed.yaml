@@ -1,0 +1,569 @@
+id: minecraft-java-paper
+schema: 3
+name: Minecraft Java (Paper)
+icon: "☕"
+description: >
+  Vanilla-compatible Minecraft Java Edition server running Paper, with
+  plugin support. Runs on any architecture with a JRE.
+version: "2.5.0"
+
+# Any JRE-capable node: Paper itself ships no native code.
+architectures: [amd64, arm64]
+
+install:
+  # Each server gets its own jar rather than sharing one: unlike ARK's
+  # identical map data, two Paper servers commonly run different versions.
+  shared: false
+  # PaperMC's download API (fill.papermc.io/v3) hands out a content-addressed
+  # URL per build rather than one a version and build number alone can
+  # template — resolving that is an API lookup, not a URL shape, and
+  # internal/agent/install deliberately stays a plain fetch-and-place (ADR-018
+  # reserves multi-step resolution for steamcmd in phase 5). So the URL
+  # itself is the editable variable: bumping the Minecraft version is an
+  # operator editing one field, still a data change rather than a Go one
+  # (ADR-007). Check https://fill.papermc.io/v3/projects/paper for a newer
+  # build's URL.
+  mount: { path: /game, mode: ro }
+  # No image: a plain fetch needs no container, so this runs in the agent
+  # process exactly as it always has. install.image is forbidden rather than
+  # ignored here, so a seed cannot claim to use a container it never pulls.
+  steps:
+    - op: download
+      url: "{{.Vars.download_url}}"
+      # Required now, where schema 2 let it default to the URL's basename. That
+      # default was a trap for exactly this seed: the URL is a variable, so its
+      # basename could change under the command that references it.
+      into: server.jar
+
+server:
+  writable_paths:
+    # No subdirectory split needed: everything Paper writes (world, logs,
+    # server.properties, plugins) lives under one server-owned directory.
+    - { from: "", to: /data }
+
+config:
+  files:
+    # Paper refuses to start without eula.txt; there is no prompt to answer
+    # inside a container, so it has to be written before first boot. Both
+    # files live in configs/ (ADR-049) rather than inline — real files a
+    # seed author can edit with their own tools, not YAML string blocks.
+    - path: eula.txt
+      source_path: configs/eula.txt.tmpl
+      # Written only if absent, so an operator who edits it keeps their edit.
+      # Nothing in this file depends on a variable, so rewriting it on every
+      # rebuild -- which is what `always` does -- was never useful. The cost of
+      # `once` is real and worth knowing: a later change to this template will
+      # never reach a server that already has the file.
+      manage: once
+    - path: server.properties
+      source_path: configs/server.properties.tmpl
+
+containers:
+  - role: game
+    primary: true
+    image: eclipse-temurin:21-jre-alpine
+    command: "java -Xmx{{.Vars.memory_mib}}M -jar /game/server.jar --nogui"
+    workdir: /data
+    ports:
+      - { name: game, protocol: tcp, default: 25565 }
+      # Allocated whether or not RCON is switched on. A port an operator
+      # might enable later is cheaper to hold than one they cannot get
+      # without a rebuild, and the node's range is not scarce (ADR-061).
+      - { name: rcon, protocol: tcp, default: 25575 }
+      # Same reasoning as rcon, and UDP because the query protocol is. It
+      # needs an allocation of its own even though nothing else references
+      # it: query.port has no relationship to server-port, so without one
+      # the server falls back to its built-in 25565 default and listens on
+      # a port that is neither allocated nor published, making the toggle
+      # a control that does nothing.
+      - { name: query, protocol: udp, default: 25565 }
+
+# Group decoration only: which variables are in a group, and what order the
+# groups appear in, both come from the variables themselves (ADR-076). This
+# block only adds a description and, for the settings most operators never
+# touch, a collapsed default.
+groups:
+  - name: Server
+    description: Identity, and how players reach this server.
+  - name: World
+    description: >-
+      Applied when the world is first generated. Changing them later does not
+      regenerate a world that already exists.
+  - name: Gameplay
+  - name: Players and permissions
+  - name: Performance
+    description: >-
+      The defaults suit a small server. View and simulation distance are the
+      two that cost CPU and memory sharply as they rise.
+    collapsed: true
+  - name: Remote access
+    description: >-
+      RCON lets external tools run console commands. Yggdrasil's own console
+      does not use it and does not need it switched on.
+    collapsed: true
+  - name: Resource pack
+    collapsed: true
+
+variables:
+  # ---- Not server.properties: how this seed is built and run -------------
+  - name: download_url
+    group: Server
+    label: Paper download URL
+    description: >-
+      PaperMC hands out a content-addressed URL per build rather than one a
+      version number can template, so bumping Minecraft means pasting a new
+      URL here. Find one at https://fill.papermc.io/v3/projects/paper.
+    default: "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar"
+    editable: true
+  - name: memory_mib
+    group: Server
+    type: number
+    label: Heap size (MiB)
+    description: Passed to the JVM as -Xmx. Leave headroom over the container's memory limit.
+    default: "2048"
+    min: 512
+    max: 65536
+    step: 256
+    editable: true
+
+  # ---- server.properties -------------------------------------------------
+  - name: motd
+    group: Server
+    label: MOTD
+    description: The line shown under the server name in the client's list. 59 characters max.
+    default: "A Yggdrasil server"
+    editable: true
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    default: "20"
+    min: 0
+    max: 1000
+    step: 1
+    editable: true
+  - name: online_mode
+    group: Server
+    type: bool
+    label: Verify accounts with Mojang
+    description: >-
+      Turn off only behind a proxy that authenticates for you. Off on a
+      reachable server lets anyone join as anyone.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: enforce_secure_profile
+    group: Server
+    type: bool
+    label: Require signed chat profiles
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: prevent_proxy_connections
+    group: Server
+    type: bool
+    label: Block proxied connections
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: hide_online_players
+    group: Server
+    type: bool
+    label: Hide the player list
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  - name: level_name
+    group: World
+    label: World name
+    description: The directory the world is stored in.
+    default: "world"
+    editable: true
+  - name: level_seed
+    group: World
+    label: Seed
+    description: Blank generates a random world.
+    default: ""
+    editable: true
+  - name: level_type
+    group: World
+    type: select
+    label: World type
+    default: "minecraft:normal"
+    editable: true
+    options:
+      - { value: "minecraft:normal", label: "Normal" }
+      - { value: "minecraft:flat", label: "Superflat" }
+      - { value: "minecraft:large_biomes", label: "Large biomes" }
+      - { value: "minecraft:amplified", label: "Amplified" }
+      - { value: "minecraft:single_biome_surface", label: "Single biome" }
+  - name: generate_structures
+    group: World
+    type: bool
+    label: Generate structures
+    description: Villages, temples, strongholds and the rest.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: max_world_size
+    group: World
+    type: number
+    label: World border radius (blocks)
+    default: "29999984"
+    min: 1
+    max: 29999984
+    step: 1
+    editable: true
+
+  - name: gamemode
+    group: Gameplay
+    type: select
+    label: Default game mode
+    default: "survival"
+    editable: true
+    options:
+      - { value: "survival", label: "Survival" }
+      - { value: "creative", label: "Creative" }
+      - { value: "adventure", label: "Adventure" }
+      - { value: "spectator", label: "Spectator" }
+  - name: force_gamemode
+    group: Gameplay
+    type: bool
+    label: Force game mode on join
+    description: Puts players back into the default mode every time they connect.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: difficulty
+    group: Gameplay
+    type: select
+    label: Difficulty
+    default: "easy"
+    editable: true
+    options:
+      - { value: "peaceful", label: "Peaceful" }
+      - { value: "easy", label: "Easy" }
+      - { value: "normal", label: "Normal" }
+      - { value: "hard", label: "Hard" }
+  - name: hardcore
+    group: Gameplay
+    type: bool
+    label: Hardcore
+    description: >-
+      Death is permanent and difficulty locks to hard. Not something to turn
+      on for a world that is already being played.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: pvp
+    group: Gameplay
+    type: bool
+    label: Player versus player
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: allow_flight
+    group: Gameplay
+    type: bool
+    label: Allow flight
+    description: >-
+      Survival-mode flight from mods or plugins. Off makes the server kick
+      players it believes are flying.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: allow_nether
+    group: Gameplay
+    type: bool
+    label: Allow the Nether
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: spawn_monsters
+    group: Gameplay
+    type: bool
+    label: Spawn monsters
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: spawn_protection
+    group: Gameplay
+    type: number
+    label: Spawn protection radius
+    description: Blocks around spawn that only operators may build in. 0 disables it.
+    default: "16"
+    min: 0
+    max: 1000
+    step: 1
+    editable: true
+
+  - name: white_list
+    group: Players and permissions
+    type: bool
+    label: Whitelist
+    description: >-
+      Only listed players may join. The list itself is managed from the
+      console or the Files tab.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: enforce_whitelist
+    group: Players and permissions
+    type: bool
+    label: Kick non-whitelisted players who are already online
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    show_if: { name: white_list, equals: "true" }
+    editable: true
+  - name: op_permission_level
+    group: Players and permissions
+    type: select
+    label: Operator permission level
+    default: "4"
+    editable: true
+    options:
+      - { value: "1", label: "1 - bypass spawn protection" }
+      - { value: "2", label: "2 - singleplayer commands" }
+      - { value: "3", label: "3 - multiplayer management" }
+      - { value: "4", label: "4 - everything, including stop" }
+  - name: function_permission_level
+    group: Players and permissions
+    type: select
+    label: Function permission level
+    default: "2"
+    editable: true
+    options:
+      - { value: "1", label: "1" }
+      - { value: "2", label: "2" }
+      - { value: "3", label: "3" }
+      - { value: "4", label: "4" }
+  - name: player_idle_timeout
+    group: Players and permissions
+    type: number
+    label: Idle kick (minutes)
+    description: 0 never kicks.
+    default: "0"
+    min: 0
+    max: 1440
+    step: 1
+    editable: true
+  - name: enable_command_block
+    group: Players and permissions
+    type: bool
+    label: Enable command blocks
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  - name: view_distance
+    group: Performance
+    type: range
+    label: View distance (chunks)
+    description: The single biggest lever on memory and CPU.
+    default: "10"
+    min: 3
+    max: 32
+    step: 1
+    editable: true
+  - name: simulation_distance
+    group: Performance
+    type: range
+    label: Simulation distance (chunks)
+    description: How far from a player entities and redstone keep ticking.
+    default: "10"
+    min: 3
+    max: 32
+    step: 1
+    editable: true
+  - name: entity_broadcast_range_percentage
+    group: Performance
+    type: range
+    label: Entity broadcast range (%)
+    default: "100"
+    min: 10
+    max: 1000
+    step: 10
+    editable: true
+  - name: network_compression_threshold
+    group: Performance
+    type: number
+    label: Compression threshold (bytes)
+    description: -1 disables compression entirely. 0 compresses everything.
+    default: "256"
+    min: -1
+    max: 65536
+    step: 1
+    editable: true
+  - name: sync_chunk_writes
+    group: Performance
+    type: bool
+    label: Synchronous chunk writes
+    description: Safer against a hard crash, slower on spinning disks.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: max_tick_time
+    group: Performance
+    type: number
+    label: Watchdog timeout (ms)
+    description: The server kills itself if one tick exceeds this. -1 disables the watchdog.
+    default: "60000"
+    min: -1
+    # Step 1, not a rounder 1000: HTML's step base is the min attribute when
+    # one is set, so a step of 1000 against min -1 would make 60000 — and
+    # every round number an operator would type — a step mismatch, which
+    # blocks the whole form from submitting.
+    step: 1
+    max: 600000
+    editable: true
+  - name: pause_when_empty_seconds
+    group: Performance
+    type: number
+    label: Pause when empty after (seconds)
+    description: Stops ticking the world while nobody is online. 0 never pauses.
+    default: "60"
+    min: 0
+    max: 86400
+    step: 10
+    editable: true
+
+  - name: enable_status
+    group: Remote access
+    type: bool
+    label: Answer server-list pings
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: enable_query
+    group: Remote access
+    type: bool
+    label: Enable GameSpy query
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: enable_rcon
+    group: Remote access
+    type: bool
+    label: Enable RCON
+    description: >-
+      The RCON port is allocated either way; this decides whether the server
+      listens on it. It also needs a password below.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: rcon_password
+    group: Remote access
+    type: password
+    label: RCON password
+    description: >-
+      Required when RCON is on. Left blank, RCON stays off however the toggle
+      above is set - the server refuses to enable it with an empty password,
+      so writing that pair would leave the toggle claiming something untrue.
+    default: ""
+    show_if: { name: enable_rcon, equals: "true" }
+    editable: true
+  - name: broadcast_console_to_ops
+    group: Remote access
+    type: bool
+    label: Show console commands to operators
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: broadcast_rcon_to_ops
+    group: Remote access
+    type: bool
+    label: Show RCON commands to operators
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    show_if: { name: enable_rcon, equals: "true" }
+    editable: true
+
+  - name: resource_pack
+    group: Resource pack
+    label: Resource pack URL
+    description: Blank serves no pack.
+    default: ""
+    editable: true
+  - name: resource_pack_sha1
+    group: Resource pack
+    label: Resource pack SHA-1
+    description: >-
+      Strongly recommended. Without it clients cache the pack by URL, so an
+      updated pack at the same URL is never re-downloaded.
+    default: ""
+    show_if: { name: resource_pack, not_equals: "" }
+    editable: true
+  - name: require_resource_pack
+    group: Resource pack
+    type: bool
+    label: Require the pack
+    description: Players who decline are kicked.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    show_if: { name: resource_pack, not_equals: "" }
+    editable: true
+
+# Readiness stays immediate, and the candidate patterns are kept as comments
+# rather than as fields.
+#
+# `Done (` and `Exception in server tick loop` are both well known for
+# Minecraft, but neither has been checked against real output *by this project*
+# — and a pattern in a field looks active whether or not anyone verified it,
+# which is precisely how logs.ready came to be declared by four seeds and
+# matched by none (ADR-067). ARK's and Valheim's patterns were verified live,
+# so they are fields; these are not, so they are not.
+#
+# Note also that `ready.pattern` is a Go regular expression, not the substring
+# logs.ready was: `Done (` would need escaping as `Done \(`.
+
+stop:
+  command: "stop"
+  timeout: 60s
+  then: SIGTERM
+
+# `copy` only. The Minecraft client's own join flow is pasting an address into
+# "Add Server", which takes exactly this `host:port` — verifiable from the game's
+# documented UI. Minecraft registers no URI scheme, so there is no `uri` to give.
+connect:
+  label: "Add this server"
+  copy: "{{.Endpoint.game}}"
+
+# Paper's join and leave lines, which are stable across every version and which
+# every Minecraft log analyser in existence already relies on:
+#
+#   [12:00:00] [Server thread/INFO]: Steve joined the game
+#   [12:03:11] [Server thread/INFO]: Steve left the game
+#
+# `\S+` rather than `\w+` because a Bedrock player crossing over through a proxy
+# can have a name with a leading dot, and because a name is whatever the server
+# printed rather than whatever we assume it may contain.
+#
+# These maintain the player list on the server's page and the count on the fleet
+# list; nothing else depends on them, which is what makes them safe to add to a
+# seed that has been running without them.
+logs:
+  events:
+    - { event: join, pattern: '(?P<player>\S+) joined the game' }
+    - { event: leave, pattern: '(?P<player>\S+) left the game' }

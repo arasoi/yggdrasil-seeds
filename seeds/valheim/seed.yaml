@@ -1,0 +1,419 @@
+id: valheim
+schema: 3
+name: Valheim
+icon: "🪓"
+description: >
+  Valheim dedicated server. Exercises the SteamCMD install path on a game
+  with an official Linux dedicated server binary — no Proton wrapper
+  needed, unlike ARK Survival Ascended.
+version: "2.2.0"
+
+# The dedicated server ships amd64 Linux binaries only.
+architectures: [amd64]
+
+install:
+  # Each server gets its own copy: unlike ARK's identical map data, two
+  # Valheim worlds have no reason to share one install (same call Paper's
+  # seed makes for its own jar).
+  shared: false
+  # Valheim Dedicated Server on Steam — confirmed reachable via
+  # `steamcmd +login anonymous +app_info_print 896660` during
+  # images/base-steamcmd's own smoke test.
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container, so the seed names which one (ADR-057).
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 896660
+
+server:
+  writable_paths:
+    # World and character saves both live under one operator-facing root;
+    # no subdirectory split needed (same shape Paper's seed uses).
+    - { from: "", to: /data }
+
+containers:
+  - role: game
+    primary: true
+    # base-linux, not base-steamcmd: the install has already materialised the
+    # depot by the time this runs, so this container only execs the binary and
+    # has no use for SteamCMD (which is ~3x the image). Note there is no
+    # ":latest" tag on any of these images — images.yml publishes only
+    # develop-latest, qa-latest, release-latest and :<short-sha> (ADR-047).
+    image: ghcr.io/arasoi/base-linux:release-latest
+    # linux64/ (bundled shared libraries) has to be on LD_LIBRARY_PATH for
+    # the binary to start at all. SteamAppId must be the *game's* app id
+    # (892970), not the dedicated server's (896660) used for install above
+    # — the server binary still talks to the Steam API as the game client
+    # would, and gets this wrong silently otherwise. Both are Iron Gate's
+    # own documented launch requirements (start_server.sh, shipped inside
+    # the install itself), not something specific to this project. Their
+    # own docker/Dockerfile additionally installs libatomic1, libpulse0 and
+    # libpulse-dev — that last one not for headers, but because it is what
+    # drags in libpulse-mainloop-glib0, the third library PlayFab Party's
+    # libparty.so links and the one ADR-070 missed. base-linux installs all
+    # three directly now (ADR-073), so this seed needs nothing game-specific.
+    # Without them the server boots and accepts direct connections but never
+    # completes PlayFab: it retries `create and join network` every 30s
+    # forever and no join code is ever issued.
+    command: >-
+      sh -c 'export LD_LIBRARY_PATH=./linux64:$LD_LIBRARY_PATH;
+      export SteamAppId=892970;
+      exec ./valheim_server.x86_64 -nographics -batchmode
+      -port {{.Ports.game}} -name "{{.Vars.server_name}}"
+      -world "{{.Vars.world_name}}" -password "{{.Vars.password}}"
+      -public {{.Vars.public}} -savedir /data
+      -saveinterval {{.Vars.save_interval}} -backups {{.Vars.backup_count}}
+      -backupshort {{.Vars.backup_short}} -backuplong {{.Vars.backup_long}}
+      {{if .Vars.instance_id}}-instanceid "{{.Vars.instance_id}}"{{end}}
+      {{if .Vars.preset}}-preset {{.Vars.preset}}{{end}}
+      {{if .Vars.combat}}-modifier combat {{.Vars.combat}}{{end}}
+      {{if .Vars.death_penalty}}-modifier deathpenalty {{.Vars.death_penalty}}{{end}}
+      {{if .Vars.resources}}-modifier resources {{.Vars.resources}}{{end}}
+      {{if .Vars.raids}}-modifier raids {{.Vars.raids}}{{end}}
+      {{if .Vars.portals}}-modifier portals {{.Vars.portals}}{{end}}
+      {{.Vars.no_build_cost}} {{.Vars.player_events}}
+      {{.Vars.passive_mobs}} {{.Vars.no_map}} {{.Vars.crossplay}}'
+    workdir: /game
+    ports:
+      - { name: game, protocol: udp, default: 2456 }
+      # Valheim's Steam query port is hardcoded to game_port+1 inside the
+      # binary, with no flag to set it independently — offset_from/offset
+      # exist specifically for this (ADR-048): the control plane allocates
+      # it to whatever the real game port ends up being, plus one, rather
+      # than as an independent reservation that could drift apart from it.
+      - { name: query, protocol: udp, offset_from: game, offset: 1 }
+
+# Every launch argument Iron Gate documents on
+# https://valheim.com/support/a-guide-to-dedicated-servers/ is exposed here,
+# except the four this project owns rather than the operator: -port (allocated
+# from the node's range, ADR-061), -savedir (fixed to the seed's writable
+# mount), -logFile (the agent captures stdout, and redirecting it would empty
+# the console and break log-value extraction), and -nographics/-batchmode.
+#
+# crossplay_flag became crossplay here, which this seed previously recorded as
+# something it could not safely do: a stored value is keyed by name, so a rename
+# drops what an operator chose and reinstates the default — which for this
+# variable would have turned crossplay back ON for every server that had
+# deliberately turned it off (ADR-074 declined the rename for exactly that
+# reason). renamed_from is what makes it safe: it desugars into a rename
+# migration, so a value stored under the old name is carried to the new one on
+# the next rebuild, once, idempotently.
+variables:
+  # ---- Server ------------------------------------------------------------
+  - name: server_name
+    group: Server
+    label: Server name
+    description: Shown in the in-game server browser.
+    default: "A Yggdrasil server"
+    editable: true
+  - name: world_name
+    group: Server
+    label: World name
+    description: A world with this name is created if it does not exist; an existing name loads that world.
+    default: "Dedicated"
+    editable: true
+  - name: password
+    group: Server
+    type: password
+    label: Password
+    # Both rules are the game's, enforced by it at startup rather than here:
+    # the schema has no length or cross-field constraint to express them, and
+    # inventing one would be a second place to keep in sync with Iron Gate.
+    description: At least 5 characters, and must not appear anywhere in the server name — the server refuses to start otherwise.
+    default: "changeme123"
+    editable: true
+  - name: public
+    group: Server
+    type: radio
+    label: Visibility
+    default: "1"
+    editable: true
+    options:
+      - { value: "1", label: "Listed in the server browser" }
+      - { value: "0", label: "Hidden — joinable by IP or join code only" }
+  # Crossplay routes the server through PlayFab, which is what makes it
+  # reachable by Xbox and Game Pass players — and, separately, what makes it
+  # print a join code at all. Without this flag there is no code to extract,
+  # which is why it defaults on rather than off.
+  #
+  # A bool with a whole flag as its true value, because the game has no
+  # `-crossplay 0`: the flag is present or absent, so "off" is the empty
+  # string. This is what true_value/false_value exist for (ADR-074) — before
+  # them this was a bare text field an operator had to type "-crossplay" into.
+  - name: crossplay
+    renamed_from: [crossplay_flag]
+    group: Server
+    type: bool
+    label: Crossplay (PlayFab)
+    description: Lets Xbox, Game Pass and PC players share the server, and is what makes it print a join code. Also disables BepInEx, so mods and crossplay are mutually exclusive.
+    true_value: "-crossplay"
+    false_value: ""
+    default: "-crossplay"
+    editable: true
+  - name: instance_id
+    group: Server
+    label: Instance ID
+    description: Only needed when two servers share both a port and a MAC address, which Yggdrasil already avoids by allocating each server its own port. Leave blank.
+    default: ""
+    editable: true
+
+  # ---- Saving and backups ------------------------------------------------
+  # These four are the game's own in-process saving and backup rotation, which
+  # is separate from and unaffected by Yggdrasil's backup jobs (ADR-042).
+  - name: save_interval
+    group: Saving and backups
+    type: number
+    label: Save interval (seconds)
+    description: How often the world is written to disk. Iron Gate's default is 1800 (30 minutes).
+    default: "1800"
+    min: 60
+    max: 86400
+    step: 60
+    editable: true
+  - name: backup_count
+    group: Saving and backups
+    type: number
+    label: Backups kept
+    description: How many of the game's own automatic backups to retain.
+    default: "4"
+    min: 0
+    max: 20
+    step: 1
+    editable: true
+  - name: backup_short
+    group: Saving and backups
+    type: number
+    label: First backup interval (seconds)
+    description: Interval before the first automatic backup. Default 7200 (2 hours).
+    default: "7200"
+    min: 300
+    max: 604800
+    step: 300
+    editable: true
+  - name: backup_long
+    group: Saving and backups
+    type: number
+    label: Later backup interval (seconds)
+    description: Interval between subsequent automatic backups. Default 43200 (12 hours).
+    default: "43200"
+    min: 300
+    max: 604800
+    step: 300
+    editable: true
+
+  # ---- World preset ------------------------------------------------------
+  # A preset sets every modifier below at once; an individual modifier then
+  # overrides that baseline. Leaving both alone is the game's normal balance.
+  - name: preset
+    group: World preset
+    type: select
+    label: Difficulty preset
+    description: Sets all five modifiers at once. Anything chosen below overrides this.
+    default: ""
+    editable: true
+    options:
+      - { value: "",          label: "Normal — the game's default balance" }
+      - { value: "casual",    label: "Casual" }
+      - { value: "easy",      label: "Easy" }
+      - { value: "hard",      label: "Hard" }
+      - { value: "hardcore",  label: "Hardcore" }
+      - { value: "immersive", label: "Immersive" }
+      - { value: "hammer",    label: "Hammer (building)" }
+
+  # ---- World modifiers ---------------------------------------------------
+  # Every modifier is enum-valued, not numeric — Valheim has no multiplier
+  # settings of any kind (no XP, loot or damage scalars). Those come from
+  # BepInEx mods, which -crossplay disables outright, so there is deliberately
+  # no "Multipliers" group here: it would be a group of nothing.
+  - name: combat
+    group: World modifiers
+    type: select
+    label: Combat
+    description: Enemy damage taken and dealt.
+    default: ""
+    editable: true
+    options:
+      - { value: "",         label: "Normal" }
+      - { value: "veryeasy", label: "Very easy" }
+      - { value: "easy",     label: "Easy" }
+      - { value: "hard",     label: "Hard" }
+      - { value: "veryhard", label: "Very hard" }
+  - name: death_penalty
+    group: World modifiers
+    type: select
+    label: Death penalty
+    description: Skill loss and item drops on death.
+    default: ""
+    editable: true
+    options:
+      - { value: "",         label: "Normal" }
+      - { value: "casual",   label: "Casual — keep everything" }
+      - { value: "veryeasy", label: "Very easy" }
+      - { value: "easy",     label: "Easy" }
+      - { value: "hard",     label: "Hard" }
+      - { value: "hardcore", label: "Hardcore — lose everything" }
+  - name: resources
+    group: World modifiers
+    type: select
+    label: Resource rate
+    description: How much you gather from trees, ore and other nodes.
+    default: ""
+    editable: true
+    options:
+      - { value: "",         label: "Normal" }
+      - { value: "muchless", label: "Much less" }
+      - { value: "less",     label: "Less" }
+      - { value: "more",     label: "More" }
+      - { value: "muchmore", label: "Much more" }
+      - { value: "most",     label: "Most" }
+  - name: raids
+    group: World modifiers
+    type: select
+    label: Raids
+    description: How often events attack your base.
+    default: ""
+    editable: true
+    options:
+      - { value: "",         label: "Normal" }
+      - { value: "none",     label: "None" }
+      - { value: "muchless", label: "Much less often" }
+      - { value: "less",     label: "Less often" }
+      - { value: "more",     label: "More often" }
+      - { value: "muchmore", label: "Much more often" }
+  - name: portals
+    group: World modifiers
+    type: select
+    label: Portals
+    description: What may be carried through a portal.
+    default: ""
+    editable: true
+    options:
+      - { value: "",         label: "Normal — no ores or metal" }
+      - { value: "casual",   label: "Casual — everything allowed" }
+      - { value: "hard",     label: "Hard — no metals or crypt keys" }
+      - { value: "veryhard", label: "Very hard — no portals at all" }
+
+  # ---- World toggles -----------------------------------------------------
+  # -setkey takes a bare key and is repeatable; there is no "off" form, so
+  # each of these is a bool whose false value is the empty string.
+  - name: no_build_cost
+    group: World toggles
+    type: bool
+    label: Free building
+    description: Build pieces cost no materials. Recipes must still be discovered.
+    true_value: "-setkey nobuildcost"
+    false_value: ""
+    default: ""
+    editable: true
+  - name: player_events
+    group: World toggles
+    type: bool
+    label: Player-based events
+    description: Events trigger from each player's own progress rather than the world's.
+    true_value: "-setkey playerevents"
+    false_value: ""
+    default: ""
+    editable: true
+  - name: passive_mobs
+    group: World toggles
+    type: bool
+    label: Passive creatures
+    description: Enemies do not attack until provoked.
+    true_value: "-setkey passivemobs"
+    false_value: ""
+    default: ""
+    editable: true
+  - name: no_map
+    group: World toggles
+    type: bool
+    label: No map
+    description: Disables the map and cartography table entirely.
+    true_value: "-setkey nomap"
+    false_value: ""
+    default: ""
+    editable: true
+
+# Confirmed verbatim against a real server's stdout, twice: a full
+# install-provision-start-ready round trip, and again during ADR-073's crossplay
+# run. Valheim reaches this in well under a minute, so the timeout is tight
+# enough to be useful and still leaves plenty of headroom.
+ready:
+  mode: log
+  pattern: "Game server connected"
+  timeout: 120s
+
+# No crash block. `crash: {mode: log}` is implemented now, and a match KILLS THE
+# POD so the ordinary exit path can restart it -- so an unverified pattern here does
+# not merely mislabel a server, it stops a healthy one. This candidate was never
+# checked against a real crash (no such log was ever captured), and "Failed to
+# initialize" is the kind of line a game can print about a subsystem it then carries
+# on without.
+#
+# The same rule readiness follows, applied where the stakes are higher: a pattern
+# only becomes a field once it has been seen doing the right thing on real output.
+#
+# crash:
+#   mode: log
+#   pattern: "Failed to initialize"
+
+logs:
+  values:
+    # Verified against a real crossplay server's own log, start to finish
+    # (ADR-073). Three lines carry the phrase, in this order:
+    #
+    #   New session server "YggTest" that has join code , now 0 player(s)
+    #   Session "YggTest" registered with join code 105503
+    #   Session "YggTest" with join code 105503 and IP 1.2.3.4:2456 is active
+    #
+    # Both formats are real, and the first one is *always* empty — it is
+    # logged the moment the session object is created, seconds before
+    # PlayFab registration returns the code. Two earlier comments here had
+    # this wrong in opposite directions: one called the `Session "..." with
+    # join code N and IP ...` format a bad guess (it is genuine), and
+    # ADR-070 read the empty `has join code ,` line as proof crossplay was
+    # broken (a healthy server prints it too).
+    #
+    # The pattern is unchanged and correct through all of it: it needs at
+    # least one digit, so it skips the empty line and matches the two real
+    # ones. logscan suppresses the unchanged repeat (ADR-067), so the
+    # operator sees one code rather than two identical facts.
+    #
+    # The code changes on every restart and appears nowhere but the log,
+    # which is the whole reason extraction exists.
+    - { name: join_code, pattern: "join code ([0-9]+)" }
+
+stop:
+  # Headless Unity process with no interactive stdin command, the same
+  # position Bedrock's seed is in: a plain SIGTERM is all there is, and
+  # Valheim autosaves on receiving it.
+  #
+  # Confirmed live rather than assumed (ADR-073): SIGTERM to a running
+  # server exits cleanly in ~3.5s, logging `Stopping build thread` through
+  # `ZNet OnDestroy`, and leaves a written world .db on disk. 30s is
+  # therefore generous for a fresh world — a long-played one saves more,
+  # which is what the margin is for.
+  timeout: 30s
+  then: SIGTERM
+
+# Deliberately `copy` only, with no `uri`.
+#
+# Valheim's own join flow is pasting an address into "Join by IP", which takes
+# exactly this `host:port`, so the copyable half is verifiable from the game's
+# documented UI. A `steam://connect/...` handler is widely said to work for
+# Valheim and has *not* been tried against a real client here — offering an
+# unverified link that silently does nothing would be worse than offering none
+# (ADR-067's honesty rule).
+#
+# A crossplay server also has a join code, which players use instead of an
+# address. That is not here because it is not knowable from the seed: it is
+# printed at runtime and extracted as a fact by the logs.values rule above.
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  # The server's own writable root. Schema 2 spelled this `include: [""]`, an
+  # empty string in a list of names that strings.Join collapsed to nothing and
+  # the authoring form then read back as "no backup at all".
+  include_root: true

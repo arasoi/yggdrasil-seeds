@@ -1,0 +1,62 @@
+# Rendered from the seed on every provision and rebuild, so edits made here
+# by hand are overwritten. Change these on the server's Settings tab.
+
+server-port={{.Ports.game}}
+motd={{.Vars.motd}}
+max-players={{.Vars.max_players}}
+online-mode={{.Vars.online_mode}}
+enforce-secure-profile={{.Vars.enforce_secure_profile}}
+prevent-proxy-connections={{.Vars.prevent_proxy_connections}}
+hide-online-players={{.Vars.hide_online_players}}
+white-list={{.Vars.white_list}}
+enforce-whitelist={{.Vars.enforce_whitelist}}
+player-idle-timeout={{.Vars.player_idle_timeout}}
+pause-when-empty-seconds={{.Vars.pause_when_empty_seconds}}
+
+level-name={{.Vars.level_name}}
+level-seed={{.Vars.level_seed}}
+level-type={{.Vars.level_type}}
+generate-structures={{.Vars.generate_structures}}
+max-world-size={{.Vars.max_world_size}}
+
+gamemode={{.Vars.gamemode}}
+force-gamemode={{.Vars.force_gamemode}}
+difficulty={{.Vars.difficulty}}
+hardcore={{.Vars.hardcore}}
+pvp={{.Vars.pvp}}
+allow-flight={{.Vars.allow_flight}}
+allow-nether={{.Vars.allow_nether}}
+spawn-monsters={{.Vars.spawn_monsters}}
+spawn-protection={{.Vars.spawn_protection}}
+
+view-distance={{.Vars.view_distance}}
+simulation-distance={{.Vars.simulation_distance}}
+entity-broadcast-range-percentage={{.Vars.entity_broadcast_range_percentage}}
+network-compression-threshold={{.Vars.network_compression_threshold}}
+sync-chunk-writes={{.Vars.sync_chunk_writes}}
+max-tick-time={{.Vars.max_tick_time}}
+
+op-permission-level={{.Vars.op_permission_level}}
+function-permission-level={{.Vars.function_permission_level}}
+broadcast-console-to-ops={{.Vars.broadcast_console_to_ops}}
+broadcast-rcon-to-ops={{.Vars.broadcast_rcon_to_ops}}
+
+enable-command-block={{.Vars.enable_command_block}}
+enable-status={{.Vars.enable_status}}
+enable-query={{.Vars.enable_query}}
+query.port={{.Ports.query}}
+{{/* RCON is written on only when it can actually work. The server rejects
+     enable-rcon=true with an empty password and disables RCON anyway, so
+     writing that pair produces a toggle that reads on beside a service that
+     is off, with the reason only in the game's own log. rcon_password
+     cannot be marked required — it is show_if-gated, and a hidden required
+     field blocks the form from submitting at all — so the guard lives
+     here. */}}
+{{if and (eq .Vars.enable_rcon "true") (ne .Vars.rcon_password "")}}enable-rcon=true
+rcon.port={{.Ports.rcon}}
+rcon.password={{.Vars.rcon_password}}
+{{else}}enable-rcon=false
+{{end}}
+resource-pack={{.Vars.resource_pack}}
+resource-pack-sha1={{.Vars.resource_pack_sha1}}
+require-resource-pack={{.Vars.require_resource_pack}}

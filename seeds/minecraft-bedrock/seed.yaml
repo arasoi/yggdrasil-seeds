@@ -1,0 +1,381 @@
+id: minecraft-bedrock
+schema: 3
+name: Minecraft Bedrock
+icon: "🧱"
+description: >
+  Minecraft Bedrock Edition dedicated server. Mojang ships no official
+  container image and the server binary needs libraries a bare base image
+  does not carry, so this seed uses a well-known community image that
+  downloads the official server itself at container start (ADR-018: a seed
+  whose image already contains the install step needs no separate Install).
+version: "3.2.0"
+
+# Bedrock Dedicated Server ships amd64-only Linux binaries.
+architectures: [amd64]
+
+server:
+  writable_paths:
+    - { from: "", to: /data }
+
+containers:
+  - role: game
+    primary: true
+    image: itzg/minecraft-bedrock-server:latest
+    # Unlike Paper, this seed writes no server.properties of its own: the
+    # image owns that file and rewrites it from these environment variables
+    # on every start, so a config.files entry here would be overwritten
+    # before the server ever read it. The env block *is* this seed's
+    # configuration surface, which is why every setting below is a variable
+    # interpolated into one.
+    env:
+      EULA: "TRUE"
+      # This image starts bedrock_server itself rather than running a command
+      # from the seed, so unlike Paper or Valheim it has no {{.Ports.game}} in
+      # a command line to pick the port up from — without this it would bind
+      # its own 19132 default inside the container while the allocated port
+      # was published to it, which only lines up for a server that happened to
+      # be allocated 19132.
+      SERVER_PORT: "{{.Ports.game}}"
+      VERSION: "{{.Vars.version}}"
+
+    workdir: /data
+    ports:
+      - { name: game, protocol: udp, default: 19132 }
+
+groups:
+  - name: Server
+    description: Identity, and how players reach this server.
+  - name: World
+    description: >-
+      Applied when the world is first generated. Changing them later does not
+      regenerate a world that already exists.
+  - name: Gameplay
+  - name: Players and permissions
+  - name: Performance
+    description: >-
+      The defaults suit a small server. View and tick distance are the two
+      that cost CPU and memory sharply as they rise.
+    collapsed: true
+  - name: Content and privacy
+    collapsed: true
+
+variables:
+  - name: version
+    group: Server
+    label: Server version
+    description: >-
+      LATEST tracks Mojang's newest release and re-downloads when it moves.
+      PREVIOUS pins the one before it, or give an exact version like
+      1.21.44.01 to hold a build still.
+    default: "LATEST"
+    editable: true
+
+# Every one of these is written into an environment variable the community image
+# reads and turns into a server.properties key on start. That is what settings are
+# for: the destination is declared once here, so nothing has to restate it as a
+# template line in the env block below (ADR-077) -- which is what those 25 lines
+# used to be.
+#
+# None is marked optional, deliberately. Optional means an unset value leaves the
+# destination entirely alone, and every setting here has a default this seed means
+# to enforce -- so leaving them non-optional keeps the rendered environment
+# byte-identical to what schema 2 produced, which is what makes this conversion a
+# move rather than a behaviour change.
+settings:
+  - name: server_name
+    group: Server
+    label: Server name
+    description: What appears in the client's friends and servers list.
+    default: "A Yggdrasil server"
+    to: { env: SERVER_NAME }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    default: "10"
+    min: 1
+    max: 100
+    step: 1
+    to: { env: MAX_PLAYERS }
+  - name: online_mode
+    group: Server
+    type: bool
+    label: Require Xbox Live sign-in
+    description: >-
+      Off lets unauthenticated clients join, which on a reachable server
+      means anyone can join as anyone.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { env: ONLINE_MODE }
+  - name: level_name
+    group: World
+    label: World name
+    description: The directory the world is stored in.
+    default: "Bedrock level"
+    to: { env: LEVEL_NAME }
+  - name: level_seed
+    group: World
+    label: Seed
+    description: Blank generates a random world.
+    default: ""
+    to: { env: LEVEL_SEED }
+  - name: level_type
+    group: World
+    type: select
+    label: World type
+    default: "DEFAULT"
+    options:
+      - { value: "DEFAULT", label: "Default" }
+      - { value: "FLAT", label: "Superflat" }
+      - { value: "LEGACY", label: "Legacy (finite world)" }
+    to: { env: LEVEL_TYPE }
+  - name: gamemode
+    group: Gameplay
+    type: select
+    label: Default game mode
+    default: "survival"
+    options:
+      - { value: "survival", label: "Survival" }
+      - { value: "creative", label: "Creative" }
+      - { value: "adventure", label: "Adventure" }
+    to: { env: GAMEMODE }
+  - name: force_gamemode
+    group: Gameplay
+    type: bool
+    label: Force game mode on join
+    description: Puts players back into the default mode every time they connect.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: FORCE_GAMEMODE }
+  - name: difficulty
+    group: Gameplay
+    type: select
+    label: Difficulty
+    default: "easy"
+    options:
+      - { value: "peaceful", label: "Peaceful" }
+      - { value: "easy", label: "Easy" }
+      - { value: "normal", label: "Normal" }
+      - { value: "hard", label: "Hard" }
+    to: { env: DIFFICULTY }
+  - name: allow_cheats
+    group: Gameplay
+    type: bool
+    label: Allow cheats
+    description: Enables commands such as /gamemode and /give for operators.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: ALLOW_CHEATS }
+  - name: default_player_permission_level
+    group: Players and permissions
+    type: select
+    label: Permission level for new players
+    default: "member"
+    options:
+      - { value: "visitor", label: "Visitor - cannot build" }
+      - { value: "member", label: "Member - can build" }
+      - { value: "operator", label: "Operator - full commands" }
+    to: { env: DEFAULT_PLAYER_PERMISSION_LEVEL }
+  - name: allow_list
+    group: Players and permissions
+    type: bool
+    label: Allow list
+    description: >-
+      Only listed players may join. The list itself is managed from the
+      Files tab (allowlist.json).
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: ALLOW_LIST }
+  - name: player_idle_timeout
+    group: Players and permissions
+    type: number
+    label: Idle kick (minutes)
+    description: 0 never kicks.
+    default: "30"
+    min: 0
+    max: 1440
+    step: 1
+    to: { env: PLAYER_IDLE_TIMEOUT }
+  - name: disable_player_interaction
+    group: Players and permissions
+    type: bool
+    label: Disable player interaction
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: DISABLE_PLAYER_INTERACTION }
+  - name: chat_restriction
+    group: Players and permissions
+    type: select
+    label: Chat restriction
+    default: "None"
+    options:
+      - { value: "None", label: "None" }
+      - { value: "Dropped", label: "Dropped - chat is silently discarded" }
+      - { value: "Disabled", label: "Disabled - players cannot chat at all" }
+    to: { env: CHAT_RESTRICTION }
+  - name: view_distance
+    group: Performance
+    type: range
+    label: View distance (chunks)
+    description: The single biggest lever on memory and CPU.
+    default: "10"
+    min: 4
+    max: 64
+    step: 1
+    to: { env: VIEW_DISTANCE }
+  - name: tick_distance
+    group: Performance
+    type: range
+    label: Tick distance (chunks)
+    description: How far from a player the world keeps simulating. Bedrock caps this at 12.
+    default: "4"
+    min: 4
+    max: 12
+    step: 1
+    to: { env: TICK_DISTANCE }
+  - name: max_threads
+    group: Performance
+    type: number
+    label: Max threads
+    description: 0 lets the server use as many as it wants.
+    default: "8"
+    min: 0
+    max: 64
+    step: 1
+    to: { env: MAX_THREADS }
+  - name: compression_threshold
+    group: Performance
+    type: number
+    label: Compression threshold (bytes)
+    description: Packets at or above this size are compressed. 1 compresses everything.
+    default: "1"
+    min: 0
+    max: 65536
+    step: 1
+    to: { env: COMPRESSION_THRESHOLD }
+  - name: client_side_chunk_generation
+    group: Performance
+    type: bool
+    label: Client-side chunk generation
+    description: Lets clients render further than the server sends, at some cost in consistency.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { env: CLIENT_SIDE_CHUNK_GENERATION_ENABLED }
+  - name: texturepack_required
+    group: Content and privacy
+    type: bool
+    label: Require the server's resource packs
+    description: Players who decline are kicked.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: TEXTUREPACK_REQUIRED }
+  - name: disable_persona
+    group: Content and privacy
+    type: bool
+    label: Disable custom character skins (persona)
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: DISABLE_PERSONA }
+  - name: disable_custom_skins
+    group: Content and privacy
+    type: bool
+    label: Disable custom-uploaded skins
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: DISABLE_CUSTOM_SKINS }
+  - name: emit_server_telemetry
+    group: Content and privacy
+    type: bool
+    label: Send telemetry to Mojang
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: EMIT_SERVER_TELEMETRY }
+  - name: content_log_file_enabled
+    group: Content and privacy
+    type: bool
+    label: Write a content error log
+    description: Useful when debugging behaviour packs; noisy otherwise.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: CONTENT_LOG_FILE_ENABLED }
+
+migrations:
+  # Each of these moved from variables to settings above. Without them every
+  # operator's stored choice would be silently discarded and the seed default
+  # reinstated, because a stored value is keyed by name and nothing would be
+  # looking for it in the variables map any more (ADR-068).
+  - promote: { variable: server_name }
+  - promote: { variable: max_players }
+  - promote: { variable: online_mode }
+  - promote: { variable: level_name }
+  - promote: { variable: level_seed }
+  - promote: { variable: level_type }
+  - promote: { variable: gamemode }
+  - promote: { variable: force_gamemode }
+  - promote: { variable: difficulty }
+  - promote: { variable: allow_cheats }
+  - promote: { variable: default_player_permission_level }
+  - promote: { variable: allow_list }
+  - promote: { variable: player_idle_timeout }
+  - promote: { variable: disable_player_interaction }
+  - promote: { variable: chat_restriction }
+  - promote: { variable: view_distance }
+  - promote: { variable: tick_distance }
+  - promote: { variable: max_threads }
+  - promote: { variable: compression_threshold }
+  - promote: { variable: client_side_chunk_generation }
+  - promote: { variable: texturepack_required }
+  - promote: { variable: disable_persona }
+  - promote: { variable: disable_custom_skins }
+  - promote: { variable: emit_server_telemetry }
+  - promote: { variable: content_log_file_enabled }
+
+# Readiness stays immediate; the candidate patterns are comments, not fields.
+# `Server started.` and `Unhandled exception` have not been checked against real
+# output by this project, and an unverified pattern in a field looks active
+# (ADR-067). Bedrock also starts in seconds, so it has the least to gain from
+# waiting on a match.
+
+stop:
+  # The image's entrypoint shuts bedrock_server down cleanly on SIGTERM;
+  # there is no interactive stop command reachable over container stdin the
+  # way Paper's console has.
+  timeout: 30s
+  then: SIGTERM
+
+# `copy` only, same as Paper: Bedrock's "Add Server" takes a host and a port, and
+# there is no URI scheme to hand a client. The port matters more here than for
+# Java — Bedrock is UDP 19132 by convention and a seed-driven server takes
+# whatever the node's range gives it (ADR-061), so an operator who does not pass
+# the port on gets a client that cannot find the server at all.
+connect:
+  label: "Add this server"
+  copy: "{{.Endpoint.game}}"
+
+# Bedrock's own connect/disconnect lines, which carry an xuid alongside the name:
+#
+#   [2026-08-09 12:00:00:123 INFO] Player connected: Steve, xuid: 2535000000000000
+#   [2026-08-09 12:03:11:456 INFO] Player disconnected: Steve, xuid: 2535000000000000
+#
+# The name is captured and the xuid is not: a seed's event fields are a fixed
+# vocabulary (join and leave define `player`), and a named group the event does not
+# define is rejected at load rather than ignored. An xuid would need its own field
+# in that vocabulary, which is a schema change rather than a seed one.
+#
+# `[^,]+` because a Bedrock gamertag may contain spaces, which `\S+` would cut
+# short — Paper's rule can use \S+ because a Java username cannot.
+logs:
+  events:
+    - { event: join, pattern: 'Player connected: (?P<player>[^,]+),' }
+    - { event: leave, pattern: 'Player disconnected: (?P<player>[^,]+),' }

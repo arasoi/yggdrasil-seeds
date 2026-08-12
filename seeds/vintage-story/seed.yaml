@@ -4,56 +4,47 @@ name: Vintage Story
 icon: "🪨"
 description: >
   Vintage Story dedicated server. A .NET application with no official Linux
-  container image, so this seed downloads both its own .NET runtime and the
-  server itself into a shared install and runs on the plain base-linux image
-  — no base-dotnet, no base-steamcmd.
-version: "1.0.0"
+  container image, so this seed downloads the server itself into a
+  per-server install and runs it on images/base-dotnet, which already
+  carries a verified, apt-installed .NET runtime.
+version: "1.1.0"
 
-# Confirmed only against the linux-x64 server tarball and the linux-x64 .NET
-# runtime tarball (both templated URLs below). An ARM64 dedicated server
-# tarball was not found published anywhere alongside the x64 one, and the
-# wiki's only ARM64 note concerns the *client* (Harmony-patched mods do not
-# work there, for want of MonoMod support) rather than confirming a server
-# build exists at all — so this stays amd64-only rather than guessing a
-# second URL that may not resolve.
+# Confirmed only against the linux-x64 server tarball (the templated URL
+# below). An ARM64 dedicated server tarball was not found published anywhere
+# alongside the x64 one, and the wiki's only ARM64 note concerns the
+# *client* (Harmony-patched mods do not work there, for want of MonoMod
+# support) rather than confirming a server build exists at all — so this
+# stays amd64-only rather than guessing a second URL that may not resolve.
 architectures: [amd64]
 
 install:
-  # Each server gets its own copy of the runtime and the game. Two Vintage
-  # Story worlds have no more reason to share one install than two Valheim
-  # or Paper servers do (same call those seeds make) — and a shared install
-  # cannot reference per-server data, which the two download URLs below,
-  # each an editable variable, would otherwise be tempted to become.
+  # Each server gets its own copy of the game. Two Vintage Story worlds have
+  # no more reason to share one install than two Valheim or Paper servers do
+  # (same call those seeds make) — and a shared install cannot reference
+  # per-server data, which the download URL below, an editable variable,
+  # would otherwise be tempted to become.
   shared: false
   mount: { path: /game, mode: ro }
-  # download/extract need no container (NeedsImage is false for both), so —
-  # unlike Valheim's steamcmd step or ARK's Proton one — this install runs
-  # entirely in the agent process. No install.image, matching Paper's plain
-  # download install.
+  # download/extract need no container (NeedsImage is false for both), so
+  # this install runs entirely in the agent process. No install.image,
+  # matching Paper's plain download install.
+  #
+  # This used to also fetch its own .NET runtime tarball straight from
+  # Microsoft's build CDN, unpacked alongside the game, and ran through it
+  # directly (base-linux, no base-dotnet). That path produced a corrupted
+  # /game/dotnet/dotnet: execing it printed raw bytes back as a garbled
+  # shell script ("ELF" and other binary fragments echoed as "not found"),
+  # the textbook symptom of a shell's execve() falling back to
+  # script-interpretation because the file it tried to run was not a valid
+  # native executable for this host — with no checksum on that download to
+  # have caught it. images/base-dotnet already carries a pinned, apt-
+  # installed .NET runtime (signed by Microsoft's own repo, ADR-047's
+  # amendment) that base-java and other seeds already run against
+  # successfully, so this now runs on it instead of fetching a second,
+  # unverified copy of the same runtime at install time. That also is what
+  # moves this seed onto .NET 10 (Vintage Story's current requirement) —
+  # base-dotnet's own pin, not a URL guessed here.
   steps:
-    # .NET Runtime 8.0 (not the SDK, not ASP.NET Core) is a separate download
-    # from the game itself: the Linux server tarball is *not* self-contained
-    # and the wiki is explicit that .NET 8.0 must be present. Rather than
-    # requiring a node to have it installed system-wide (which base-linux
-    # deliberately does not carry — that is what base-dotnet exists for),
-    # this seed fetches its own copy straight from Microsoft's build CDN and
-    # runs it from inside the install, so base-linux alone is enough.
-    #
-    # https://builds.dotnet.microsoft.com/dotnet/Runtime/<version>/dotnet-runtime-<version>-linux-x64.tar.gz
-    # is the same fixed-version download-CDN shape the .NET install scripts
-    # themselves resolve to (learn.microsoft.com/dotnet/core/tools/dotnet-install-script);
-    # there is no floating "latest" alias at this URL, which is why the
-    # version is pinned here rather than assumed. Bump it by editing this
-    # field — the same data-change Paper's own download_url variable is.
-    - op: download
-      name: "Downloading .NET 8.0 runtime"
-      url: "{{.Vars.dotnet_runtime_url}}"
-      into: dotnet-runtime.tar.gz
-    - op: extract
-      name: "Extracting .NET runtime"
-      from: dotnet-runtime.tar.gz
-      into: dotnet
-      archive: targz
     # The official download page's "Linux tar.gz Archive (server only)" link,
     # per the dedicated-server guide. Templated the same way Paper's own jar
     # URL is (ADR-018's own install mechanism is a plain fetch-and-place, not
@@ -118,12 +109,17 @@ config:
 containers:
   - role: game
     primary: true
-    image: { base: linux }
-    # dotnet/dotnet rather than the native ./VintagestoryServer apphost: the
-    # wiki gives both as equivalent ("./VintagestoryServer or dotnet
-    # VintagestoryServer.dll"), and invoking through the runtime this install
-    # just downloaded needs no executable bit surviving the extract, where
-    # the apphost's would have to.
+    # base-dotnet's own pinned .NET 10 runtime (images/base-dotnet/Dockerfile),
+    # not a raw tarball this seed fetches and unpacks itself — see the note
+    # on the install block above for why.
+    image: { base: dotnet }
+    # `dotnet` rather than the native ./VintagestoryServer apphost: the wiki
+    # gives both as equivalent ("./VintagestoryServer or dotnet
+    # VintagestoryServer.dll"), and invoking through the runtime needs no
+    # executable bit surviving the download, where the apphost's would have
+    # to. Bare `dotnet` resolves through base-dotnet's own PATH
+    # (/usr/bin/dotnet, already set up by that image) rather than a path
+    # into this install, since the runtime no longer lives there.
     #
     # --dataPath is the one documented CLI flag (the wiki's dedicated-server
     # guide shows only this one); serverconfig.json — written directly to
@@ -132,7 +128,7 @@ containers:
     # everything else, confirmed against the wiki's own AppData example
     # ("Inside %AppData%/VSserverData should also be a serverconfig.json
     # file").
-    command: "/game/dotnet/dotnet /game/VintagestoryServer.dll --dataPath=/data"
+    command: "dotnet /game/VintagestoryServer.dll --dataPath=/data"
     workdir: /data
     ports:
       # The dedicated-server guide's router-configuration section is explicit
@@ -154,17 +150,11 @@ containers:
 
 variables:
   # ---- Install ------------------------------------------------------------
-  - name: dotnet_runtime_url
-    group: Install
-    label: ".NET 8.0 runtime download URL"
-    description: >-
-      Linux x64 .NET 8.0 Runtime tarball. Bump this to move to a newer 8.0.x
-      patch release; find the current one at
-      https://dotnet.microsoft.com/download/dotnet/8.0 (the "Runtime" row,
-      not the SDK or ASP.NET Core rows). Applying a change here requires an
-      install update, not just a settings save.
-    default: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.30/dotnet-runtime-8.0.30-linux-x64.tar.gz"
-    editable: true
+  # dotnet_runtime_url is gone: the .NET runtime comes from base-dotnet's own
+  # pinned apt package now, not a URL this seed fetches itself (see the
+  # install block above). The migration below carries a stored override
+  # forward as nothing rather than leaving it stranded under a name this
+  # seed no longer declares.
   - name: vintagestory_download_url
     group: Install
     label: "Vintage Story server download URL"
@@ -312,3 +302,10 @@ connect:
 
 backup:
   include_root: true
+
+# dotnet_runtime_url no longer exists (the runtime moved to base-dotnet's own
+# apt package, see the install block above) — dropped rather than left
+# stranded under a name this seed no longer declares, so a server created
+# under the old shape does not carry a dead override forward for no reason.
+migrations:
+  - drop: dotnet_runtime_url

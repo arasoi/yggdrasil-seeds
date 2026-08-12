@@ -7,7 +7,7 @@ description: >
   container image, so this seed downloads the server itself into a
   per-server install and runs it on images/base-dotnet, which already
   carries a verified, apt-installed .NET runtime.
-version: "1.1.0"
+version: "1.1.1"
 
 # Confirmed only against the linux-x64 server tarball (the templated URL
 # below). An ARM64 dedicated server tarball was not found published anywhere
@@ -93,17 +93,29 @@ config:
       # as the bare `true`/`false` a JSON boolean actually needs.
       #
       # Deliberately partial rather than a full replica of the ~60-field
-      # config the wiki documents (Roles/Privileges, anti-abuse tuning, world
-      # generation internals and more): those were never confirmed to be
-      # optional on this game's own deserializer, this project's own build
-      # cannot run a real Vintage Story server to check, and a game that
-      # populates a config object already carrying its own compiled defaults
-      # — the ordinary .NET pattern, and the one every field in the wiki's
-      # own "Defaults" section already implies exists — should apply its
-      # defaults to whatever this template leaves out. If that assumption is
-      # wrong for a field an operator needs, the raw-YAML editor reaches the
-      # rest of this schema's `settings`/`config.files` machinery same as any
-      # other seed's gap would.
+      # config the wiki documents (anti-abuse tuning, world generation
+      # internals and more): those were never confirmed to be optional on
+      # this game's own deserializer, and a game that populates a config
+      # object already carrying its own compiled defaults — the ordinary
+      # .NET pattern — should apply its defaults to whatever this template
+      # leaves out. If that assumption is wrong for a field an operator
+      # needs, the raw-YAML editor reaches the rest of this schema's
+      # `settings`/`config.files` machinery same as any other seed's gap
+      # would.
+      #
+      # That assumption was WRONG for Roles/DefaultRoleCode, confirmed by a
+      # real run: "You have configured a default group code suplayer but no
+      # such group exists! Killing server". `DefaultRoleCode` ("suplayer") is
+      # a compiled field default the server applies unconditionally, but the
+      # `Roles` list it must resolve against is apparently only populated by
+      # a first-run bootstrap that fires when no serverconfig.json exists yet
+      # — and this file always exists, since `manage: always` writes it on
+      # every rebuild. Omitting `Roles` therefore leaves it empty rather than
+      # defaulted, and `DefaultRoleCode` then points at nothing. The template
+      # now writes the game's own documented default `Roles` array
+      # explicitly (verified against a real dedicated-server's own
+      # serverconfig.json, not just the wiki's prose), so the file is
+      # self-contained regardless of that bootstrap behaviour.
       manage: always
 
 containers:

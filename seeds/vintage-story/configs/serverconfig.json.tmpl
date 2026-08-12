@@ -1,0 +1,19 @@
+{
+  "ServerName": "{{.Vars.server_name | js}}",
+  "ServerDescription": {{if .Vars.server_description}}"{{.Vars.server_description | js}}"{{else}}null{{end}},
+  "WelcomeMessage": "{{.Vars.welcome_message | js}}",
+  "Port": {{.Ports.game}},
+  "MaxClients": {{.Vars.max_clients}},
+  "Password": {{if .Vars.password}}"{{.Vars.password | js}}"{{else}}null{{end}},
+  "WhitelistMode": {{.Vars.whitelist_mode}},
+  "PassTimeWhenEmpty": {{.Vars.pass_time_when_empty}},
+  "AllowPvP": {{.Vars.allow_pvp}},
+  "AllowFireSpread": {{.Vars.allow_fire_spread}},
+  "AllowFallingBlocks": {{.Vars.allow_falling_blocks}},
+  "WorldConfig": {
+    "WorldName": "{{.Vars.world_name | js}}",
+    "Seed": {{if .Vars.world_seed}}"{{.Vars.world_seed | js}}"{{else}}null{{end}},
+    "PlayStyle": "{{.Vars.play_style | js}}",
+    "SaveFileLocation": "/data/Saves/{{.Vars.world_name | js}}.vcdbs"
+  }
+}

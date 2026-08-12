@@ -1,0 +1,314 @@
+id: vintage-story
+schema: 3
+name: Vintage Story
+icon: "🪨"
+description: >
+  Vintage Story dedicated server. A .NET application with no official Linux
+  container image, so this seed downloads both its own .NET runtime and the
+  server itself into a shared install and runs on the plain base-linux image
+  — no base-dotnet, no base-steamcmd.
+version: "1.0.0"
+
+# Confirmed only against the linux-x64 server tarball and the linux-x64 .NET
+# runtime tarball (both templated URLs below). An ARM64 dedicated server
+# tarball was not found published anywhere alongside the x64 one, and the
+# wiki's only ARM64 note concerns the *client* (Harmony-patched mods do not
+# work there, for want of MonoMod support) rather than confirming a server
+# build exists at all — so this stays amd64-only rather than guessing a
+# second URL that may not resolve.
+architectures: [amd64]
+
+install:
+  # Each server gets its own copy of the runtime and the game. Two Vintage
+  # Story worlds have no more reason to share one install than two Valheim
+  # or Paper servers do (same call those seeds make) — and a shared install
+  # cannot reference per-server data, which the two download URLs below,
+  # each an editable variable, would otherwise be tempted to become.
+  shared: false
+  mount: { path: /game, mode: ro }
+  # download/extract need no container (NeedsImage is false for both), so —
+  # unlike Valheim's steamcmd step or ARK's Proton one — this install runs
+  # entirely in the agent process. No install.image, matching Paper's plain
+  # download install.
+  steps:
+    # .NET Runtime 8.0 (not the SDK, not ASP.NET Core) is a separate download
+    # from the game itself: the Linux server tarball is *not* self-contained
+    # and the wiki is explicit that .NET 8.0 must be present. Rather than
+    # requiring a node to have it installed system-wide (which base-linux
+    # deliberately does not carry — that is what base-dotnet exists for),
+    # this seed fetches its own copy straight from Microsoft's build CDN and
+    # runs it from inside the install, so base-linux alone is enough.
+    #
+    # https://builds.dotnet.microsoft.com/dotnet/Runtime/<version>/dotnet-runtime-<version>-linux-x64.tar.gz
+    # is the same fixed-version download-CDN shape the .NET install scripts
+    # themselves resolve to (learn.microsoft.com/dotnet/core/tools/dotnet-install-script);
+    # there is no floating "latest" alias at this URL, which is why the
+    # version is pinned here rather than assumed. Bump it by editing this
+    # field — the same data-change Paper's own download_url variable is.
+    - op: download
+      name: "Downloading .NET 8.0 runtime"
+      url: "{{.Vars.dotnet_runtime_url}}"
+      into: dotnet-runtime.tar.gz
+    - op: extract
+      name: "Extracting .NET runtime"
+      from: dotnet-runtime.tar.gz
+      into: dotnet
+      archive: targz
+    # The official download page's "Linux tar.gz Archive (server only)" link,
+    # per the dedicated-server guide. Templated the same way Paper's own jar
+    # URL is (ADR-018's own install mechanism is a plain fetch-and-place, not
+    # an API lookup), since there is no stable "latest stable" URL published
+    # for it either — bumping the game version is editing this field.
+    - op: download
+      name: "Downloading Vintage Story server"
+      url: "{{.Vars.vintagestory_download_url}}"
+      into: vs_server.tar.gz
+    # The server tarball extracts flat (VintagestoryServer.dll, Lib/, assets/
+    # etc. all at top level) — the wiki's own `tar -C server -xzf ...`
+    # unpacks it the same way with no strip needed, so neither does this.
+    - op: extract
+      name: "Extracting Vintage Story server"
+      from: vs_server.tar.gz
+      archive: targz
+
+server:
+  # Everything Vintage Story owns — serverconfig.json, Saves/, Mods/, logs —
+  # lives directly under --dataPath with no further split, the same
+  # single-root shape Paper's and Valheim's own writable_paths already use.
+  writable_paths:
+    - { from: "", to: /data }
+
+config:
+  files:
+    - path: serverconfig.json
+      source_path: configs/serverconfig.json.tmpl
+      # `always`, deliberately: every field this template writes is backed by
+      # an editable variable, and a Settings-tab save only takes effect if the
+      # rebuild it triggers (ADR-062) actually rewrites the file — the same
+      # reasoning that keeps Paper's server.properties on `always` rather than
+      # `once`. The cost is the same one Paper accepts: an operator's own
+      # direct edit to this file is discarded on the next rebuild.
+      #
+      # This is a whole-file template rather than a `settings` block with
+      # `manage: patch`, on purpose. JSON patching in this codebase always
+      # writes a value as a JSON *string* (internal/configfile's own
+      # setMapPath: "the value is written as a string, always... A game that
+      # needs a real JSON number in its config is a case for a whole-file
+      # template, and the spec says so"). MaxClients, Port, WhitelistMode and
+      # the AllowXxx flags are real JSON numbers and booleans in Vintage
+      # Story's own config, not strings — patching them through would hand a
+      # strict .NET JSON deserializer a type it very likely does not accept.
+      # A template controls the literal token written, so a bool var renders
+      # as the bare `true`/`false` a JSON boolean actually needs.
+      #
+      # Deliberately partial rather than a full replica of the ~60-field
+      # config the wiki documents (Roles/Privileges, anti-abuse tuning, world
+      # generation internals and more): those were never confirmed to be
+      # optional on this game's own deserializer, this project's own build
+      # cannot run a real Vintage Story server to check, and a game that
+      # populates a config object already carrying its own compiled defaults
+      # — the ordinary .NET pattern, and the one every field in the wiki's
+      # own "Defaults" section already implies exists — should apply its
+      # defaults to whatever this template leaves out. If that assumption is
+      # wrong for a field an operator needs, the raw-YAML editor reaches the
+      # rest of this schema's `settings`/`config.files` machinery same as any
+      # other seed's gap would.
+      manage: always
+
+containers:
+  - role: game
+    primary: true
+    image: { base: linux }
+    # dotnet/dotnet rather than the native ./VintagestoryServer apphost: the
+    # wiki gives both as equivalent ("./VintagestoryServer or dotnet
+    # VintagestoryServer.dll"), and invoking through the runtime this install
+    # just downloaded needs no executable bit surviving the extract, where
+    # the apphost's would have to.
+    #
+    # --dataPath is the one documented CLI flag (the wiki's dedicated-server
+    # guide shows only this one); serverconfig.json — written directly to
+    # /data/serverconfig.json above, since --dataPath points straight at the
+    # directory serverconfig.json lives in, not a parent of one — carries
+    # everything else, confirmed against the wiki's own AppData example
+    # ("Inside %AppData%/VSserverData should also be a serverconfig.json
+    # file").
+    command: "/game/dotnet/dotnet /game/VintagestoryServer.dll --dataPath=/data"
+    workdir: /data
+    ports:
+      # The dedicated-server guide's router-configuration section is explicit
+      # that port 42420 needs forwarding on *both* TCP and UDP — not one
+      # port each, the same number twice. offset_from/offset:0 (ADR-048's
+      # mechanism, used here for identity rather than a real +1 shift) is
+      # what keeps them allocated to the same number instead of two
+      # independent ones drifting apart, which is what two ordinary `default:`
+      # ports would do the moment a second Vintage Story server shares a node.
+      #
+      # Which protocol actually carries player connections was not settled
+      # with confidence from the wiki alone; `kind: game` (and therefore the
+      # connect link below) is put on the TCP port as the better-documented
+      # guess. Getting that guess wrong costs a cosmetic connect label, not a
+      # working server — both numbers are always identical either way, so
+      # both protocols are open regardless of which one is "correct".
+      - { name: game, protocol: tcp, default: 42420, kind: game }
+      - { name: game-udp, protocol: udp, offset_from: game, offset: 0 }
+
+variables:
+  # ---- Install ------------------------------------------------------------
+  - name: dotnet_runtime_url
+    group: Install
+    label: ".NET 8.0 runtime download URL"
+    description: >-
+      Linux x64 .NET 8.0 Runtime tarball. Bump this to move to a newer 8.0.x
+      patch release; find the current one at
+      https://dotnet.microsoft.com/download/dotnet/8.0 (the "Runtime" row,
+      not the SDK or ASP.NET Core rows). Applying a change here requires an
+      install update, not just a settings save.
+    default: "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.30/dotnet-runtime-8.0.30-linux-x64.tar.gz"
+    editable: true
+  - name: vintagestory_download_url
+    group: Install
+    label: "Vintage Story server download URL"
+    description: >-
+      The "Linux tar.gz Archive (server only)" link from
+      https://www.vintagestory.at/download.html — "Show all available
+      downloads and mirrors" surfaces it. Applying a change here requires an
+      install update, not just a settings save.
+    default: "https://cdn.vintagestory.at/gamefiles/stable/vs_server_linux-x64_1.22.1.tar.gz"
+    editable: true
+
+  # ---- Server ---------------------------------------------------------------
+  - name: server_name
+    group: Server
+    label: Server name
+    description: Shown in the in-game server browser.
+    default: "A Yggdrasil server"
+    editable: true
+  - name: server_description
+    group: Server
+    label: Server description
+    description: Longer text shown alongside the server name. Leave blank for none.
+    default: ""
+    editable: true
+  - name: welcome_message
+    group: Server
+    label: Welcome message
+    description: 'Shown to a player on join. "{0}" is replaced with their name.'
+    default: "Welcome {0}, may you survive well and prosper"
+    editable: true
+  - name: max_clients
+    group: Server
+    type: number
+    label: Max players
+    default: "16"
+    min: 1
+    max: 128
+    step: 1
+    editable: true
+  - name: password
+    group: Server
+    type: password
+    label: Password
+    description: Leave blank for no password.
+    default: ""
+    editable: true
+  - name: whitelist_mode
+    group: Server
+    type: select
+    label: Whitelist
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: "Default (on for a dedicated server)" }
+      - { value: "1", label: "Off" }
+      - { value: "2", label: "On" }
+  - name: pass_time_when_empty
+    group: Server
+    type: bool
+    label: Keep time passing with nobody online
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: allow_pvp
+    group: Server
+    type: bool
+    label: Allow PvP
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: allow_fire_spread
+    group: Server
+    type: bool
+    label: Allow fire to spread
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: allow_falling_blocks
+    group: Server
+    type: bool
+    label: Allow blocks to fall
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+
+  # ---- World ------------------------------------------------------------
+  - name: world_name
+    group: World
+    label: World name
+    description: >-
+      A world with this name is created if it does not exist; an existing
+      name loads that world. Also names the save file
+      (/data/Saves/<world name>.vcdbs), so renaming this starts a new world
+      rather than renaming the current one.
+    default: "Yggdrasil World"
+    editable: true
+  - name: world_seed
+    group: World
+    label: World seed
+    description: Leave blank for a random seed. Only used the first time a world is created.
+    default: ""
+    editable: true
+  - name: play_style
+    group: World
+    type: select
+    label: Play style
+    default: "surviveandbuild"
+    editable: true
+    options:
+      - { value: "surviveandbuild",    label: "Surviving and building — the default balance" }
+      - { value: "wildernesssurvival", label: "Wilderness survival — no trader waypoints, harder start" }
+      - { value: "exploration",        label: "Exploration" }
+      - { value: "homosapiens",        label: "Homo Sapiens — expedition-style, permadeath" }
+      - { value: "creativebuilding",   label: "Creative building — flight and unlimited resources" }
+
+# `mode: port` rather than `mode: log`, deliberately. The dedicated-server
+# guide does quote the exact ready line ("Dedicated Server now running on
+# Port 42420 and all ips!"), but this project's own convention (see
+# Valheim's and ARK's seeds) is to only declare a log pattern once it has
+# been seen against a real, running server — this one has not been run here.
+# `mode: port` needs no game-specific knowledge and is the documented right
+# first choice for a game added blind (ADR-077 / docs/seed-spec.md §9.1).
+ready:
+  mode: port
+  port: game
+  timeout: 300s
+
+# `/stop` is the documented console command ("Then do /stop and relaunch
+# Vintagestoryserver.exe"), sent to the primary container's stdin before
+# escalating — unverified how long a large world takes to flush, so the
+# timeout is generous rather than tight, the same margin Valheim's own
+# (verified) stop block reasons about for a long-played world.
+stop:
+  command: "/stop"
+  timeout: 90s
+  then: SIGTERM
+
+connect:
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include_root: true

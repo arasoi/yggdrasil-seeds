@@ -112,24 +112,23 @@ not reference ADR numbers — see [conventions.md](conventions.md).
 ### SEED-004: The embedded set carries a wire-shape constraint this repository does not
 
 - **Date:** 2026-08-12
-- **Status:** Accepted
-- **Context:** Adding the Vintage Story seed forced this into the open. Its
-  Linux server tarball is not self-contained and needs a .NET runtime, which the
-  plain base image deliberately does not carry — so the install is **two**
-  downloads. A test upstream requires every *bundled* seed's install to survive
-  conversion to the older single-download wire shape, so that an agent speaking
-  the previous protocol version installs it exactly as it always did. A two-file
-  install cannot be expressed that way.
-- **Decision:** The seed lives here and not in the embedded set. More generally:
-  **the embedded set is constrained by backward compatibility with older agents,
-  and this repository is not.** A seed whose install cannot be expressed in the
-  legacy shape is a perfectly good catalog seed.
-- **Consequences:** The catalog can carry seeds the binary cannot, which is a
-  capability rather than a limitation — it is a concrete reason for the two sets
-  to exist separately. An author does not have to think about the wire shape at
-  all unless promoting a seed upstream, which is where the constraint is checked.
-  The cost is that "add it to the bundled set too" is not always available, and
-  the reason is invisible from this repository.
+- **Status:** **Superseded by SEED-010**
+- **Context:** Adding the Vintage Story seed appeared to force this into the
+  open. Its Linux server tarball is not self-contained and needs a .NET runtime,
+  which the plain base image deliberately does not carry — so the install is
+  **two** downloads, and a compatibility test upstream appeared to require every
+  *bundled* seed's install to survive conversion to the older single-download
+  wire shape.
+- **Decision:** The seed lives here and not in the embedded set, because a
+  two-file install cannot be expressed in the legacy shape.
+- **Why it was wrong:** The test is scoped to seeds that *had* a schema 2 form
+  and must keep installing the way they always did. A seed authored directly in
+  schema 3 has no earlier form to preserve and is compared against nothing, so
+  it was never excluded — the test simply needed scoping correctly, which is
+  what happened upstream when Vintage Story was promoted into `seeds/library`.
+  See SEED-010 for what is actually true, and for what turned out to matter more.
+
+---
 
 ---
 
@@ -248,3 +247,50 @@ not reference ADR numbers — see [conventions.md](conventions.md).
   record what was not verified: the gap is real, it is not going to be closed by
   CI, and a reader deserves to know which parts of a seed are attested and which
   are inference.
+
+---
+
+### SEED-010: A seed in both sets must be published here, because the catalog shadows the binary
+
+- **Date:** 2026-08-13
+- **Status:** Accepted (supersedes SEED-004)
+- **Context:** SEED-004 claimed the embedded set was closed to installs the
+  legacy wire shape could not express, and used Vintage Story's two-download
+  install as proof. That was wrong, and finding out why exposed something more
+  important.
+
+  The compatibility test upstream is **scoped** to seeds that had a schema 2
+  form: those must keep installing exactly as they always did, so their installs
+  are compared before and after conversion. A seed authored directly in schema 3
+  has no earlier form to preserve and is compared against nothing. Vintage Story
+  was never excluded — the test needed scoping correctly, which is what happened
+  when the seed was promoted into `seeds/library` upstream.
+
+  So a seed can live in **both** sets. And the layering makes that a hazard
+  rather than a nicety: bundled < catalog < operator, so an installed catalog
+  bundle replaces the embedded copy **entirely, including when the embedded copy
+  is newer**. Observed live — the embedded copy of Vintage Story reached 2.0.0
+  upstream while the catalog here was still on 1.1.1, which means every operator
+  who had installed it from the catalog was pinned to the older seed by the very
+  act of having installed it. Not a stale copy sitting harmlessly in a private
+  repository: an active override.
+- **Decision:** There is no wire-shape restriction on a newly authored seed in
+  either set. A seed may live in both, and when it does, **a change upstream must
+  be published here too, at a version at least as high.** Neither the packer nor
+  any test can catch a divergence — the two sets are in different repositories,
+  and one of them is private — so it is a standing practice, stated in
+  [contributing.md](contributing.md) with the two commands that check it, and
+  codified upstream as its own rule.
+- **Consequences:** "Add it to the bundled set too" is available for any seed,
+  which is a real capability SEED-004 wrongly ruled out. In exchange, a seed in
+  both sets now has an ongoing obligation, and the failure mode is silent in the
+  direction that matters least intuitively: publishing here *always* wins, so
+  forgetting to publish is what hurts, and forgetting to promote upstream costs
+  only the offline floor being older than the catalog, which is what it is for.
+
+  Worth keeping as a method note, since it is the second time this has bitten in
+  this repository: **the fact that mattered was not the one being checked.** The
+  question was "may this seed be embedded", and the answer turned out to be
+  irrelevant next to "what happens when it is in both places". A constraint that
+  looks like it partitions two sets is worth testing by trying to violate it
+  before it is written down as the reason they are separate.

@@ -7,7 +7,7 @@ description: >
   container image, so this seed downloads the server itself into a
   per-server install and runs it on images/base-dotnet, which already
   carries a verified, apt-installed .NET runtime.
-version: "1.1.1"
+version: "2.0.0"
 
 # Confirmed only against the linux-x64 server tarball (the templated URL
 # below). An ARM64 dedicated server tarball was not found published anywhere
@@ -78,7 +78,9 @@ config:
       # rebuild it triggers (ADR-062) actually rewrites the file — the same
       # reasoning that keeps Paper's server.properties on `always` rather than
       # `once`. The cost is the same one Paper accepts: an operator's own
-      # direct edit to this file is discarded on the next rebuild.
+      # direct edit to this file is discarded on the next rebuild, and so is
+      # anything changed in-game with /worldconfig that this template also
+      # writes.
       #
       # This is a whole-file template rather than a `settings` block with
       # `manage: patch`, on purpose. JSON patching in this codebase always
@@ -92,30 +94,21 @@ config:
       # A template controls the literal token written, so a bool var renders
       # as the bare `true`/`false` a JSON boolean actually needs.
       #
-      # Deliberately partial rather than a full replica of the ~60-field
-      # config the wiki documents (anti-abuse tuning, world generation
-      # internals and more): those were never confirmed to be optional on
-      # this game's own deserializer, and a game that populates a config
-      # object already carrying its own compiled defaults — the ordinary
-      # .NET pattern — should apply its defaults to whatever this template
-      # leaves out. If that assumption is wrong for a field an operator
-      # needs, the raw-YAML editor reaches the rest of this schema's
-      # `settings`/`config.files` machinery same as any other seed's gap
-      # would.
+      # It is also why every control below is a `variable` rather than a
+      # `setting`: a setting's `to: {file, key}` destination is only valid
+      # against a file managed `patch` (docs/seed-spec.md §7.3), which this
+      # file cannot be for the reason above. Paper's own 44 controls are
+      # variables through a whole-file template for the same reason.
       #
-      # That assumption was WRONG for Roles/DefaultRoleCode, confirmed by a
-      # real run: "You have configured a default group code suplayer but no
-      # such group exists! Killing server". `DefaultRoleCode` ("suplayer") is
-      # a compiled field default the server applies unconditionally, but the
-      # `Roles` list it must resolve against is apparently only populated by
-      # a first-run bootstrap that fires when no serverconfig.json exists yet
-      # — and this file always exists, since `manage: always` writes it on
-      # every rebuild. Omitting `Roles` therefore leaves it empty rather than
-      # defaulted, and `DefaultRoleCode` then points at nothing. The template
-      # now writes the game's own documented default `Roles` array
-      # explicitly (verified against a real dedicated-server's own
-      # serverconfig.json, not just the wiki's prose), so the file is
-      # self-contained regardless of that bootstrap behaviour.
+      # The `Roles` array stays hard-coded rather than becoming controls.
+      # ADR-084's amendment records why it must be written at all: writing
+      # this file pre-empts the game's first-run config bootstrap, so
+      # `DefaultRoleCode` ("suplayer", a compiled field default) would resolve
+      # against an empty list and the server kills itself at startup. Those
+      # nine roles are the game's own defaults, verified against a real
+      # dedicated server's serverconfig.json. Editing them is a raw-YAML job,
+      # not a form field — a per-privilege UI for nine roles is a different
+      # feature from configuring a server.
       manage: always
 
 containers:
@@ -160,6 +153,98 @@ containers:
       - { name: game, protocol: tcp, default: 42420, kind: game }
       - { name: game-udp, protocol: udp, offset_from: game, offset: 0 }
 
+# ---------------------------------------------------------------------------
+# Groups
+#
+# The two wiki pages this configuration surface is built from group their
+# contents very differently, and the group names below follow each page rather
+# than imposing one scheme over both:
+#
+#   * World_Configuration has real section headings, and every "World: ..."
+#     group is one of them verbatim — Player spawn and death, Survival
+#     challenges, World map, Temporal stability, World generation, Multiplayer,
+#     and the page's own "Configurations not in the customize world screen".
+#
+#   * Server_Config has NO topical sections at all. Its only headings are
+#     "serverconfig.json" (with Defaults / Sample with explanations beneath it)
+#     and "servermagicnumbers.json" — the body is one flat annotated JSON
+#     sample. So the server-side groups here are this seed's own, ordered to
+#     follow that sample's own key order rather than invented from nothing.
+#     Anyone comparing the two should not go looking for "Performance" on the
+#     wiki; it is not there.
+#
+# What is deliberately NOT exposed, and why:
+#
+#   * Port / Ip — Yggdrasil allocates the port (ADR-061) and the container must
+#     bind every interface, so both are owned by the template, not an operator.
+#   * Upnp / UpnpInfiniteLifetime — the container runtime already publishes the
+#     port; UPnP from inside a container maps the wrong host.
+#   * ConfigVersion ("should not be edited by hand"), ServerIdentifier,
+#     VhIdentifier, NextPlayerGroupUid, LastLaunchMods, LastLaunchPlaystyle,
+#     FileEditWarning — internal state the game maintains for itself.
+#   * SaveFileLocation, ModPaths — paths fixed by this seed's own layout.
+#   * DefaultSpawn / Roles — nested objects; see the Roles note above.
+#   * OnlyWhitelisted — the wiki marks it superseded ("can be ignored").
+#   * HostedMode / HostedModeAllowMods — silently disable MaxChunkRadius,
+#     MaxClients, Upnp, EntityDebugMode, TickTime and RandomBlockTicksPerChunk.
+#     A toggle that turns six other controls on this page into no-ops with
+#     nothing on screen saying so is worse than its absence.
+#   * MapSizeX/Y/Z — the same world dimensions World_Configuration documents as
+#     worldWidth/worldLength, which is where they are offered below. Two
+#     controls writing one concept is how they end up disagreeing.
+#   * SkipEveryChunkRow / SkipEveryChunkRowWidth, RepairMode, AnalyzeMode —
+#     worldgen test scaffolding and modes the wiki itself documents as
+#     "Unknown".
+#   * servermagicnumbers.json in its entirety — a separate file (so a second
+#     config.files entry) of engine internals: thread counts, chunk queue
+#     sizes, desync tolerances. Adding it is a contained follow-on if it is
+#     ever wanted; guessing at it here would put a server's stability behind
+#     twenty-five controls nobody has tested.
+# ---------------------------------------------------------------------------
+groups:
+  - name: Install
+    description: Applying a change here needs an install update, not just a save.
+  - name: Performance
+    description: >-
+      Tick and view-distance tuning. Raising these costs RAM and CPU on the node.
+    collapsed: true
+  - name: Stability
+    description: >-
+      Thresholds at which the server shuts itself down rather than keep running
+      in a state it cannot recover from.
+    collapsed: true
+  - name: Logging
+    collapsed: true
+  - name: Chat and groups
+    collapsed: true
+  - name: Mods
+    collapsed: true
+  - name: Startup
+    collapsed: true
+  - name: "World: Player spawn and death"
+    description: From the World Configuration wiki page's section of the same name.
+  - name: "World: Survival challenges"
+    description: From the World Configuration wiki page's section of the same name.
+    collapsed: true
+  - name: "World: World map"
+    collapsed: true
+  - name: "World: Temporal stability"
+    collapsed: true
+  - name: "World: World generation"
+    description: >-
+      Most of these apply only when a world is first created — changing them
+      later does nothing to terrain that already exists.
+    collapsed: true
+  - name: "World: Multiplayer"
+    collapsed: true
+  - name: "World: Advanced"
+    description: >-
+      The wiki's "Configurations not in the customize world screen". These
+      publish no default, so each is blank here and the key is left out of the
+      config entirely until you set one — which leaves the game's own built-in
+      value in place rather than this seed guessing at it.
+    collapsed: true
+
 variables:
   # ---- Install ------------------------------------------------------------
   # dotnet_runtime_url is gone: the .NET runtime comes from base-dotnet's own
@@ -182,39 +267,103 @@ variables:
   - name: server_name
     group: Server
     label: Server name
-    description: Shown in the in-game server browser.
+    description: >-
+      Shown in the in-game server browser. 4-80 characters, and it must be set
+      for "Advertise server" below to work at all.
     default: "A Yggdrasil server"
     editable: true
   - name: server_description
     group: Server
     label: Server description
-    description: Longer text shown alongside the server name. Leave blank for none.
+    description: >-
+      Longer text shown alongside the server name. VTML is accepted here (for
+      example <br> for a line break). Leave blank for none.
     default: ""
     editable: true
   - name: welcome_message
     group: Server
     label: Welcome message
-    description: 'Shown to a player on join. "{0}" is replaced with their name.'
+    description: >-
+      Shown to a player on join. "{0}" is replaced with their name. Leave blank
+      to disable it — the game crashes clients on a null, so this seed writes an
+      empty string rather than removing the key.
     default: "Welcome {0}, may you survive well and prosper"
     editable: true
-  - name: max_clients
+  - name: server_language
     group: Server
+    label: Server language
+    description: Two-letter ISO code deciding the language of server messages.
+    default: "en"
+    editable: true
+  - name: server_url
+    group: Server
+    label: Server URL
+    description: >-
+      Sent to the master server. The wiki records it as having no use yet, so
+      blank is the ordinary answer.
+    default: ""
+    editable: true
+  - name: advertise_server
+    group: Server
+    type: bool
+    label: Advertise on the public server list
+    description: >-
+      Publishes this server to the master server's public listing. Needs
+      "Server name" set, and the game port reachable from the internet.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: masterserver_url
+    group: Server
+    label: Master server URL
+    description: >-
+      Where "Advertise on the public server list" publishes to. Must include
+      the protocol and a trailing slash.
+    default: "http://masterserver.vintagestory.at/api/v1/servers/"
+    editable: true
+
+  # ---- Players --------------------------------------------------------------
+  - name: max_clients
+    group: Players
     type: number
     label: Max players
+    description: Higher values need more RAM and CPU on the node.
     default: "16"
     min: 1
     max: 128
     step: 1
     editable: true
+  - name: max_clients_in_queue
+    group: Players
+    type: number
+    label: Max players queued
+    description: How many may wait to join once the server is full. 0 disables the queue.
+    default: "0"
+    min: 0
+    max: 128
+    step: 1
+    editable: true
   - name: password
-    group: Server
+    group: Players
     type: password
     label: Password
     description: Leave blank for no password.
     default: ""
     editable: true
+  - name: verify_player_auth
+    group: Players
+    type: bool
+    label: Verify player accounts
+    description: >-
+      Checks each joining player against the game's auth servers. Turning this
+      off lets unauthenticated clients in and is only sane on a LAN.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
   - name: whitelist_mode
-    group: Server
+    group: Players
     type: select
     label: Whitelist
     default: "0"
@@ -223,16 +372,59 @@ variables:
       - { value: "0", label: "Default (on for a dedicated server)" }
       - { value: "1", label: "Off" }
       - { value: "2", label: "On" }
-  - name: pass_time_when_empty
-    group: Server
-    type: bool
-    label: Keep time passing with nobody online
-    true_value: "true"
-    false_value: "false"
-    default: "false"
+  - name: default_role_code
+    group: Players
+    type: select
+    label: Default role for new players
+    description: >-
+      One of the nine roles this seed writes into serverconfig.json. Naming a
+      role that does not exist kills the server at startup, so this is a list
+      rather than a free-text field.
+    default: "suplayer"
     editable: true
+    options:
+      - { value: "suvisitor",       label: "Survival Visitor — chat only, cannot build" }
+      - { value: "crvisitor",       label: "Creative Visitor — chat and fly, cannot build" }
+      - { value: "limitedsuplayer", label: "Limited Survival Player — build in permitted areas" }
+      - { value: "limitedcrplayer", label: "Limited Creative Player — build in permitted areas, fly" }
+      - { value: "suplayer",        label: "Survival Player — the game's own default" }
+      - { value: "crplayer",        label: "Creative Player — build anywhere, fly" }
+      - { value: "sumod",           label: "Survival Moderator — kick and ban" }
+      - { value: "crmod",           label: "Creative Moderator — kick, ban, fly, set game modes" }
+      - { value: "admin",           label: "Admin — every privilege, including granting admin" }
+  - name: client_connection_timeout
+    group: Players
+    type: number
+    label: Client timeout (seconds)
+    default: "150"
+    min: 10
+    max: 3600
+    step: 1
+    editable: true
+  - name: warn_clients_after_afk_seconds
+    group: Players
+    type: number
+    label: Warn AFK players after (seconds)
+    description: 0 disables the warning.
+    default: "0"
+    min: 0
+    max: 86400
+    step: 1
+    editable: true
+  - name: kick_clients_after_afk_seconds
+    group: Players
+    type: number
+    label: Kick AFK players after (seconds)
+    description: 0 disables kicking.
+    default: "0"
+    min: 0
+    max: 86400
+    step: 1
+    editable: true
+
+  # ---- Gameplay -------------------------------------------------------------
   - name: allow_pvp
-    group: Server
+    group: Gameplay
     type: bool
     label: Allow PvP
     true_value: "true"
@@ -240,7 +432,7 @@ variables:
     default: "true"
     editable: true
   - name: allow_fire_spread
-    group: Server
+    group: Gameplay
     type: bool
     label: Allow fire to spread
     true_value: "true"
@@ -248,15 +440,286 @@ variables:
     default: "true"
     editable: true
   - name: allow_falling_blocks
-    group: Server
+    group: Gameplay
     type: bool
     label: Allow blocks to fall
     true_value: "true"
     false_value: "false"
     default: "true"
     editable: true
+  - name: pass_time_when_empty
+    group: Gameplay
+    type: bool
+    label: Keep time passing with nobody online
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
 
-  # ---- World ------------------------------------------------------------
+  # ---- Performance ----------------------------------------------------------
+  - name: max_chunk_radius
+    group: Performance
+    type: number
+    label: Max view distance (chunks)
+    description: The furthest a player may see. Higher values need more RAM.
+    default: "12"
+    min: 1
+    max: 64
+    step: 1
+    editable: true
+  - name: tick_time
+    group: Performance
+    label: Tick time (milliseconds)
+    description: >-
+      Milliseconds between server ticks; the default is 30 ticks per second
+      (1000/30). A text field rather than a number one because the game's own
+      default carries more decimal places than a stepped numeric control can
+      express without rounding it.
+    default: "33.3333321"
+    editable: true
+  - name: max_main_thread_block_ticks
+    group: Performance
+    type: number
+    label: Max block ticks per server tick
+    default: "10000"
+    min: 100
+    max: 1000000
+    step: 100
+    editable: true
+  - name: random_block_ticks_per_chunk
+    group: Performance
+    type: number
+    label: Random ticks per chunk
+    description: Higher values make grass and crops recover faster.
+    default: "16"
+    min: 0
+    max: 256
+    step: 1
+    editable: true
+  - name: block_tick_chunk_range
+    group: Performance
+    type: number
+    label: Random tick range (chunks)
+    description: How far from a player chunks receive random ticks. 4 chunks is 128 blocks.
+    default: "4"
+    min: 1
+    max: 32
+    step: 1
+    editable: true
+  - name: block_tick_interval
+    group: Performance
+    type: number
+    label: Random tick interval (milliseconds)
+    default: "300"
+    min: 10
+    max: 60000
+    step: 10
+    editable: true
+  - name: spawn_cap_player_scaling
+    group: Performance
+    type: number
+    label: Mob cap scaling per player
+    description: >-
+      Raises the mob cap by this much per online player. 0 keeps one cap however
+      many are on.
+    default: "0.5"
+    min: 0
+    max: 5
+    step: 0.05
+    editable: true
+  - name: compress_packets
+    group: Performance
+    type: bool
+    label: Compress packets to clients
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+
+  # ---- Stability ------------------------------------------------------------
+  - name: die_below_disk_space_mb
+    group: Stability
+    type: number
+    label: Shut down below free disk (MB)
+    default: "400"
+    min: 0
+    max: 1000000
+    step: 50
+    editable: true
+  - name: die_above_error_count
+    group: Stability
+    type: number
+    label: Shut down above error count
+    default: "100000"
+    min: 0
+    max: 10000000
+    step: 1000
+    editable: true
+  - name: die_above_memory_usage_mb
+    group: Stability
+    type: number
+    label: Shut down above memory use (MB)
+    description: >-
+      The game's own default is 50000 MB. Set this under the node's real memory
+      limit so the server exits cleanly rather than being OOM-killed.
+    default: "50000"
+    min: 0
+    max: 1000000
+    step: 16
+    editable: true
+  - name: corruption_protection
+    group: Stability
+    type: bool
+    label: Corruption protection
+    description: Writes redundant data so corrupt world files can be detected.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: regenerate_corrupt_chunks
+    group: Stability
+    type: bool
+    label: Regenerate corrupt chunks
+    description: >-
+      Replaces a corrupt chunk with freshly generated terrain. Anything built
+      there is lost, which is why it is off by default.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- Logging --------------------------------------------------------------
+  - name: log_block_break_place
+    group: Logging
+    type: bool
+    label: Log every block placed and broken
+    description: An audit trail, and a large one on a busy server.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: log_file_split_after_line
+    group: Logging
+    type: number
+    label: Split log files after (lines)
+    default: "500000"
+    min: 1000
+    max: 100000000
+    step: 1000
+    editable: true
+  - name: entity_debug_mode
+    group: Logging
+    type: bool
+    label: Entity debug mode
+    description: Sends extra entity detail to clients that ask for it.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: anti_abuse
+    group: Logging
+    type: number
+    label: Anti-abuse level
+    description: >-
+      Guards against a range of malicious client behaviour. The wiki notes it
+      was glitchy when introduced, so 0 remains the game's default.
+    default: "0"
+    min: 0
+    max: 3
+    step: 1
+    editable: true
+  - name: login_flood_protection
+    group: Logging
+    type: bool
+    label: Login flood protection
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: temporary_ip_block_list
+    group: Logging
+    type: bool
+    label: Temporary IP block list
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- Chat and groups ------------------------------------------------------
+  - name: chat_rate_limit_ms
+    group: Chat and groups
+    type: number
+    label: Minimum time between chat messages (ms)
+    default: "1000"
+    min: 0
+    max: 60000
+    step: 100
+    editable: true
+  - name: max_owned_group_channels_per_user
+    group: Chat and groups
+    type: number
+    label: Max group channels per player
+    default: "10"
+    min: 0
+    max: 1000
+    step: 1
+    editable: true
+  - name: group_chat_history_size
+    group: Chat and groups
+    type: number
+    label: Group chat history size
+    default: "20"
+    min: 0
+    max: 10000
+    step: 1
+    editable: true
+
+  # ---- Mods -----------------------------------------------------------------
+  - name: mod_db_url
+    group: Mods
+    label: Mod database URL
+    description: Where /moddb install downloads from.
+    default: "https://mods.vintagestory.at/"
+    editable: true
+  # ModIdBlackList / ModIdWhiteList are deliberately absent. Both are JSON
+  # arrays, and a seed template cannot build one from a text control: the
+  # renderer is text/template, whose builtin function set has no `split`. The
+  # alternative — a free-text field an operator types raw JSON into — puts the
+  # whole of serverconfig.json behind one unbalanced bracket, and this file is
+  # rewritten on every rebuild, so a typo would leave the server unable to
+  # start with nothing on the form saying which field did it. A repeating
+  # list control is the real fix and is a schema change, not a seed one.
+  - name: disable_mod_safety_check
+    group: Mods
+    type: bool
+    label: Skip mod safety checks
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: disable_auto_remap
+    group: Mods
+    type: bool
+    label: Disable automatic mod ID remapping
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- Startup --------------------------------------------------------------
+  - name: startup_command
+    group: Startup
+    label: Startup command
+    description: >-
+      A single command run when the server starts, for example "/time set day".
+      The game accepts several separated by newlines, which a one-line control
+      cannot express — leave blank to run none.
+    default: ""
+    editable: true
+
+  # ---- World ----------------------------------------------------------------
+  # WorldConfig's own top-level fields, as against the WorldConfiguration bag
+  # below it that the World Configuration wiki page documents.
   - name: world_name
     group: World
     label: World name
@@ -277,6 +740,9 @@ variables:
     group: World
     type: select
     label: Play style
+    description: >-
+      Picks the preset a new world is created from. It does not re-apply to a
+      world that already exists.
     default: "surviveandbuild"
     editable: true
     options:
@@ -285,6 +751,847 @@ variables:
       - { value: "exploration",        label: "Exploration" }
       - { value: "homosapiens",        label: "Homo Sapiens — expedition-style, permadeath" }
       - { value: "creativebuilding",   label: "Creative building — flight and unlimited resources" }
+  - name: world_type
+    group: World
+    type: select
+    label: World type
+    default: "standard"
+    editable: true
+    options:
+      - { value: "standard",  label: "Standard" }
+      - { value: "superflat", label: "Superflat" }
+  - name: allow_creative_mode
+    group: World
+    type: bool
+    label: Allow /gamemode creative
+    description: >-
+      The old "allow cheats" toggle. With this off, even an admin cannot switch
+      to creative.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+
+  # ---- World: Player spawn and death ---------------------------------------
+  - name: wc_game_mode
+    group: "World: Player spawn and death"
+    type: select
+    label: Game mode
+    default: "survival"
+    editable: true
+    options:
+      - { value: "survival", label: "Survival" }
+      - { value: "creative", label: "Creative" }
+  - name: wc_death_punishment
+    group: "World: Player spawn and death"
+    type: select
+    label: On death
+    default: "drop"
+    editable: true
+    options:
+      - { value: "drop", label: "Drop inventory" }
+      - { value: "keep", label: "Keep inventory" }
+  - name: wc_dropped_items_timer
+    group: "World: Player spawn and death"
+    type: number
+    label: Dropped items despawn after (seconds)
+    default: "600"
+    min: 0
+    max: 100000
+    step: 10
+    editable: true
+  - name: wc_spawn_radius
+    group: "World: Player spawn and death"
+    type: number
+    label: Spawn radius (blocks)
+    description: How far from world spawn a player may appear.
+    default: "50"
+    min: 0
+    max: 10000
+    step: 1
+    editable: true
+  - name: wc_temporal_gear_respawn_uses
+    group: "World: Player spawn and death"
+    type: number
+    label: Temporal gear respawn uses
+    description: >-
+      How many times a temporal gear may set a respawn point. -1 is unlimited.
+      The wiki lists this under both "Player spawn and death" and "Temporal
+      stability"; it is declared once, here.
+    default: "20"
+    min: -1
+    max: 9999
+    step: 1
+    editable: true
+  - name: wc_starting_climate
+    group: "World: Player spawn and death"
+    type: select
+    label: Starting climate
+    description: The climate band at world spawn. New worlds only.
+    default: "temperate"
+    editable: true
+    options:
+      - { value: "hot",       label: "Hot" }
+      - { value: "warm",      label: "Warm" }
+      - { value: "temperate", label: "Temperate" }
+      - { value: "cool",      label: "Cool" }
+      - { value: "icy",       label: "Icy" }
+  - name: wc_grace_timer
+    group: "World: Player spawn and death"
+    type: number
+    label: Grace timer (in-game days)
+    description: Days before hostile creatures start spawning. New worlds only.
+    default: "0"
+    min: 0
+    max: 1000
+    step: 1
+    editable: true
+
+  # ---- World: Survival challenges ------------------------------------------
+  - name: wc_seasons
+    group: "World: Survival challenges"
+    type: select
+    label: Seasons
+    default: "enabled"
+    editable: true
+    options:
+      - { value: "enabled", label: "Progress normally" }
+      - { value: "spring",  label: "Always spring" }
+      - { value: "summer",  label: "Always summer" }
+      - { value: "fall",    label: "Always autumn" }
+      - { value: "winter",  label: "Always winter" }
+  - name: wc_playerlives
+    group: "World: Survival challenges"
+    type: number
+    label: Player lives
+    description: Lives before permanent death. -1 is infinite.
+    default: "-1"
+    min: -1
+    max: 1000
+    step: 1
+    editable: true
+  - name: wc_lung_capacity
+    group: "World: Survival challenges"
+    type: number
+    label: Lung capacity (milliseconds)
+    description: How long a player can hold their breath underwater.
+    default: "40000"
+    min: 1000
+    max: 1000000
+    step: 1000
+    editable: true
+  - name: wc_days_per_month
+    group: "World: Survival challenges"
+    type: number
+    label: Days per month
+    description: Higher values make seasons pass more slowly.
+    default: "9"
+    min: 1
+    max: 1000
+    step: 1
+    editable: true
+  - name: wc_harsh_winters
+    group: "World: Survival challenges"
+    type: bool
+    label: Harsh winters
+    description: Cold damages crops and suppresses animal spawning.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_block_gravity
+    group: "World: Survival challenges"
+    type: select
+    label: Blocks affected by gravity
+    default: "sandgravel"
+    editable: true
+    options:
+      - { value: "sandgravel",     label: "Sand and gravel" }
+      - { value: "sandgravelsoil", label: "Sand, gravel and soil" }
+  - name: wc_cave_ins
+    group: "World: Survival challenges"
+    type: select
+    label: Cave-ins
+    description: Whether unsupported rock collapses.
+    default: "off"
+    editable: true
+    options:
+      - { value: "off", label: "Off" }
+      - { value: "on",  label: "On" }
+  - name: wc_allow_underground_farming
+    group: "World: Survival challenges"
+    type: bool
+    label: Allow underground farming
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: wc_no_liquid_source_transport
+    group: "World: Survival challenges"
+    type: bool
+    label: Buckets cannot create water sources
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: wc_body_temperature_resistance
+    group: "World: Survival challenges"
+    type: number
+    label: Body temperature resistance (degrees)
+    description: How much cold an undressed seraph tolerates.
+    default: "0"
+    min: -50
+    max: 50
+    step: 1
+    editable: true
+  - name: wc_creature_hostility
+    group: "World: Survival challenges"
+    type: select
+    label: Creature hostility
+    default: "aggressive"
+    editable: true
+    options:
+      - { value: "aggressive", label: "Aggressive" }
+      - { value: "passive",    label: "Passive" }
+      - { value: "off",        label: "Off" }
+  - name: wc_creature_strength
+    group: "World: Survival challenges"
+    type: number
+    label: Creature damage multiplier
+    description: 1 is 100%.
+    default: "1"
+    min: 0
+    max: 99
+    step: 0.05
+    editable: true
+  - name: wc_creature_swim_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Creature swim speed multiplier
+    default: "2"
+    min: 0.5
+    max: 3
+    step: 0.05
+    editable: true
+  - name: wc_player_health_points
+    group: "World: Survival challenges"
+    type: number
+    label: Player base health
+    default: "15"
+    min: 1
+    max: 999
+    step: 1
+    editable: true
+  - name: wc_player_health_regen_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Player health regeneration multiplier
+    default: "1"
+    min: 0.25
+    max: 2
+    step: 0.05
+    editable: true
+  - name: wc_player_hunger_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Player hunger rate multiplier
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_player_move_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Player movement speed multiplier
+    default: "1.5"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_food_spoil_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Food spoilage multiplier
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_sapling_growth_rate
+    group: "World: Survival challenges"
+    type: number
+    label: Sapling growth multiplier
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_tool_durability
+    group: "World: Survival challenges"
+    type: number
+    label: Tool durability multiplier
+    default: "1"
+    min: 0
+    max: 99
+    step: 0.05
+    editable: true
+  - name: wc_tool_mining_speed
+    group: "World: Survival challenges"
+    type: number
+    label: Tool mining speed multiplier
+    default: "1"
+    min: 0
+    max: 99
+    step: 0.05
+    editable: true
+  - name: wc_propick_node_search_radius
+    group: "World: Survival challenges"
+    type: number
+    label: Prospecting pick search radius (blocks)
+    default: "6"
+    min: 0
+    max: 100
+    step: 1
+    editable: true
+  - name: wc_global_deposit_spawn_rate
+    group: "World: Survival challenges"
+    type: number
+    label: Ore deposit spawn rate
+    description: 1 is 100%.
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_microblock_chiseling
+    group: "World: Survival challenges"
+    type: select
+    label: Microblock chiseling
+    default: "stonewood"
+    editable: true
+    options:
+      - { value: "off",       label: "Off" }
+      - { value: "stonewood", label: "Stone and wood" }
+      - { value: "all",       label: "All blocks" }
+  - name: wc_lore_content
+    group: "World: Survival challenges"
+    type: bool
+    label: Story and lore content
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_clutter_obtainable
+    group: "World: Survival challenges"
+    type: select
+    label: Ruin clutter obtainable
+    default: "ifrepaired"
+    editable: true
+    options:
+      - { value: "ifrepaired", label: "Only if repaired" }
+      - { value: "yes",        label: "Yes" }
+      - { value: "no",         label: "No" }
+  - name: wc_lightning_fires
+    group: "World: Survival challenges"
+    type: bool
+    label: Lightning starts fires
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- World: World map -----------------------------------------------------
+  - name: wc_allow_coordinate_hud
+    group: "World: World map"
+    type: bool
+    label: Allow the coordinate display
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_allow_map
+    group: "World: World map"
+    type: bool
+    label: Allow the world map
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_color_accurate_worldmap
+    group: "World: World map"
+    type: bool
+    label: Classic colourful map style
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- World: Temporal stability -------------------------------------------
+  - name: wc_temporal_stability
+    group: "World: Temporal stability"
+    type: bool
+    label: Temporal stability mechanic
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_temporal_storms
+    group: "World: Temporal stability"
+    type: select
+    label: Temporal storm frequency
+    default: "sometimes"
+    editable: true
+    options:
+      - { value: "off",       label: "Off" }
+      - { value: "veryrare",  label: "Very rare" }
+      - { value: "rare",      label: "Rare" }
+      - { value: "sometimes", label: "Sometimes" }
+      - { value: "often",     label: "Often" }
+      - { value: "veryoften", label: "Very often" }
+  - name: wc_tempstorm_duration_mul
+    group: "World: Temporal stability"
+    type: number
+    label: Temporal storm duration multiplier
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_temporal_rifts
+    group: "World: Temporal stability"
+    type: select
+    label: Temporal rifts
+    default: "visible"
+    editable: true
+    options:
+      - { value: "off",       label: "Off" }
+      - { value: "invisible", label: "Invisible" }
+      - { value: "visible",   label: "Visible" }
+  - name: wc_temporal_storm_sleeping
+    group: "World: Temporal stability"
+    type: select
+    label: Sleeping during a temporal storm
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: "Not allowed" }
+      - { value: "1", label: "Allowed" }
+
+  # ---- World: World generation ---------------------------------------------
+  - name: wc_world_climate
+    group: "World: World generation"
+    type: select
+    label: World climate
+    description: New worlds only.
+    default: "realistic"
+    editable: true
+    options:
+      - { value: "realistic", label: "Realistic" }
+      - { value: "patchy",    label: "Patchy" }
+  - name: wc_world_width
+    group: "World: World generation"
+    type: number
+    label: World width (blocks)
+    description: New worlds only.
+    default: "1024000"
+    min: 1000
+    max: 8192000
+    step: 1000
+    editable: true
+  - name: wc_world_length
+    group: "World: World generation"
+    type: number
+    label: World length (blocks)
+    description: New worlds only.
+    default: "1024000"
+    min: 1000
+    max: 8192000
+    step: 1000
+    editable: true
+  - name: wc_polar_equator_distance
+    group: "World: World generation"
+    type: number
+    label: Pole-to-equator distance (blocks)
+    description: New worlds only. The game's own sample uses 100000.
+    default: "100000"
+    min: 1000
+    max: 1000000
+    step: 1000
+    editable: true
+  - name: wc_landcover
+    group: "World: World generation"
+    type: number
+    label: Land cover
+    description: Fraction of the world that is land. New worlds only.
+    default: "1"
+    min: 0
+    max: 1
+    step: 0.005
+    editable: true
+  - name: wc_oceanscale
+    group: "World: World generation"
+    type: number
+    label: Ocean scale
+    description: New worlds only.
+    default: "1"
+    min: 0.1
+    max: 5
+    step: 0.05
+    editable: true
+  - name: wc_upheavel_commonness
+    group: "World: World generation"
+    type: number
+    label: Upheaval commonness
+    description: How often dramatic terrain occurs. New worlds only.
+    default: "0.3"
+    min: 0
+    max: 1
+    step: 0.05
+    editable: true
+  - name: wc_geologic_activity
+    group: "World: World generation"
+    type: number
+    label: Geologic activity
+    description: Drives hot springs and surface lava. New worlds only.
+    default: "0.05"
+    min: 0
+    max: 0.4
+    step: 0.05
+    editable: true
+  - name: wc_landform_scale
+    group: "World: World generation"
+    type: number
+    label: Landform scale
+    description: New worlds only.
+    default: "1.0"
+    min: 0.2
+    max: 3
+    step: 0.05
+    editable: true
+  - name: wc_world_edge
+    group: "World: World generation"
+    type: select
+    label: World edge
+    default: "traversable"
+    editable: true
+    options:
+      - { value: "traversable", label: "Traversable" }
+      - { value: "blocked",     label: "Blocked" }
+  - name: wc_global_temperature
+    group: "World: World generation"
+    type: number
+    label: Global temperature multiplier
+    default: "1"
+    min: 0
+    max: 5
+    step: 0.05
+    editable: true
+  - name: wc_global_precipitation
+    group: "World: World generation"
+    type: number
+    label: Global precipitation multiplier
+    default: "1"
+    min: 0
+    max: 5
+    step: 0.05
+    editable: true
+  - name: wc_global_forestation
+    group: "World: World generation"
+    type: number
+    label: Global forestation offset
+    description: -1 is no forests, 1 is all forests.
+    default: "0"
+    min: -1
+    max: 1
+    step: 0.05
+    editable: true
+  - name: wc_surface_copper_deposits
+    group: "World: World generation"
+    type: number
+    label: Surface copper deposit rate
+    default: "0.12"
+    min: 0
+    max: 5
+    step: 0.01
+    editable: true
+  - name: wc_surface_tin_deposits
+    group: "World: World generation"
+    type: number
+    label: Surface tin deposit rate
+    default: "0.007"
+    min: 0
+    max: 5
+    step: 0.001
+    editable: true
+  - name: wc_snow_accum
+    group: "World: World generation"
+    type: bool
+    label: Snow accumulates in winter
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_story_structures_dist_scaling
+    group: "World: World generation"
+    type: number
+    label: Story structure spacing multiplier
+    default: "1"
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+
+  # ---- World: Multiplayer ---------------------------------------------------
+  - name: wc_allow_land_claiming
+    group: "World: Multiplayer"
+    type: bool
+    label: Allow land claiming
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_class_exclusive_recipes
+    group: "World: Multiplayer"
+    type: bool
+    label: Class-exclusive recipes
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: wc_auction_house
+    group: "World: Multiplayer"
+    type: bool
+    label: Auction house
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+
+  # ---- World: Advanced ------------------------------------------------------
+  # Every control here defaults to blank, and blank leaves the key out of
+  # WorldConfiguration entirely. The wiki publishes no default for most of
+  # them, so writing one would be this seed inventing a value and silently
+  # overriding whatever the game itself uses. The three that DO have a
+  # documented default still start blank, for the same reason: they are only
+  # worth writing when an operator has deliberately chosen one.
+  - name: wc_allow_timeswitch
+    group: "World: Advanced"
+    type: select
+    label: Time switching
+    description: Requires lore content to be disabled.
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game (false)" }
+      - { value: "true",  label: "Enabled" }
+      - { value: "false", label: "Disabled" }
+  - name: wc_temp_storm_frequency_mul
+    group: "World: Advanced"
+    type: number
+    label: Temporal storm frequency multiplier
+    default: ""
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_disable_death_messages
+    group: "World: Advanced"
+    type: select
+    label: Death messages
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "false", label: "Shown" }
+      - { value: "true",  label: "Hidden" }
+  - name: wc_wind_affected_entity_movement
+    group: "World: Advanced"
+    type: select
+    label: Wind affects movement
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_allow_crop_death
+    group: "World: Advanced"
+    type: select
+    label: Crops can die
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_process_crops
+    group: "World: Advanced"
+    type: select
+    label: Crops grow
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_crop_growth_rate_mul
+    group: "World: Advanced"
+    type: number
+    label: Crop growth rate multiplier
+    default: ""
+    min: 0.1
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_fertility_recovery_speed
+    group: "World: Advanced"
+    type: number
+    label: Soil fertility recovery speed
+    description: The wiki gives 0.25 as the game's own default.
+    default: ""
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_auction_house_delivery_price_mul
+    group: "World: Advanced"
+    type: number
+    label: Auction delivery price multiplier
+    default: ""
+    min: 0
+    max: 10
+    step: 0.05
+    editable: true
+  - name: wc_auction_house_duration_weeks_mul
+    group: "World: Advanced"
+    type: number
+    label: Auction duration multiplier (weeks)
+    default: ""
+    min: 1
+    max: 100
+    step: 1
+    editable: true
+  - name: wc_auction_house_sales_cut_rate
+    group: "World: Advanced"
+    type: number
+    label: Trader sales commission
+    description: A fraction — the wiki gives 0.1 as the game's own default.
+    default: ""
+    min: 0
+    max: 1
+    step: 0.01
+    editable: true
+  - name: wc_underground_windmills
+    group: "World: Advanced"
+    type: select
+    label: Windmills work underground
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_lightning_damage
+    group: "World: Advanced"
+    type: select
+    label: Lightning causes damage
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_legacywecommands
+    group: "World: Advanced"
+    type: select
+    label: Legacy world-edit commands
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Enabled" }
+      - { value: "false", label: "Disabled" }
+  - name: wc_map_hide_other_players
+    group: "World: Advanced"
+    type: select
+    label: Hide other players on the map
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Hidden" }
+      - { value: "false", label: "Shown" }
+  - name: wc_entity_map_layer
+    group: "World: Advanced"
+    type: select
+    label: Entity map layer
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Shown" }
+      - { value: "false", label: "Hidden" }
+  - name: wc_allow_deathwaypointing
+    group: "World: Advanced"
+    type: select
+    label: Death waypoints on the map
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Shown" }
+      - { value: "false", label: "Hidden" }
+  - name: wc_potatoe_mode
+    group: "World: Advanced"
+    type: select
+    label: Moss generates on trees
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_allow_open_fire_firing
+    group: "World: Advanced"
+    type: select
+    label: Fire raw clay in an open fire
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Allowed" }
+      - { value: "false", label: "Not allowed" }
+  - name: wc_player2player_collisions
+    group: "World: Advanced"
+    type: select
+    label: Players collide with each other
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_allow_creative_mode_command_blocks
+    group: "World: Advanced"
+    type: select
+    label: Command blocks editable
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
+  - name: wc_open_doors_not_solid
+    group: "World: Advanced"
+    type: select
+    label: Open doors behave like slabs
+    default: ""
+    editable: true
+    options:
+      - { value: "",      label: "Leave to the game" }
+      - { value: "true",  label: "Yes" }
+      - { value: "false", label: "No" }
 
 # `mode: port` rather than `mode: log`, deliberately. The dedicated-server
 # guide does quote the exact ready line ("Dedicated Server now running on
@@ -319,5 +1626,12 @@ backup:
 # apt package, see the install block above) — dropped rather than left
 # stranded under a name this seed no longer declares, so a server created
 # under the old shape does not carry a dead override forward for no reason.
+#
+# Every variable that existed before this release keeps its exact name, so no
+# rename migration is needed: server_name, server_description, welcome_message,
+# max_clients, password, whitelist_mode, pass_time_when_empty, allow_pvp,
+# allow_fire_spread, allow_falling_blocks, world_name, world_seed and
+# play_style all still resolve to the operator's stored value. Only their
+# `group` changed, which is presentation and is not stored per server.
 migrations:
   - drop: dotnet_runtime_url

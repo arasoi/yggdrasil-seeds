@@ -116,14 +116,27 @@ Rarely, and deliberately. The set embedded in the `yggd` binary lives upstream a
 all** — it is an offline floor, not a mirror of this repository, and it should
 stay small.
 
-Promoting a seed there is a commit in the private repository, not a sync, and it
-carries a constraint this repository does not: a bundled seed's install must
-survive conversion to the older single-download wire shape, so that a protocol 1
-agent installs it exactly as it always did. An install with more than one
-download cannot join it. That is why Vintage Story lives here only.
+Promoting a seed there is a commit in the private repository, not a sync. There
+is no wire-shape restriction on a newly authored seed: the compatibility test
+upstream is scoped to seeds that *had* a schema 2 form and must keep installing
+the way they always did, and a seed authored directly in schema 3 is compared
+against nothing. Vintage Story sits in both sets.
 
-If a seed is promoted, the two copies are then **independent** and will drift.
-Fix a seed here first; carry it upstream only if it is in the embedded set.
+**Once a seed is in both, the two copies are independent and will drift — and
+the drift has a direction that bites.** The catalog layer sits *above* the
+bundled one, so an installed catalog bundle replaces the embedded copy entirely,
+including when the embedded copy is newer. A fix that lands only upstream is
+therefore invisible to every operator who installed that seed from the catalog.
+
+So: **a seed change upstream must be pushed here too**, and with a version at
+least as high. Check both before you assume a fix has shipped:
+
+```bash
+grep -m1 '^version:' seeds/<id>/seed.yaml                  # here
+grep -m1 '^version:' ../yggdrasil/seeds/library/<id>/seed.yaml   # upstream
+```
+
+Fix a seed here first where you can — this is where it reaches operators.
 
 ## Keeping the mirrored docs current
 

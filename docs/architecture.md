@@ -48,19 +48,25 @@ There are two collections of seeds, and they are not the same thing:
 | Reaches an operator by | Downloading from a catalog | Being compiled into the `yggd` binary |
 | Updated by | Pushing to this repository | A new control-plane release |
 | Exists so that | A seed can be fixed on its own schedule | A fresh install has seeds **with no network at all** |
-| Constrained by the legacy wire shape | **No** | Yes — see below |
 
 The embedded set is the offline floor. It is not a mirror of this repository and
 is not kept in sync with it: promoting a seed into it is a deliberate commit
 upstream, not a sync, and it should stay small for that reason.
 
-**The embedded set carries a constraint this repository does not.** A test
-upstream requires every bundled seed's install to survive conversion to the
-older single-download wire shape, so that a protocol 1 agent installs it exactly
-as it always did. An install that cannot be expressed that way — more than one
-download, say — cannot join the embedded set, but is perfectly fine here. The
-Vintage Story seed is the worked example: it fetches a .NET runtime *and* the
-game server, two downloads, so it lives here and not there.
+**The two sets can hold different versions of the same seed, and the catalog
+wins.** Merging is by id and whole-seed, with the catalog layer above the bundled
+one — so an installed catalog bundle replaces the embedded copy entirely,
+*including when the embedded copy is newer*. A seed fixed upstream but not
+published here is therefore not merely unpublished: for any operator who has
+installed it from the catalog, the fix is shadowed by the older bundle. That is
+why a seed change upstream has to be pushed here too.
+
+Newly authored seeds face no wire-shape restriction in either set. The
+compatibility test upstream is scoped to seeds that *had* a schema 2 form and
+must keep installing the way they always did; a seed authored directly in schema
+3 has nothing to preserve and is compared against nothing. Vintage Story is the
+worked example — a two-download install (a .NET runtime and the game), which
+sits in both sets.
 
 If you are unsure which set you are editing: this repository is the one whose
 bundles sit directly under `seeds/<id>/`, with no `library/` in the path.

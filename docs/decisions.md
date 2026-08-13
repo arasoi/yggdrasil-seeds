@@ -288,6 +288,13 @@ not reference ADR numbers — see [conventions.md](conventions.md).
   forgetting to publish is what hurts, and forgetting to promote upstream costs
   only the offline floor being older than the catalog, which is what it is for.
 
+  The scope of that obligation is worth stating plainly, because the record above
+  reads as though it concerns one seed: **it concerns all of them.** Every bundle
+  in this repository is also in `seeds/library` upstream, byte-identical as of
+  Vintage Story 2.0.0. The overlap being total is not a decision — it is simply
+  where the two sets have ended up — but it means "is this seed embedded too?"
+  has the same answer for every seed here, and that answer is yes.
+
   Worth keeping as a method note, since it is the second time this has bitten in
   this repository: **the fact that mattered was not the one being checked.** The
   question was "may this seed be embedded", and the answer turned out to be

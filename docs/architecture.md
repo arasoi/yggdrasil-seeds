@@ -51,7 +51,14 @@ There are two collections of seeds, and they are not the same thing:
 
 The embedded set is the offline floor. It is not a mirror of this repository and
 is not kept in sync with it: promoting a seed into it is a deliberate commit
-upstream, not a sync, and it should stay small for that reason.
+upstream, not a sync.
+
+**As it happens, every seed here is currently in both sets.** All five bundles
+under `seeds/` are byte-identical to their `seeds/library` counterparts upstream
+as of Vintage Story 2.0.0. That is a fact about today rather than a property of
+the arrangement — the two sets stay in step because somebody keeps them there,
+and nothing checks it — but it does mean the obligation below is not a special
+case for one seed. It applies to all of them.
 
 **The two sets can hold different versions of the same seed, and the catalog
 wins.** Merging is by id and whole-seed, with the catalog layer above the bundled
@@ -65,8 +72,8 @@ Newly authored seeds face no wire-shape restriction in either set. The
 compatibility test upstream is scoped to seeds that *had* a schema 2 form and
 must keep installing the way they always did; a seed authored directly in schema
 3 has nothing to preserve and is compared against nothing. Vintage Story is the
-worked example — a two-download install (a .NET runtime and the game), which
-sits in both sets.
+worked example — a two-download install (a .NET runtime and the game), authored
+directly in schema 3 and embedded without difficulty.
 
 If you are unsure which set you are editing: this repository is the one whose
 bundles sit directly under `seeds/<id>/`, with no `library/` in the path.

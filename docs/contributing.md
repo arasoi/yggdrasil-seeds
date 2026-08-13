@@ -111,16 +111,20 @@ is better than a tidy one nobody has started.
 
 ## Adding a seed to the embedded set
 
-Rarely, and deliberately. The set embedded in the `yggd` binary lives upstream at
-`seeds/library` and exists so a fresh install has seeds **with no network at
-all** — it is an offline floor, not a mirror of this repository, and it should
-stay small.
+Deliberately, and as its own commit. The set embedded in the `yggd` binary lives
+upstream at `seeds/library` and exists so a fresh install has seeds **with no
+network at all** — it is an offline floor, not a mirror of this repository.
 
 Promoting a seed there is a commit in the private repository, not a sync. There
 is no wire-shape restriction on a newly authored seed: the compatibility test
 upstream is scoped to seeds that *had* a schema 2 form and must keep installing
 the way they always did, and a seed authored directly in schema 3 is compared
-against nothing. Vintage Story sits in both sets.
+against nothing.
+
+**Every seed in this repository is currently in both sets** — all five, and
+byte-identical as of Vintage Story 2.0.0. So the paragraphs below are not a note
+about one unusual bundle; they describe the normal case here, and you should
+assume any seed you touch is embedded too until you have checked otherwise.
 
 **Once a seed is in both, the two copies are independent and will drift — and
 the drift has a direction that bites.** The catalog layer sits *above* the

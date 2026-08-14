@@ -3,12 +3,10 @@ schema: 3
 name: Minecraft Bedrock
 icon: "🧱"
 description: >
-  Minecraft Bedrock Edition dedicated server. Mojang ships no official
-  container image and the server binary needs libraries a bare base image
-  does not carry, so this seed uses a well-known community image that
-  downloads the official server itself at container start (ADR-018: a seed
-  whose image already contains the install step needs no separate Install).
-version: "4.0.0"
+  Dedicated server for Minecraft Bedrock Edition — the version played on
+  consoles, phones and Windows. The server downloads itself when it first
+  starts, so there is no separate install step.
+version: "4.0.1"
 
 # Bedrock Dedicated Server ships amd64-only Linux binaries.
 architectures: [amd64]

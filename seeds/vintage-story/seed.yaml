@@ -3,11 +3,10 @@ schema: 3
 name: Vintage Story
 icon: "🪨"
 description: >
-  Vintage Story dedicated server. A .NET application with no official Linux
-  container image, so this seed downloads the server itself into a
-  per-server install and runs it on images/base-dotnet, which already
-  carries a verified, apt-installed .NET runtime.
-version: "2.0.0"
+  Dedicated server for Vintage Story, a sandbox survival and building game.
+  Each server gets its own copy of the game files, so different worlds can run
+  different versions.
+version: "2.0.1"
 
 # Confirmed only against the linux-x64 server tarball (the templated URL
 # below). An ARM64 dedicated server tarball was not found published anywhere

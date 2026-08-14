@@ -3,13 +3,10 @@ schema: 3
 name: ARK Survival Ascended
 icon: "🦖"
 description: >
-  ARK Survival Ascended exercises shared installs and clusters: one SteamCMD
-  install per node, writable server state for saves and config, and a shared
-  cluster volume for map transfers and cluster identity. ARK ASA has no
-  native Linux dedicated server, so the primary container runs the Windows
-  binary under GE-Proton via the ygg-proton helper in
-  images/base-steamcmd-proton (ADR-047).
-version: "5.0.0"
+  Dedicated server for ARK Survival Ascended. Several maps can share one copy
+  of the game files and a cluster volume, so players keep their characters and
+  items when they travel between maps.
+version: "5.0.1"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.

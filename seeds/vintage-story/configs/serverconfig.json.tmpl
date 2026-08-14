@@ -1,15 +1,59 @@
 {
   "ServerName": "{{.Vars.server_name | js}}",
   "ServerDescription": {{if .Vars.server_description}}"{{.Vars.server_description | js}}"{{else}}null{{end}},
+  "ServerUrl": {{if .Vars.server_url}}"{{.Vars.server_url | js}}"{{else}}null{{end}},
   "WelcomeMessage": "{{.Vars.welcome_message | js}}",
+  "ServerLanguage": "{{.Vars.server_language | js}}",
+  "AdvertiseServer": {{.Vars.advertise_server}},
+  "MasterserverUrl": "{{.Vars.masterserver_url | js}}",
+  "ModDbUrl": "{{.Vars.mod_db_url | js}}",
+
   "Port": {{.Ports.game}},
   "MaxClients": {{.Vars.max_clients}},
+  "MaxClientsInQueue": {{.Vars.max_clients_in_queue}},
   "Password": {{if .Vars.password}}"{{.Vars.password | js}}"{{else}}null{{end}},
+  "VerifyPlayerAuth": {{.Vars.verify_player_auth}},
   "WhitelistMode": {{.Vars.whitelist_mode}},
-  "PassTimeWhenEmpty": {{.Vars.pass_time_when_empty}},
+  "ClientConnectionTimeout": {{.Vars.client_connection_timeout}},
+  "WarnClientsAfterAfkSeconds": {{.Vars.warn_clients_after_afk_seconds}},
+  "KickClientsAfterAfkSeconds": {{.Vars.kick_clients_after_afk_seconds}},
+
   "AllowPvP": {{.Vars.allow_pvp}},
   "AllowFireSpread": {{.Vars.allow_fire_spread}},
   "AllowFallingBlocks": {{.Vars.allow_falling_blocks}},
+  "PassTimeWhenEmpty": {{.Vars.pass_time_when_empty}},
+
+  "MaxChunkRadius": {{.Vars.max_chunk_radius}},
+  "TickTime": {{.Vars.tick_time}},
+  "MaxMainThreadBlockTicks": {{.Vars.max_main_thread_block_ticks}},
+  "RandomBlockTicksPerChunk": {{.Vars.random_block_ticks_per_chunk}},
+  "BlockTickChunkRange": {{.Vars.block_tick_chunk_range}},
+  "BlockTickInterval": {{.Vars.block_tick_interval}},
+  "SpawnCapPlayerScaling": {{.Vars.spawn_cap_player_scaling}},
+  "CompressPackets": {{.Vars.compress_packets}},
+
+  "DieBelowDiskSpaceMb": {{.Vars.die_below_disk_space_mb}},
+  "DieAboveErrorCount": {{.Vars.die_above_error_count}},
+  "DieAboveMemoryUsageMb": {{.Vars.die_above_memory_usage_mb}},
+  "CorruptionProtection": {{.Vars.corruption_protection}},
+  "RegenerateCorruptChunks": {{.Vars.regenerate_corrupt_chunks}},
+
+  "LogBlockBreakPlace": {{.Vars.log_block_break_place}},
+  "LogFileSplitAfterLine": {{.Vars.log_file_split_after_line}},
+  "EntityDebugMode": {{.Vars.entity_debug_mode}},
+  "AntiAbuse": {{.Vars.anti_abuse}},
+  "LoginFloodProtection": {{.Vars.login_flood_protection}},
+  "TemporaryIpBlockList": {{.Vars.temporary_ip_block_list}},
+
+  "ChatRateLimitMs": {{.Vars.chat_rate_limit_ms}},
+  "MaxOwnedGroupChannelsPerUser": {{.Vars.max_owned_group_channels_per_user}},
+  "GroupChatHistorySize": {{.Vars.group_chat_history_size}},
+
+  "DisableModSafetyCheck": {{.Vars.disable_mod_safety_check}},
+  "DisableAutoRemap": {{.Vars.disable_auto_remap}},
+
+  "StartupCommands": {{if .Vars.startup_command}}"{{.Vars.startup_command | js}}"{{else}}null{{end}},
+
   "Roles": [
     {
       "Code": "suvisitor",
@@ -156,11 +200,114 @@
       "AutoGrant": true
     }
   ],
-  "DefaultRoleCode": "suplayer",
+  "DefaultRoleCode": "{{.Vars.default_role_code | js}}",
+
   "WorldConfig": {
     "WorldName": "{{.Vars.world_name | js}}",
     "Seed": {{if .Vars.world_seed}}"{{.Vars.world_seed | js}}"{{else}}null{{end}},
     "PlayStyle": "{{.Vars.play_style | js}}",
-    "SaveFileLocation": "/data/Saves/{{.Vars.world_name | js}}.vcdbs"
+    "WorldType": "{{.Vars.world_type | js}}",
+    "AllowCreativeMode": {{.Vars.allow_creative_mode}},
+    "SaveFileLocation": "/data/Saves/{{.Vars.world_name | js}}.vcdbs",
+
+    "WorldConfiguration": {
+      "gameMode": "{{.Vars.wc_game_mode | js}}",
+      "deathPunishment": "{{.Vars.wc_death_punishment | js}}",
+      "droppedItemsTimer": "{{.Vars.wc_dropped_items_timer | js}}",
+      "spawnRadius": "{{.Vars.wc_spawn_radius | js}}",
+      "temporalGearRespawnUses": "{{.Vars.wc_temporal_gear_respawn_uses | js}}",
+      "startingClimate": "{{.Vars.wc_starting_climate | js}}",
+      "graceTimer": "{{.Vars.wc_grace_timer | js}}",
+
+      "seasons": "{{.Vars.wc_seasons | js}}",
+      "playerlives": "{{.Vars.wc_playerlives | js}}",
+      "lungCapacity": "{{.Vars.wc_lung_capacity | js}}",
+      "daysPerMonth": "{{.Vars.wc_days_per_month | js}}",
+      "harshWinters": "{{.Vars.wc_harsh_winters | js}}",
+      "blockGravity": "{{.Vars.wc_block_gravity | js}}",
+      "caveIns": "{{.Vars.wc_cave_ins | js}}",
+      "allowUndergroundFarming": {{.Vars.wc_allow_underground_farming}},
+      "noLiquidSourceTransport": {{.Vars.wc_no_liquid_source_transport}},
+      "bodyTemperatureResistance": "{{.Vars.wc_body_temperature_resistance | js}}",
+      "creatureHostility": "{{.Vars.wc_creature_hostility | js}}",
+      "creatureStrength": "{{.Vars.wc_creature_strength | js}}",
+      "creatureSwimSpeed": "{{.Vars.wc_creature_swim_speed | js}}",
+      "playerHealthPoints": "{{.Vars.wc_player_health_points | js}}",
+      "playerHealthRegenSpeed": "{{.Vars.wc_player_health_regen_speed | js}}",
+      "playerHungerSpeed": "{{.Vars.wc_player_hunger_speed | js}}",
+      "playerMoveSpeed": "{{.Vars.wc_player_move_speed | js}}",
+      "foodSpoilSpeed": "{{.Vars.wc_food_spoil_speed | js}}",
+      "saplingGrowthRate": "{{.Vars.wc_sapling_growth_rate | js}}",
+      "toolDurability": "{{.Vars.wc_tool_durability | js}}",
+      "toolMiningSpeed": "{{.Vars.wc_tool_mining_speed | js}}",
+      "propickNodeSearchRadius": "{{.Vars.wc_propick_node_search_radius | js}}",
+      "globalDepositSpawnRate": "{{.Vars.wc_global_deposit_spawn_rate | js}}",
+      "microblockChiseling": "{{.Vars.wc_microblock_chiseling | js}}",
+      "loreContent": {{.Vars.wc_lore_content}},
+      "clutterObtainable": "{{.Vars.wc_clutter_obtainable | js}}",
+      "lightningFires": {{.Vars.wc_lightning_fires}},
+
+      "allowCoordinateHud": {{.Vars.wc_allow_coordinate_hud}},
+      "allowMap": {{.Vars.wc_allow_map}},
+      "colorAccurateWorldmap": {{.Vars.wc_color_accurate_worldmap}},
+
+      "temporalStability": {{.Vars.wc_temporal_stability}},
+      "temporalStorms": "{{.Vars.wc_temporal_storms | js}}",
+      "tempstormDurationMul": "{{.Vars.wc_tempstorm_duration_mul | js}}",
+      "temporalRifts": "{{.Vars.wc_temporal_rifts | js}}",
+      "temporalStormSleeping": "{{.Vars.wc_temporal_storm_sleeping | js}}",
+
+      "worldClimate": "{{.Vars.wc_world_climate | js}}",
+      "worldWidth": "{{.Vars.wc_world_width | js}}",
+      "worldLength": "{{.Vars.wc_world_length | js}}",
+      "polarEquatorDistance": "{{.Vars.wc_polar_equator_distance | js}}",
+      "landcover": "{{.Vars.wc_landcover | js}}",
+      "oceanscale": "{{.Vars.wc_oceanscale | js}}",
+      "upheavelCommonness": "{{.Vars.wc_upheavel_commonness | js}}",
+      "geologicActivity": "{{.Vars.wc_geologic_activity | js}}",
+      "landformScale": "{{.Vars.wc_landform_scale | js}}",
+      "worldEdge": "{{.Vars.wc_world_edge | js}}",
+      "globalTemperature": "{{.Vars.wc_global_temperature | js}}",
+      "globalPrecipitation": "{{.Vars.wc_global_precipitation | js}}",
+      "globalForestation": "{{.Vars.wc_global_forestation | js}}",
+      "surfaceCopperDeposits": "{{.Vars.wc_surface_copper_deposits | js}}",
+      "surfaceTinDeposits": "{{.Vars.wc_surface_tin_deposits | js}}",
+      "snowAccum": "{{.Vars.wc_snow_accum | js}}",
+      "storyStructuresDistScaling": "{{.Vars.wc_story_structures_dist_scaling | js}}",
+
+      "allowLandClaiming": {{.Vars.wc_allow_land_claiming}},
+      "classExclusiveRecipes": {{.Vars.wc_class_exclusive_recipes}},
+      "auctionHouse": {{.Vars.wc_auction_house}}{{/*
+
+      Everything past here is the wiki's "Configurations not in the customize
+      world screen". Each is omitted entirely when its control is blank, so the
+      game keeps whatever built-in value it has rather than one this seed
+      guessed. That is why they trail the block with a leading comma each: the
+      last always-written key above carries no trailing comma of its own.
+
+      */}}{{if .Vars.wc_allow_timeswitch}},
+      "allowTimeswitch": {{.Vars.wc_allow_timeswitch}}{{end}}{{if .Vars.wc_temp_storm_frequency_mul}},
+      "tempStormFrequencyMul": "{{.Vars.wc_temp_storm_frequency_mul | js}}"{{end}}{{if .Vars.wc_disable_death_messages}},
+      "disableDeathMessages": {{.Vars.wc_disable_death_messages}}{{end}}{{if .Vars.wc_wind_affected_entity_movement}},
+      "windAffectedEntityMovement": {{.Vars.wc_wind_affected_entity_movement}}{{end}}{{if .Vars.wc_allow_crop_death}},
+      "allowCropDeath": {{.Vars.wc_allow_crop_death}}{{end}}{{if .Vars.wc_process_crops}},
+      "processCrops": {{.Vars.wc_process_crops}}{{end}}{{if .Vars.wc_crop_growth_rate_mul}},
+      "cropGrowthRateMul": "{{.Vars.wc_crop_growth_rate_mul | js}}"{{end}}{{if .Vars.wc_fertility_recovery_speed}},
+      "fertilityRecoverySpeed": "{{.Vars.wc_fertility_recovery_speed | js}}"{{end}}{{if .Vars.wc_auction_house_delivery_price_mul}},
+      "auctionHouseDeliveryPriceMul": "{{.Vars.wc_auction_house_delivery_price_mul | js}}"{{end}}{{if .Vars.wc_auction_house_duration_weeks_mul}},
+      "auctionHouseDurationWeeksMul": "{{.Vars.wc_auction_house_duration_weeks_mul | js}}"{{end}}{{if .Vars.wc_auction_house_sales_cut_rate}},
+      "auctionHouseSalesCutRate": "{{.Vars.wc_auction_house_sales_cut_rate | js}}"{{end}}{{if .Vars.wc_underground_windmills}},
+      "undergroundWindmills": "{{.Vars.wc_underground_windmills | js}}"{{end}}{{if .Vars.wc_lightning_damage}},
+      "lightningDamage": {{.Vars.wc_lightning_damage}}{{end}}{{if .Vars.wc_legacywecommands}},
+      "legacywecommands": {{.Vars.wc_legacywecommands}}{{end}}{{if .Vars.wc_map_hide_other_players}},
+      "mapHideOtherPlayers": {{.Vars.wc_map_hide_other_players}}{{end}}{{if .Vars.wc_entity_map_layer}},
+      "entityMapLayer": {{.Vars.wc_entity_map_layer}}{{end}}{{if .Vars.wc_allow_deathwaypointing}},
+      "allowDeathwaypointing": {{.Vars.wc_allow_deathwaypointing}}{{end}}{{if .Vars.wc_potatoe_mode}},
+      "potatoeMode": "{{.Vars.wc_potatoe_mode | js}}"{{end}}{{if .Vars.wc_allow_open_fire_firing}},
+      "allowOpenFireFiring": "{{.Vars.wc_allow_open_fire_firing | js}}"{{end}}{{if .Vars.wc_player2player_collisions}},
+      "player2PlayerCollisions": {{.Vars.wc_player2player_collisions}}{{end}}{{if .Vars.wc_allow_creative_mode_command_blocks}},
+      "allowCreativeModeCommandBlocks": {{.Vars.wc_allow_creative_mode_command_blocks}}{{end}}{{if .Vars.wc_open_doors_not_solid}},
+      "openDoorsNotSolid": {{.Vars.wc_open_doors_not_solid}}{{end}}
+    }
   }
 }

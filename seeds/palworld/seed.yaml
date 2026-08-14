@@ -1,0 +1,1516 @@
+id: palworld
+schema: 3
+name: Palworld
+icon: "🐾"
+description: >
+  Open-world survival and creature collection. Players catch and deploy Pals to
+  fight, build and automate, alone or with up to 31 others on one server.
+version: "1.0.0"
+
+# amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
+# node declaring the wrong architecture is refused at creation rather than
+# crash-looping on an exec-format error (ADR-016).
+architectures: [amd64]
+
+install:
+  # Each server gets its own copy. Two Palworld worlds have no reason to share
+  # one install the way ARK's identical map data does -- the same call Valheim's
+  # and Paper's seeds make.
+  shared: false
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container, so the seed names which one (ADR-057).
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      # The *dedicated server* app, not the game (1623730). Anonymous login
+      # works, and there is a native Linux build, so no Proton wrapper is
+      # needed the way ARK Survival Ascended needs one.
+      app_id: 2394010
+
+server:
+  writable_paths:
+    # Everything the game writes lives under Pal/Saved: the world, the player
+    # data, its own logs, and the config file below.
+    - { from: saved, to: /game/Pal/Saved }
+    # HOME for the container's user. steamclient.so is staged here at start --
+    # see the command -- so it has to be per-server and writable, never part of
+    # the read-only install (ADR-018, and ADR-070's lesson about a HOME the
+    # container's own uid cannot write).
+    - { from: home, to: /home/steam }
+  file_denylist:
+    # The seed rewrites this on every rebuild, so offering it in the file
+    # browser invites an edit the next rebuild discards. Not a security
+    # boundary -- the sandbox is (ADR-033).
+    - "saved/Config/LinuxServer/PalWorldSettings.ini"
+
+containers:
+  - role: game
+    primary: true
+    # base-steamcmd rather than base-linux, which is what Valheim uses for its
+    # own native Linux build. The difference is steamclient.so: PalServer
+    # dlopen()s $HOME/.steam/sdk64/steamclient.so, and SteamCMD's own copy is
+    # the one to stage there -- the same file, from the same place, that
+    # ygg-proton stages for ARK (ADR-047's final amendment). base-linux does
+    # not carry it.
+    image: { base: steamcmd }
+    # One readable line would be better, and this is the shortest honest
+    # version of it:
+    #
+    #   * The staging step is why this is a shell command at all. Without it
+    #     PalServer logs `dlopen failed trying to load: steamclient.so` and,
+    #     depending on the build, either carries on degraded or never finishes
+    #     starting. Copying it is cheap and removes the question.
+    #   * -port is the allocated port, never the seed's declared default
+    #     (ADR-061). PublicPort in the config file is set from the same
+    #     allocation, so what the server binds and what it advertises agree.
+    #   * The three -use/-No flags are Pocketpair's own documented performance
+    #     switches for dedicated servers.
+    #
+    # One interaction worth knowing about and NOT yet confirmed against a real
+    # run: PalServer.sh chmod +x's the shipped binary before exec'ing it, and
+    # the install is mounted read-only (ADR-018), so that chmod fails. The
+    # script carries no `set -e`, and SteamCMD preserves the executable bit on
+    # download, so this should be a printed error and nothing more -- but "should
+    # be" is the honest word. If a server never starts and the console shows a
+    # chmod failure, invoking Pal/Binaries/Linux/PalServer-Linux-Shipping
+    # directly is the fix. The documented entry point is used here because
+    # second-guessing it without a server to test against would be the larger
+    # risk (ADR-064 is this project's own record of a read-only install breaking
+    # something nobody expected).
+    command: >-
+      sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
+      cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
+      exec /game/PalServer.sh
+      -port={{.Ports.game}}
+      -players={{.Vars.server_player_max_num}}
+      -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS'
+    workdir: /game
+    env:
+      # base-steamcmd honours HOME (its own descriptor says so), and the
+      # writable path above is what makes this one writable.
+      HOME: /home/steam
+    ports:
+      - { name: game, protocol: udp, default: 8211, kind: game }
+      # RCON and the REST API are both allocated whether or not they are turned
+      # on: a port an operator can enable later is cheaper to hold than one they
+      # cannot get without a rebuild, and a node's range is not scarce (ADR-076).
+      - { name: rcon, protocol: tcp, default: 25575, kind: rcon }
+      - { name: rest, protocol: tcp, default: 8212, kind: web }
+      #
+      # No query port. Palworld's own config file has no query-port key among
+      # its 119, which is the authority this seed has -- several hosting guides
+      # mention 27015, but nothing in the shipped configuration asks for it, and
+      # declaring a port the game never binds would allocate a number that means
+      # nothing.
+
+config:
+  files:
+    - path: saved/Config/LinuxServer/PalWorldSettings.ini
+      source_path: configs/PalWorldSettings.ini.tmpl
+      # Rewritten wholesale on every rebuild, which is the default and the only
+      # option here: the entire configuration is a single ini key whose value is
+      # one comma-separated tuple, so `manage: patch` could only ever set that
+      # one key to a whole new tuple. That is also why every control below is a
+      # `variable` rather than a `setting` -- a setting's `to: {file, key}`
+      # destination addresses one key, and there is only one.
+      manage: always
+
+ready:
+  # mode: port, not a log pattern. Palworld does print a startup line, but
+  # nobody here has captured one from a real run, and this project does not put
+  # an unverified pattern in a field where it would look active (ADR-067). The
+  # port needs no game-specific knowledge, which makes it the right first
+  # choice for a game added without a server to watch (ADR-077).
+  mode: port
+  port: game
+  timeout: 300s
+
+# No crash block. `crash: {mode: log}` kills the pod so the ordinary exit path
+# can restart it, so a wrong pattern does not mislabel a server -- it stops a
+# healthy one. Nothing here has been checked against a real crash.
+
+stop:
+  # SIGTERM, with no console command: PalServer reads no commands on stdin, so
+  # there is nothing to send it. The graceful path the game documents is an
+  # RCON `Shutdown`, which this seed cannot reach from a stop spec.
+  #
+  # What bounds the loss is the game's own autosave, which the Performance
+  # group exposes and which defaults to every 30 seconds. The timeout is
+  # generous because a large world takes a while to flush.
+  timeout: 120s
+  then: SIGTERM
+
+connect:
+  # `copy` only, no `uri`: Palworld's join flow is pasting an address into the
+  # client's "Join with IP" box, which takes exactly this host:port. There is no
+  # URI scheme this project has watched a client honour, and an unverified link
+  # that silently does nothing is worse than none (ADR-067's honesty rule).
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  # The whole writable root: the world, the player saves and the config the
+  # seed renders. `home` is deliberately not separated out -- it holds only a
+  # staged copy of steamclient.so, which the next start recreates.
+  include: [saved]
+
+groups:
+  - name: Server
+    description: Identity, access and who may connect.
+  - name: Remote access
+    description: >-
+      RCON and the REST API. Both authenticate with the admin password, so
+      neither is written as enabled while that is blank.
+  - name: World
+    description: Time, difficulty and what spawns.
+  - name: Rates
+    description: Multipliers on progression and production.
+  - name: Combat
+    description: Damage dealt and taken.
+  - name: Survival
+    description: Hunger, stamina and regeneration.
+  - name: Structures
+    description: Building health and decay.
+  - name: Gathering
+    description: Nodes, drops and respawn.
+  - name: Death and respawn
+    description: What is lost on death and how long a respawn takes.
+  - name: PvP
+    description: Player-versus-player rules.
+    collapsed: true
+  - name: Guilds and bases
+    description: Guild limits, base counts and building rules.
+  - name: Travel and Palbox
+    description: Fast travel and the Global Palbox.
+    collapsed: true
+  - name: Stat points
+    description: Which stats players may spend points on.
+    collapsed: true
+  - name: Voice chat
+    description: In-game voice and its falloff distances.
+    collapsed: true
+  - name: Performance
+    description: >-
+      Limits and intervals that trade responsiveness against server load.
+      Worth changing only with a reason.
+    collapsed: true
+  - name: Misc
+    description: >-
+      Keys the game ships that the official guide does not document, plus aim
+      assist. Exposed rather than hidden, since the game writes them.
+    collapsed: true
+
+# Every key in the game's own DefaultPalWorldSettings.ini, plus the one the
+# official guide documents that the shipped file omits
+# (bAllowEnemyCampSpawnNearBaseCamp). Defaults are read from that file rather
+# than retyped from a guide.
+#
+# Three of its keys are absent on purpose: PublicPort, RCONPort and RESTAPIPort
+# are allocated by the control plane, so the template renders them from the
+# allocation instead of offering an operator a number the node may not honour
+# (ADR-061).
+variables:
+
+  # ---- World -------------------------------------------------------------
+  - name: difficulty
+    group: World
+    type: select
+    label: Difficulty preset
+    description: >-
+      Game difficulty preset. None leaves the individual rates below in charge. Config
+      key: Difficulty.
+    default: "None"
+    options:
+      - { value: "None", label: "None (use the rates below)" }
+      - { value: "Casual", label: "Casual" }
+      - { value: "Normal", label: "Normal" }
+      - { value: "Hard", label: "Hard" }
+    editable: true
+  - name: randomizer_type
+    group: World
+    type: select
+    label: Pal randomizer
+    description: >-
+      Pal spawn randomization mode: None = no randomization; Region = randomize per
+      region; All = fully randomized. Config key: RandomizerType.
+    default: "None"
+    options:
+      - { value: "None", label: "None" }
+      - { value: "Region", label: "Per region" }
+      - { value: "All", label: "Fully randomized" }
+    editable: true
+  - name: randomizer_seed
+    group: World
+    label: Randomizer seed
+    description: >-
+      Seed value used when Pal spawn randomization mode is enabled. Config key:
+      RandomizerSeed.
+    default: ""
+    editable: true
+  - name: randomizer_pal_level_random
+    group: World
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Randomize Pal levels
+    description: >-
+      If on, wild Pal levels are fully random. If off, levels are randomized within
+      each area's intended range. Config key: bIsRandomizerPalLevelRandom.
+    default: "False"
+    editable: true
+  - name: day_time_speed_rate
+    group: World
+    type: number
+    label: Daytime speed
+    description: >-
+      Daytime progression speed. Config key: DayTimeSpeedRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: night_time_speed_rate
+    group: World
+    type: number
+    label: Nighttime speed
+    description: >-
+      Nighttime progression speed. Config key: NightTimeSpeedRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: enable_invader_enemy
+    group: World
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Invaders
+    description: >-
+      Enable raids on bases by invaders. Config key: bEnableInvaderEnemy.
+    default: "True"
+    editable: true
+  - name: start_location_select_by_map
+    group: World
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Choose start location
+    description: >-
+      Whether to allow players to choose their starting location. Config key:
+      bIsStartLocationSelectByMap.
+    default: "False"
+    editable: true
+  - name: supply_drop_span
+    group: World
+    type: number
+    label: Supply drop interval
+    description: >-
+      Meteorite and supply drop interval, in minutes. Config key: SupplyDropSpan.
+    min: 1
+    max: 1440
+    step: 1
+    default: "180"
+    editable: true
+  - name: enable_predator_boss_pal
+    group: World
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Predator Pals
+    description: >-
+      Enable Predator Pals. Config key: EnablePredatorBossPal.
+    default: "True"
+    editable: true
+
+  # ---- Rates -------------------------------------------------------------
+  - name: exp_rate
+    group: Rates
+    type: number
+    label: EXP
+    description: >-
+      EXP gain multiplier. Config key: ExpRate.
+    min: 0.1
+    max: 20.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_capture_rate
+    group: Rates
+    type: number
+    label: Capture rate
+    description: >-
+      Capture rate multiplier. Config key: PalCaptureRate.
+    min: 0.1
+    max: 20.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_spawn_num_rate
+    group: Rates
+    type: number
+    label: Pal spawn rate
+    description: >-
+      Pal spawn rate. Raising this impacts performance. Config key: PalSpawnNumRate.
+    min: 0.1
+    max: 3.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_egg_default_hatching_time
+    group: Rates
+    type: number
+    label: Huge egg hatch time
+    description: >-
+      Time to hatch a Huge Egg, in hours. Other eggs also take time to incubate.
+      Config key: PalEggDefaultHatchingTime.
+    min: 0.0
+    max: 240.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: work_speed_rate
+    group: Rates
+    type: number
+    label: Work speed
+    description: >-
+      Pal work speed multiplier. Config key: WorkSpeedRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: item_weight_rate
+    group: Rates
+    type: number
+    label: Item weight
+    description: >-
+      Item weight multiplier. Config key: ItemWeightRate.
+    min: 0.0
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: equipment_durability_damage_rate
+    group: Rates
+    type: number
+    label: Equipment durability loss
+    description: >-
+      Equipment durability loss multiplier. 0 disables durability loss. Config key:
+      EquipmentDurabilityDamageRate.
+    min: 0.0
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: item_corruption_multiplier
+    group: Rates
+    type: number
+    label: Item corruption speed
+    description: >-
+      Item corruption speed multiplier. Config key: ItemCorruptionMultiplier.
+    min: 0.0
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: monster_farm_action_speed_rate
+    group: Rates
+    type: number
+    label: Ranch production speed
+    description: >-
+      Item production speed multiplier from grazing. Config key:
+      MonsterFarmActionSpeedRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+
+  # ---- Combat ------------------------------------------------------------
+  - name: pal_damage_rate_attack
+    group: Combat
+    type: number
+    label: Pal damage dealt
+    description: >-
+      Damage dealt by Pals, multiplied. Config key: PalDamageRateAttack.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_damage_rate_defense
+    group: Combat
+    type: number
+    label: Pal damage taken
+    description: >-
+      Damage taken by Pals, multiplied. Config key: PalDamageRateDefense.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_damage_rate_attack
+    group: Combat
+    type: number
+    label: Player damage dealt
+    description: >-
+      Damage dealt by players, multiplied. Config key: PlayerDamageRateAttack.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_damage_rate_defense
+    group: Combat
+    type: number
+    label: Player damage taken
+    description: >-
+      Damage taken by players, multiplied. Config key: PlayerDamageRateDefense.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+
+  # ---- Survival ----------------------------------------------------------
+  - name: player_stomach_decrease_rate
+    group: Survival
+    type: number
+    label: Player hunger drain
+    description: >-
+      Player hunger depletion rate multiplier. Config key: PlayerStomachDecreaceRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_stamina_decrease_rate
+    group: Survival
+    type: number
+    label: Player stamina drain
+    description: >-
+      Player stamina depletion rate multiplier. Config key: PlayerStaminaDecreaceRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_auto_hp_regen_rate
+    group: Survival
+    type: number
+    label: Player HP regen
+    description: >-
+      Player natural HP regeneration multiplier. Config key: PlayerAutoHPRegeneRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_auto_hp_regen_rate_in_sleep
+    group: Survival
+    type: number
+    label: Player HP regen while sleeping
+    description: >-
+      Player HP regeneration while sleeping, multiplied. Config key:
+      PlayerAutoHpRegeneRateInSleep.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_stomach_decrease_rate
+    group: Survival
+    type: number
+    label: Pal hunger drain
+    description: >-
+      Pal hunger depletion rate multiplier. Config key: PalStomachDecreaceRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_stamina_decrease_rate
+    group: Survival
+    type: number
+    label: Pal stamina drain
+    description: >-
+      Pal stamina depletion rate multiplier. Config key: PalStaminaDecreaceRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_auto_hp_regen_rate
+    group: Survival
+    type: number
+    label: Pal HP regen
+    description: >-
+      Pal natural HP regeneration multiplier. Config key: PalAutoHPRegeneRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: pal_auto_hp_regen_rate_in_sleep
+    group: Survival
+    type: number
+    label: Pal HP regen in Palbox
+    description: >-
+      Pal HP regeneration while sleeping in the Palbox, multiplied. Config key:
+      PalAutoHpRegeneRateInSleep.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+
+  # ---- Structures --------------------------------------------------------
+  - name: build_object_hp_rate
+    group: Structures
+    type: number
+    label: Structure health
+    description: >-
+      Structure health multiplier. Config key: BuildObjectHpRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: build_object_damage_rate
+    group: Structures
+    type: number
+    label: Structure damage taken
+    description: >-
+      Damage multiplier to buildings. Config key: BuildObjectDamageRate.
+    min: 0.1
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: build_object_deterioration_damage_rate
+    group: Structures
+    type: number
+    label: Structure decay
+    description: >-
+      Building decay speed multiplier. 0 disables decay entirely. Config key:
+      BuildObjectDeteriorationDamageRate.
+    min: 0.0
+    max: 5.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+
+  # ---- Gathering ---------------------------------------------------------
+  - name: collection_drop_rate
+    group: Gathering
+    type: number
+    label: Gathered item yield
+    description: >-
+      Gatherable items multiplier. Config key: CollectionDropRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: collection_object_hp_rate
+    group: Gathering
+    type: number
+    label: Gatherable health
+    description: >-
+      Gatherable objects health multiplier. Config key: CollectionObjectHpRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: collection_object_respawn_speed_rate
+    group: Gathering
+    type: number
+    label: Gatherable respawn
+    description: >-
+      Gatherable objects respawn interval multiplier. Config key:
+      CollectionObjectRespawnSpeedRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: enemy_drop_item_rate
+    group: Gathering
+    type: number
+    label: Enemy drop quantity
+    description: >-
+      Dropped item quantity multiplier. Config key: EnemyDropItemRate.
+    min: 0.1
+    max: 10.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+
+  # ---- Death and respawn -------------------------------------------------
+  - name: death_penalty
+    group: Death and respawn
+    type: select
+    label: Death penalty
+    description: >-
+      What is dropped on death. Config key: DeathPenalty.
+    default: "Item"
+    options:
+      - { value: "None", label: "Nothing" }
+      - { value: "Item", label: "All items except equipment" }
+      - { value: "ItemAndEquipment", label: "All items" }
+      - { value: "All", label: "All items and Pals on team" }
+    editable: true
+  - name: hardcore
+    group: Death and respawn
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Hardcore
+    description: >-
+      Enable Hardcore. Players cannot respawn on death. Config key: bHardcore.
+    default: "False"
+    editable: true
+  - name: pal_lost
+    group: Death and respawn
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Lose Pals on death
+    description: >-
+      Permanently lose Pals on death. Config key: bPalLost.
+    default: "False"
+    editable: true
+  - name: character_recreate_in_hardcore
+    group: Death and respawn
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Recreate character in Hardcore
+    description: >-
+      Whether a player may recreate their character after dying in Hardcore mode.
+      Config key: bCharacterRecreateInHardcore.
+    default: "False"
+    editable: true
+  - name: can_pickup_other_guild_death_penalty_drop
+    group: Death and respawn
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Loot other guilds' drops
+    description: >-
+      Allow picking up items dropped by members of another guild. Config key:
+      bCanPickupOtherGuildDeathPenaltyDrop.
+    default: "False"
+    editable: true
+  - name: enable_non_login_penalty
+    group: Death and respawn
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Absence penalty
+    description: >-
+      Apply a penalty to players who have not logged in for a long time. Config key:
+      bEnableNonLoginPenalty.
+    default: "True"
+    editable: true
+  - name: block_respawn_time
+    group: Death and respawn
+    type: number
+    label: Respawn cooldown
+    description: >-
+      Cooldown before a player can respawn after death, in seconds. Config key:
+      BlockRespawnTime.
+    min: 0.0
+    max: 600.0
+    step: 1.0
+    default: "5.0"
+    editable: true
+  - name: respawn_penalty_duration_threshold
+    group: Death and respawn
+    type: number
+    label: Respawn penalty threshold
+    description: >-
+      Survival-time threshold in seconds for applying the respawn cooldown multiplier
+      on a subsequent death. 0 disables it. Config key:
+      RespawnPenaltyDurationThreshold.
+    min: 0.0
+    max: 3600.0
+    step: 1.0
+    default: "0.0"
+    editable: true
+  - name: respawn_penalty_time_scale
+    group: Death and respawn
+    type: number
+    label: Respawn penalty multiplier
+    description: >-
+      Multiplier applied to the respawn cooldown. Config key: RespawnPenaltyTimeScale.
+    min: 1.0
+    max: 10.0
+    step: 0.1
+    default: "2.0"
+    editable: true
+
+  # ---- PvP ---------------------------------------------------------------
+  - name: enable_player_to_player_damage
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Player-to-player damage
+    description: >-
+      Allow players to damage each other. Config key: bEnablePlayerToPlayerDamage.
+    default: "False"
+    editable: true
+  - name: enable_friendly_fire
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Friendly fire
+    description: >-
+      Allow damage between guild members. Config key: bEnableFriendlyFire.
+    default: "False"
+    editable: true
+  - name: is_pvp
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: PvP
+    description: >-
+      Enable PvP. Config key: bIsPvP.
+    default: "False"
+    editable: true
+  - name: enable_defense_other_guild_player
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Base defence vs players
+    description: >-
+      Whether base defences attack players from other guilds. Config key:
+      bEnableDefenseOtherGuildPlayer.
+    default: "False"
+    editable: true
+  - name: display_pvp_item_num_on_world_map_base_camp
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Show PvP items on map (bases)
+    description: >-
+      Whether to show, on the map, the number of PvP-exclusive items in each base.
+      Config key: bDisplayPvPItemNumOnWorldMap_BaseCamp.
+    default: "False"
+    editable: true
+  - name: display_pvp_item_num_on_world_map_player
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Show PvP items on map (players)
+    description: >-
+      Whether to show player locations and the number of PvP-exclusive items on the
+      map. Config key: bDisplayPvPItemNumOnWorldMap_Player.
+    default: "False"
+    editable: true
+  - name: additional_drop_item_when_player_killing_in_pvp_mode
+    group: PvP
+    label: PvP kill drop item
+    description: >-
+      The ID of the item to drop when a player is killed in PvP, used only when the
+      toggle below is on. Config key: AdditionalDropItemWhenPlayerKillingInPvPMode.
+    default: "PlayerDropItem"
+    editable: true
+  - name: additional_drop_item_num_when_player_killing_in_pvp_mode
+    group: PvP
+    type: number
+    label: PvP kill drop quantity
+    description: >-
+      How many of that item to drop. Config key:
+      AdditionalDropItemNumWhenPlayerKillingInPvPMode.
+    min: 0
+    max: 100
+    step: 1
+    default: "1"
+    editable: true
+  - name: enable_additional_drop_item_when_player_killing_in_pvp_mode
+    group: PvP
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Drop an item on PvP kill
+    description: >-
+      Whether to drop a special item when a player is killed while PvP is enabled.
+      Config key: bAdditionalDropItemWhenPlayerKillingInPvPMode.
+    default: "False"
+    editable: true
+
+  # ---- Misc --------------------------------------------------------------
+  - name: active_unko
+    group: Misc
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Enable UNKO
+    description: >-
+      The game's own toggle for a joke item category. Undocumented by the official
+      guide; left exposed because it is in the default file. Config key: bActiveUNKO.
+    default: "False"
+    editable: true
+  - name: enable_aim_assist_pad
+    group: Misc
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Aim assist (controller)
+    description: >-
+      Aim assist for controller players. Config key: bEnableAimAssistPad.
+    default: "True"
+    editable: true
+  - name: enable_aim_assist_keyboard
+    group: Misc
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Aim assist (keyboard)
+    description: >-
+      Aim assist for keyboard and mouse players. Config key: bEnableAimAssistKeyboard.
+    default: "False"
+    editable: true
+  - name: deny_technology_list
+    group: Misc
+    label: Disabled technologies
+    description: >-
+      Technology IDs to disable, as a parenthesised quoted list, for example
+      ("PALBOX","RepairBench"). Blank disables nothing. Config key:
+      DenyTechnologyList.
+    default: ""
+    editable: true
+
+  # ---- Performance -------------------------------------------------------
+  - name: drop_item_max_num
+    group: Performance
+    type: number
+    label: Max dropped items
+    description: >-
+      Maximum dropped items in the world at once. Config key: DropItemMaxNum.
+    min: 0
+    max: 20000
+    step: 1
+    default: "3000"
+    editable: true
+  - name: physics_active_drop_item_max_num
+    group: Performance
+    type: number
+    label: Max physics drops
+    description: >-
+      Maximum number of dropped items that can use physics behavior. -1 leaves it
+      unbounded. Config key: PhysicsActiveDropItemMaxNum.
+    min: -1
+    max: 5000
+    step: 1
+    default: "-1"
+    editable: true
+  - name: drop_item_max_num_unko
+    group: Performance
+    type: number
+    label: Max dropped UNKO
+    description: >-
+      Maximum dropped items of the UNKO category. Config key: DropItemMaxNum_UNKO.
+    min: 0
+    max: 5000
+    step: 1
+    default: "100"
+    editable: true
+  - name: drop_item_alive_max_hours
+    group: Performance
+    type: number
+    label: Dropped item lifetime
+    description: >-
+      How long dropped items survive, in hours. Config key: DropItemAliveMaxHours.
+    min: 0.1
+    max: 100.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: auto_save_span
+    group: Performance
+    type: number
+    label: Autosave interval
+    description: >-
+      Seconds between automatic world saves. This is also the bound on what a hard
+      stop can lose. Config key: AutoSaveSpan.
+    min: 10.0
+    max: 3600.0
+    step: 1.0
+    default: "30.0"
+    editable: true
+  - name: use_backup_save_data
+    group: Performance
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: World backups
+    description: >-
+      Enable the game's own world backups. Enabling this increases disk load, and is
+      separate from Yggdrasil's backups. Config key: bIsUseBackupSaveData.
+    default: "True"
+    editable: true
+  - name: server_replicate_pawn_cull_distance
+    group: Performance
+    type: number
+    label: Pal sync distance
+    description: >-
+      Pal sync distance from players, in centimetres. The game clamps this to
+      5000-15000. Config key: ServerReplicatePawnCullDistance.
+    min: 5000.0
+    max: 15000.0
+    step: 100.0
+    default: "15000.0"
+    editable: true
+  - name: item_container_force_mark_dirty_interval
+    group: Performance
+    type: number
+    label: Container re-sync interval
+    description: >-
+      How often to force re-sync while a container UI is open, in seconds. Config key:
+      ItemContainerForceMarkDirtyInterval.
+    min: 0.1
+    max: 60.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: player_data_pal_storage_update_check_tick_interval
+    group: Performance
+    type: number
+    label: Pal storage check interval
+    description: >-
+      How often player Pal storage is checked for updates, in seconds. Config key:
+      PlayerDataPalStorageUpdateCheckTickInterval.
+    min: 0.1
+    max: 60.0
+    step: 0.1
+    default: "1.0"
+    editable: true
+  - name: max_guilds_per_frame
+    group: Performance
+    type: number
+    label: Guilds processed per frame
+    description: >-
+      How many guilds the server processes per frame. Config key: MaxGuildsPerFrame.
+    min: 1
+    max: 100
+    step: 1
+    default: "10"
+    editable: true
+  - name: building_name_display_cache_ttl_seconds
+    group: Performance
+    type: number
+    label: Builder name cache TTL
+    description: >-
+      How long the builder-name display is cached, in seconds. Config key:
+      BuildingNameDisplayCacheTTLSeconds.
+    min: 1.0
+    max: 3600.0
+    step: 1.0
+    default: "60.0"
+    editable: true
+
+  # ---- Guilds and bases --------------------------------------------------
+  - name: base_camp_max_num
+    group: Guilds and bases
+    type: number
+    label: Bases (server)
+    description: >-
+      Total number of bases across the server. Config key: BaseCampMaxNum.
+    min: 1
+    max: 1280
+    step: 1
+    default: "128"
+    editable: true
+  - name: base_camp_worker_max_num
+    group: Guilds and bases
+    type: number
+    label: Pals per base
+    description: >-
+      Maximum number of Pals per base (max 50). Raising this increases processing
+      load. Config key: BaseCampWorkerMaxNum.
+    min: 1
+    max: 50
+    step: 1
+    default: "15"
+    editable: true
+  - name: auto_reset_guild_no_online_players
+    group: Guilds and bases
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Auto-reset idle guilds
+    description: >-
+      If no guild members log in, automatically delete structures and base Pals.
+      Config key: bAutoResetGuildNoOnlinePlayers.
+    default: "False"
+    editable: true
+  - name: auto_reset_guild_time_no_online_players
+    group: Guilds and bases
+    type: number
+    label: Idle guild timeout
+    description: >-
+      Offline duration in hours before auto-reset triggers. Ignored when auto-reset is
+      off. Config key: AutoResetGuildTimeNoOnlinePlayers.
+    min: 1.0
+    max: 720.0
+    step: 1.0
+    default: "72.0"
+    editable: true
+  - name: guild_player_max_num
+    group: Guilds and bases
+    type: number
+    label: Players per guild
+    description: >-
+      Maximum players in one guild. Config key: GuildPlayerMaxNum.
+    min: 1
+    max: 100
+    step: 1
+    default: "20"
+    editable: true
+  - name: base_camp_max_num_in_guild
+    group: Guilds and bases
+    type: number
+    label: Bases per guild
+    description: >-
+      Maximum number of bases per guild (max 10). Raising this increases processing
+      load. Config key: BaseCampMaxNumInGuild.
+    min: 1
+    max: 10
+    step: 1
+    default: "4"
+    editable: true
+  - name: invisible_other_guild_base_camp_area_fx
+    group: Guilds and bases
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Hide other bases' area FX
+    description: >-
+      Show base area boundaries for other guilds' bases. Config key:
+      bInvisibleOtherGuildBaseCampAreaFX.
+    default: "False"
+    editable: true
+  - name: build_area_limit
+    group: Guilds and bases
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Building area limit
+    description: >-
+      Prevent building near structures such as fast-travel points. Config key:
+      bBuildAreaLimit.
+    default: "False"
+    editable: true
+  - name: max_building_limit_num
+    group: Guilds and bases
+    type: number
+    label: Building limit
+    description: >-
+      Per-player building count cap. 0 is unlimited. Config key: MaxBuildingLimitNum.
+    min: 0
+    max: 100000
+    step: 1
+    default: "0"
+    editable: true
+  - name: guild_rejoin_cooldown_minutes
+    group: Guilds and bases
+    type: number
+    label: Guild rejoin cooldown
+    description: >-
+      Cooldown before a player may rejoin a guild, in minutes. Config key:
+      GuildRejoinCooldownMinutes.
+    min: 0
+    max: 10080
+    step: 1
+    default: "0"
+    editable: true
+  - name: auto_transfer_master_check_interval_seconds
+    group: Guilds and bases
+    type: number
+    label: Guild master transfer check
+    description: >-
+      How often to check whether a guild's master should be transferred, in seconds.
+      Config key: AutoTransferMasterCheckIntervalSeconds.
+    min: 60.0
+    max: 86400.0
+    step: 60.0
+    default: "3600.0"
+    editable: true
+  - name: auto_transfer_master_threshold_days
+    group: Guilds and bases
+    type: number
+    label: Guild master transfer threshold
+    description: >-
+      Days a guild master may be absent before mastership transfers. Config key:
+      AutoTransferMasterThresholdDays.
+    min: 1
+    max: 365
+    step: 1
+    default: "14"
+    editable: true
+  - name: enable_building_player_uid_display
+    group: Guilds and bases
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Show builder ID
+    description: >-
+      Whether to display the creator's player ID on structures. Config key:
+      bEnableBuildingPlayerUIdDisplay.
+    default: "False"
+    editable: true
+  - name: allow_enemy_camp_spawn_near_base_camp
+    group: Guilds and bases
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Enemy camps near bases
+    description: >-
+      Whether to allow enemy bases to spawn near player bases. Config key:
+      bAllowEnemyCampSpawnNearBaseCamp.
+    default: "True"
+    editable: true
+
+  # ---- Server ------------------------------------------------------------
+  - name: is_multiplay
+    group: Server
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Co-op mode
+    description: >-
+      The game's own co-op flag. A dedicated server does not use it; left exposed
+      because it is in the default file. Config key: bIsMultiplay.
+    default: "False"
+    editable: true
+  - name: coop_player_max_num
+    group: Server
+    type: number
+    label: Co-op player limit
+    description: >-
+      Player limit for the game's own co-op mode. A dedicated server uses the player
+      limit below instead. Config key: CoopPlayerMaxNum.
+    min: 1
+    max: 32
+    step: 1
+    default: "4"
+    editable: true
+  - name: server_player_max_num
+    group: Server
+    type: number
+    label: Max players
+    description: >-
+      Maximum number of players who can join the server. Config key:
+      ServerPlayerMaxNum.
+    min: 1
+    max: 32
+    step: 1
+    default: "32"
+    editable: true
+  - name: server_name
+    group: Server
+    label: Server name
+    description: >-
+      What appears in the community server list. Config key: ServerName.
+    default: "Default Palworld Server"
+    editable: true
+  - name: server_description
+    group: Server
+    label: Server description
+    description: >-
+      Shown beside the name in the community server list. Config key:
+      ServerDescription.
+    default: ""
+    editable: true
+  - name: admin_password
+    group: Server
+    type: password
+    label: Admin password
+    description: >-
+      Password used to obtain administrative privileges on the server, and the
+      password RCON authenticates with. Config key: AdminPassword.
+    default: ""
+    editable: true
+  - name: server_password
+    group: Server
+    type: password
+    label: Join password
+    description: >-
+      Password required to log in to the server. Blank leaves the server open. Config
+      key: ServerPassword.
+    default: ""
+    editable: true
+  - name: allow_client_mod
+    group: Server
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow modded clients
+    description: >-
+      Allow players with mods enabled to join the server. Config key: bAllowClientMod.
+    default: "True"
+    editable: true
+  - name: public_ip
+    group: Server
+    label: Advertised IP
+    description: >-
+      Explicitly advertise this external IP to the community server list. Blank lets
+      the server work it out, which is usually right. Config key: PublicIP.
+    default: ""
+    editable: true
+  - name: region
+    group: Server
+    label: Region
+    description: >-
+      Region code advertised to the community server list. Config key: Region.
+    default: ""
+    editable: true
+  - name: use_auth
+    group: Server
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Require authentication
+    description: >-
+      Require players to be authenticated. Turning this off is not recommended. Config
+      key: bUseAuth.
+    default: "True"
+    editable: true
+  - name: ban_list_url
+    group: Server
+    label: Ban list URL
+    description: >-
+      Where the server fetches its ban list from. Config key: BanListURL.
+    default: "https://b.palworldgame.com/api/banlist.txt"
+    editable: true
+  - name: show_player_list
+    group: Server
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Show player list
+    description: >-
+      Enable the player list on the ESC menu. Config key: bShowPlayerList.
+    default: "False"
+    editable: true
+  - name: chat_post_limit_per_minute
+    group: Server
+    type: number
+    label: Chat rate limit
+    description: >-
+      Maximum number of chat messages allowed per minute. Config key:
+      ChatPostLimitPerMinute.
+    min: 1
+    max: 600
+    step: 1
+    default: "30"
+    editable: true
+  - name: crossplay_platforms
+    group: Server
+    label: Crossplay platforms
+    description: >-
+      Which platforms may connect, as a parenthesised list. The game's default is
+      (Steam,Xbox,PS5,Mac); narrow it by removing entries. Config key:
+      CrossplayPlatforms.
+    default: "(Steam,Xbox,PS5,Mac)"
+    editable: true
+  - name: log_format_type
+    group: Server
+    type: select
+    label: Log format
+    description: >-
+      Format of the server's own log output. Config key: LogFormatType.
+    default: "Text"
+    options:
+      - { value: "Text", label: "Text" }
+      - { value: "Json", label: "JSON" }
+    editable: true
+  - name: show_join_left_message
+    group: Server
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Join/leave messages
+    description: >-
+      Show in-game messages when players join or leave. Config key:
+      bIsShowJoinLeftMessage.
+    default: "True"
+    editable: true
+
+  # ---- Travel and Palbox -------------------------------------------------
+  - name: enable_fast_travel
+    group: Travel and Palbox
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Fast travel
+    description: >-
+      Enable fast travel. Config key: bEnableFastTravel.
+    default: "True"
+    editable: true
+  - name: enable_fast_travel_only_base_camp
+    group: Travel and Palbox
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Fast travel between bases only
+    description: >-
+      Restrict fast travel to between bases only. Config key:
+      bEnableFastTravelOnlyBaseCamp.
+    default: "False"
+    editable: true
+  - name: exist_player_after_logout
+    group: Travel and Palbox
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Body stays after logout
+    description: >-
+      Whether players enter a sleeping state at their current location when logging
+      out. Config key: bExistPlayerAfterLogout.
+    default: "False"
+    editable: true
+  - name: allow_global_palbox_export
+    group: Travel and Palbox
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Global Palbox export
+    description: >-
+      Allow saving to the Global Palbox. Config key: bAllowGlobalPalboxExport.
+    default: "True"
+    editable: true
+  - name: allow_global_palbox_import
+    group: Travel and Palbox
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Global Palbox import
+    description: >-
+      Allow loading from the Global Palbox. Config key: bAllowGlobalPalboxImport.
+    default: "False"
+    editable: true
+
+  # ---- Remote access -----------------------------------------------------
+  - name: rcon_enabled
+    group: Remote access
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Enable RCON
+    description: >-
+      Enable RCON. The admin password above is what it authenticates with, so RCON
+      with a blank admin password is refused by this seed. Config key: RCONEnabled.
+    default: "False"
+    editable: true
+  - name: rest_api_enabled
+    group: Remote access
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Enable REST API
+    description: >-
+      Enable the REST API, which uses the admin password for authentication. Config
+      key: RESTAPIEnabled.
+    default: "False"
+    editable: true
+
+  # ---- Voice chat --------------------------------------------------------
+  - name: enable_voice_chat
+    group: Voice chat
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Voice chat
+    description: >-
+      Enable in-game voice chat. Config key: bEnableVoiceChat.
+    default: "False"
+    editable: true
+  - name: voice_chat_max_volume_distance
+    group: Voice chat
+    type: number
+    label: Full volume distance
+    description: >-
+      Distance at which voice chat volume does not attenuate. Config key:
+      VoiceChatMaxVolumeDistance.
+    min: 0.0
+    max: 100000.0
+    step: 100.0
+    default: "3000.0"
+    editable: true
+  - name: voice_chat_zero_volume_distance
+    group: Voice chat
+    type: number
+    label: Silence distance
+    description: >-
+      Distance at which voice chat volume becomes zero. Config key:
+      VoiceChatZeroVolumeDistance.
+    min: 0.0
+    max: 100000.0
+    step: 100.0
+    default: "15000.0"
+    editable: true
+
+  # ---- Stat points -------------------------------------------------------
+  - name: allow_enhance_stat_health
+    group: Stat points
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow HP points
+    description: >-
+      Allow allocating stat points to HP. Config key: bAllowEnhanceStat_Health.
+    default: "True"
+    editable: true
+  - name: allow_enhance_stat_attack
+    group: Stat points
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow Attack points
+    description: >-
+      Allow allocating stat points to Attack. Config key: bAllowEnhanceStat_Attack.
+    default: "True"
+    editable: true
+  - name: allow_enhance_stat_stamina
+    group: Stat points
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow Stamina points
+    description: >-
+      Allow allocating stat points to Stamina. Config key: bAllowEnhanceStat_Stamina.
+    default: "True"
+    editable: true
+  - name: allow_enhance_stat_weight
+    group: Stat points
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow Carry Weight points
+    description: >-
+      Allow allocating stat points to Carry Weight. Config key:
+      bAllowEnhanceStat_Weight.
+    default: "True"
+    editable: true
+  - name: allow_enhance_stat_work_speed
+    group: Stat points
+    type: bool
+    true_value: "True"
+    false_value: "False"
+    label: Allow Work Speed points
+    description: >-
+      Allow allocating stat points to Work Speed. Config key:
+      bAllowEnhanceStat_WorkSpeed.
+    default: "True"
+    editable: true

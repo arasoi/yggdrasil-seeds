@@ -5,7 +5,7 @@ icon: "☕"
 description: >
   Vanilla-compatible Minecraft Java Edition server running Paper, with
   plugin support. Runs on any architecture with a JRE.
-version: "2.5.0"
+version: "3.0.0"
 
 # Any JRE-capable node: Paper itself ships no native code.
 architectures: [amd64, arm64]
@@ -537,6 +537,123 @@ variables:
 #
 # Note also that `ready.pattern` is a Go regular expression, not the substring
 # logs.ready was: `Done (` would need escaping as `Done \(`.
+
+  # The remaining documented server.properties keys. ADR-076 curated the set
+  # above to "every key worth an operator's attention" and left these out as
+  # niche; they are here now so the seed covers the whole documented surface
+  # rather than a judgement about which parts of it matter. Each has a matching
+  # line in configs/server.properties.tmpl -- a variable this template does not
+  # render is a control that does nothing, which is this codebase's most
+  # repeated bug (ADR-078).
+  - name: resource_pack_id
+    group: Resource pack
+    label: Resource pack UUID
+    description: A stable id for the pack, so a client can tell one version from another.
+    default: ""
+    show_if: { name: resource_pack, not_equals: "" }
+    editable: true
+  - name: resource_pack_prompt
+    group: Resource pack
+    label: Resource pack prompt
+    description: The message shown when the client is asked to accept the pack.
+    default: ""
+    show_if: { name: resource_pack, not_equals: "" }
+    editable: true
+  - name: generator_settings
+    group: World
+    label: Generator settings
+    description: JSON tuning for the world generator. Only meaningful for flat and custom world types.
+    default: "{}"
+    editable: true
+  - name: initial_enabled_packs
+    group: World
+    label: Enabled datapacks
+    description: Comma-separated, applied when the world is first created.
+    default: "vanilla"
+    editable: true
+  - name: initial_disabled_packs
+    group: World
+    label: Disabled datapacks
+    default: ""
+    editable: true
+  - name: accepts_transfers
+    group: Server
+    type: bool
+    label: Accept transfers
+    description: Allows players to arrive via a transfer packet from another server.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: log_ips
+    group: Server
+    type: bool
+    label: Log player IP addresses
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: bug_report_link
+    group: Server
+    label: Bug report link
+    description: A URL the client offers when a player reports a problem.
+    default: ""
+    editable: true
+  - name: use_native_transport
+    group: Performance
+    type: bool
+    label: Native transport
+    description: Linux-only optimised packet handling. Off only to work around a networking bug.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: enable_jmx_monitoring
+    group: Performance
+    type: bool
+    label: JMX monitoring
+    description: Exposes JVM metrics to a JMX client. Off unless something is collecting them.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: region_file_compression
+    group: Performance
+    type: select
+    label: Region file compression
+    description: How chunks are compressed on disk. lz4 is faster to read and write and uses more space.
+    default: "deflate"
+    options:
+      - { value: deflate, label: Deflate (smallest) }
+      - { value: lz4, label: LZ4 (fastest) }
+      - { value: none, label: None }
+    editable: true
+  - name: max_chained_neighbor_updates
+    group: Performance
+    type: number
+    label: Max chained neighbour updates
+    description: Caps cascading block updates. Negative disables the limit.
+    min: -1
+    step: 1
+    default: "1000000"
+    editable: true
+  - name: rate_limit
+    group: Performance
+    type: number
+    label: Packet rate limit
+    description: Packets per second before a client is kicked. 0 disables the limit.
+    min: 0
+    step: 1
+    default: "0"
+    editable: true
+  - name: text_filtering_version
+    group: Players and permissions
+    type: number
+    label: Text filtering version
+    min: 0
+    step: 1
+    default: "0"
+    editable: true
 
 stop:
   command: "stop"

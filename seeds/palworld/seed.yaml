@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.2"
+version: "1.0.3"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -71,6 +71,14 @@ containers:
     #   * -port is the allocated port, never the seed's declared default
     #     (ADR-061). PublicPort in the config file is set from the same
     #     allocation, so what the server binds and what it advertises agree.
+    #   * -log is what puts the engine's output on stdout. Without it Unreal
+    #     writes to Pal/Saved/Logs and prints nothing to the console at all --
+    #     so a server that is running perfectly well shows an empty console,
+    #     and every line an operator did see up to this point came from the
+    #     shell rather than from the game. It is also the prerequisite for
+    #     anything reading the output: a logs.values or logs.events rule
+    #     matches what the container prints, and without this it prints
+    #     nothing to match.
     #   * The three -use/-No flags are Pocketpair's own documented performance
     #     switches for dedicated servers.
     #
@@ -100,6 +108,7 @@ containers:
       sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
       cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
       exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
+      -log
       -port={{.Ports.game}}
       -players={{.Vars.server_player_max_num}}
       -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS'

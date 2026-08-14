@@ -32,10 +32,11 @@ seeds/<id>/
   icon.png        # branding, if it ships any
 ```
 
-The format is schema 3, specified in
-[docs/seed-spec.md](https://github.com/arasoi/yggdrasil/blob/main/docs/seed-spec.md).
-`internal/seed.Validate` is normative — the rules that matter most are
-cross-field and no schema language expresses them.
+The format is schema 3, specified in [docs/seed-spec.md](docs/seed-spec.md).
+`internal/seed.Validate` in the control plane is normative — the rules that
+matter most are cross-field and no schema language expresses them — so the
+practical test of any claim in the spec is `ygg-seed validate`, which calls
+exactly that code.
 
 Every seed carries its own `version:`, independent of Yggdrasil's. That is the
 point of publishing them separately: fixing a seed does not need a new `yggd`
@@ -59,3 +60,21 @@ forgetting means nobody is ever offered the change.
 Only write a `ready.pattern` you have seen in real output, and prefer no
 `crash:` rule at all to an unverified one: a wrong readiness pattern delays a
 server, a wrong crash pattern stops a healthy one.
+
+Validation proves a seed **loads**, which is a much weaker claim than that the
+game runs — a port declared TCP that is really UDP validates, lints clean, and
+refuses every connection. [docs/testing.md](docs/testing.md) is the pass that
+closes that gap; run it before opening a pull request.
+
+## Documentation
+
+| | |
+|---|---|
+| [authoring.md](docs/authoring.md) | Writing a seed, end to end |
+| [testing.md](docs/testing.md) | Verifying one against real infrastructure |
+| [conventions.md](docs/conventions.md) | House style, versioning, what counts as a breaking change |
+| [contributing.md](docs/contributing.md) | Branches, review checklist |
+| [publishing.md](docs/publishing.md) | Channels, the branch model, recovery |
+| [architecture.md](docs/architecture.md) | How a seed reaches an operator |
+| [decisions.md](docs/decisions.md) | Why things are arranged this way |
+| [seed-spec.md](docs/seed-spec.md) · [seed-fields.md](docs/seed-fields.md) | The format. Mirrored from the control-plane repository — do not edit here |

@@ -8,7 +8,7 @@ description: >
   does not carry, so this seed uses a well-known community image that
   downloads the official server itself at container start (ADR-018: a seed
   whose image already contains the install step needs no separate Install).
-version: "3.2.0"
+version: "4.0.0"
 
 # Bedrock Dedicated Server ships amd64-only Linux binaries.
 architectures: [amd64]
@@ -57,6 +57,14 @@ groups:
       that cost CPU and memory sharply as they rise.
     collapsed: true
   - name: Content and privacy
+    collapsed: true
+  - name: Movement and anti-cheat
+    description: >-
+      How much the server trusts the client about where it is. Tightening these
+      costs CPU and can make a laggy connection feel worse.
+    collapsed: true
+  - name: Scripting
+    description: The script debugger, which is off unless you are developing a behaviour pack.
     collapsed: true
 
 variables:
@@ -309,6 +317,121 @@ settings:
     false_value: "false"
     default: "false"
     to: { env: CONTENT_LOG_FILE_ENABLED }
+
+  # The remaining documented server.properties keys, all of them supported by
+  # this image as environment variables. ADR-076 curated the set above and left
+  # these out as niche; they are here now so the seed covers the whole
+  # documented surface. Defaults match the game's own, so a rebuild writes the
+  # same behaviour an existing server already has.
+  - name: enable_lan_visibility
+    group: Server
+    type: bool
+    label: Announce on the local network
+    description: Off hides the server from LAN discovery. It stays reachable by address.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { env: ENABLE_LAN_VISIBILITY }
+  - name: compression_algorithm
+    group: Performance
+    type: select
+    label: Compression algorithm
+    default: "zlib"
+    options:
+      - { value: zlib, label: zlib (smaller) }
+      - { value: snappy, label: snappy (faster) }
+    to: { env: COMPRESSION_ALGORITHM }
+  - name: server_build_radius_ratio
+    group: Performance
+    label: Build radius ratio
+    description: >-
+      "Disabled", or a value from 0 to 1 giving the fraction of the view
+      distance the server keeps loaded for building.
+    default: "Disabled"
+    to: { env: SERVER_BUILD_RADIUS_RATIO }
+  - name: server_authoritative_movement
+    group: Movement and anti-cheat
+    type: select
+    label: Movement authority
+    description: >-
+      Who decides where a player is. Server authority resists movement cheats;
+      rewind additionally replays the client's view before correcting it.
+    default: "server-auth-with-rewind"
+    options:
+      - { value: client-auth, label: Client authoritative }
+      - { value: server-auth, label: Server authoritative }
+      - { value: server-auth-with-rewind, label: Server authoritative with rewind }
+    to: { env: SERVER_AUTHORITATIVE_MOVEMENT }
+  - name: correct_player_movement
+    group: Movement and anti-cheat
+    type: bool
+    label: Correct player movement
+    description: Snaps a player back when the server disagrees with them, rather than only logging it.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: CORRECT_PLAYER_MOVEMENT }
+  - name: player_position_acceptance_threshold
+    group: Movement and anti-cheat
+    type: number
+    label: Position acceptance threshold (blocks)
+    description: How far the client may disagree with the server before it is corrected.
+    min: 0
+    step: 0.001
+    default: "0.5"
+    to: { env: PLAYER_POSITION_ACCEPTANCE_THRESHOLD }
+  - name: player_movement_action_direction_threshold
+    group: Movement and anti-cheat
+    type: number
+    label: Action direction threshold
+    description: How closely a player must be facing what they act on. 1 is exact.
+    min: 0
+    max: 1
+    step: 0.001
+    default: "0.85"
+    to: { env: PLAYER_MOVEMENT_ACTION_DIRECTION_THRESHOLD }
+  - name: server_authoritative_block_breaking
+    group: Movement and anti-cheat
+    type: bool
+    label: Server authoritative block breaking
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: SERVER_AUTHORITATIVE_BLOCK_BREAKING }
+  - name: block_network_ids_are_hashes
+    group: Movement and anti-cheat
+    type: bool
+    label: Hashed block network ids
+    description: Keeps block ids stable across updates, which add-ons generally want.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: BLOCK_NETWORK_IDS_ARE_HASHES }
+  - name: allow_outbound_script_debugging
+    group: Scripting
+    type: bool
+    label: Allow outbound script debugging
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: ALLOW_OUTBOUND_SCRIPT_DEBUGGING }
+  - name: allow_inbound_script_debugging
+    group: Scripting
+    type: bool
+    label: Allow inbound script debugging
+    description: Lets a debugger attach to the server. Off unless you are actively developing.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { env: ALLOW_INBOUND_SCRIPT_DEBUGGING }
+  - name: script_debugger_auth_token
+    group: Scripting
+    type: password
+    label: Script debugger token
+    description: Required to attach a debugger. Blank means no token is demanded.
+    default: ""
+    show_if: { name: allow_inbound_script_debugging, equals: "true" }
+    to: { env: SCRIPT_DEBUGGER_AUTH_TOKEN }
 
 migrations:
   # Each of these moved from variables to settings above. Without them every

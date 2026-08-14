@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.1"
+version: "1.0.2"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -108,6 +108,22 @@ containers:
       # base-steamcmd honours HOME (its own descriptor says so), and the
       # writable path above is what makes this one writable.
       HOME: /home/steam
+      # Unreal Engine refuses to run as root -- "Refusing to run with the root
+      # privileges.", no flag and no override -- and a container otherwise runs
+      # as the image's default user, which is root. Without this the server
+      # prints that one line and stops, having done nothing else.
+      #
+      # The uid is not named here on purpose: the image takes it from whoever
+      # owns HOME, which is the agent that created the writable paths on the
+      # host. That is the only uid which leaves the game able to write its saves
+      # and the agent able to read them back for a backup, and it is right on a
+      # fleet whose agent runs as root and one whose agent does not, without a
+      # seed having to know which.
+      YGG_DROP_PRIVS: "1"
+      # HOME is made writable by the image without being asked; anything else
+      # the game writes to has to be named. Pal/Saved is the world, the player
+      # data and the config this seed renders.
+      YGG_CHOWN_DIRS: "/game/Pal/Saved"
     ports:
       - { name: game, protocol: udp, default: 8211, kind: game }
       # RCON and the REST API are both allocated whether or not they are turned

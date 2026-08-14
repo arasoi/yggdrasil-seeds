@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.0"
+version: "1.0.1"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -26,6 +26,14 @@ install:
       # works, and there is a native Linux build, so no Proton wrapper is
       # needed the way ARK Survival Ascended needs one.
       app_id: 2394010
+    # PalServer.sh is no longer the entry point (see the command below), and it
+    # was the thing that chmod +x'd the binary before exec'ing it. SteamCMD
+    # preserves the executable bit on download, so this is belt and braces --
+    # but it runs while the install directory is still writable, which is the
+    # only moment anything can set a mode inside it.
+    - op: chmod
+      path: Pal/Binaries/Linux/PalServer-Linux-Shipping
+      mode: "0755"
 
 server:
   writable_paths:
@@ -66,21 +74,32 @@ containers:
     #   * The three -use/-No flags are Pocketpair's own documented performance
     #     switches for dedicated servers.
     #
-    # One interaction worth knowing about and NOT yet confirmed against a real
-    # run: PalServer.sh chmod +x's the shipped binary before exec'ing it, and
-    # the install is mounted read-only (ADR-018), so that chmod fails. The
-    # script carries no `set -e`, and SteamCMD preserves the executable bit on
-    # download, so this should be a printed error and nothing more -- but "should
-    # be" is the honest word. If a server never starts and the console shows a
-    # chmod failure, invoking Pal/Binaries/Linux/PalServer-Linux-Shipping
-    # directly is the fix. The documented entry point is used here because
-    # second-guessing it without a server to test against would be the larger
-    # risk (ADR-064 is this project's own record of a read-only install breaking
-    # something nobody expected).
+    # The shipping binary is exec'd directly rather than through PalServer.sh,
+    # which 1.0.0 used. That script writes into the install directory on every
+    # start, and an install is mounted read-only, so it cannot:
+    #
+    #     cp: cannot create regular file '/game/Pal/Binaries/Linux/steamclient.so':
+    #         Read-only file system
+    #     Failed to copy the file: /game/linux64/steamclient.so ->
+    #         /game/Pal/Binaries/Linux/steamclient.so
+    #
+    # 1.0.0 anticipated this and named the wrong write: it expected the script's
+    # chmod +x to be what failed, and reasoned that a printed error was all it
+    # would cost. The chmod may well fail too. What an operator actually hit
+    # first is the steamclient.so copy, and pre-placing that file does not help,
+    # because a copy onto a read-only filesystem fails whether or not the
+    # destination is already correct.
+    #
+    # Bypassing the script costs nothing here. The two things it does are stage
+    # steamclient.so -- which the line below already does, into
+    # $HOME/.steam/sdk64, the path PalServer actually dlopen()s -- and chmod the
+    # binary, now an install step where the directory is still writable. `Pal`
+    # is the project name the script passes as the first argument; Unreal needs
+    # it and dropping it is the one way to get this wrong quietly.
     command: >-
       sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
       cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
-      exec /game/PalServer.sh
+      exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
       -port={{.Ports.game}}
       -players={{.Vars.server_player_max_num}}
       -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS'

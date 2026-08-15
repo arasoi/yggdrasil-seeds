@@ -1,0 +1,308 @@
+id: empyrion
+schema: 3
+name: Empyrion - Galactic Survival
+icon: "🚀"
+description: >
+  Space survival sandbox. Build ships and bases, mine planets and fight through
+  a persistent galaxy, alone or with others on one server.
+version: "1.0.0"
+
+# amd64 only, and the architecture here is the *node's* rather than the
+# binary's: Eleon ship no Linux build of the dedicated server at all, so this
+# runs the Windows one under Proton, the same way ARK does.
+architectures: [amd64]
+
+install:
+  # Each server gets its own copy. Two Empyrion galaxies have nothing to share
+  # the way ARK's identical map data does across a cluster.
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      # The *dedicated server* app (530870), not the game (383120). It is
+      # free to download, so an anonymous login works.
+      #
+      # Its only depots are Windows ones -- the `1006` depot alongside them is
+      # the Steamworks Linux redistributable, not the game -- and that is fine:
+      # the installer forces the Linux *platform*, and a Windows-only app still
+      # resolves its depots through it. Confirmed against ARK, which is
+      # Windows-only in exactly the same way and installs correctly.
+      app_id: 530870
+
+server:
+  writable_paths:
+    # The galaxy, every player's blueprints, and the game's own logs. Empyrion
+    # writes Saves relative to the install root, which is mounted read-only, so
+    # this is what makes the game able to write at all.
+    - { from: saves, to: /game/Saves }
+    # HOME for the container's user: the Wine prefix, the staged
+    # steamclient.so, and Proton's own scratch state. Per-server and writable,
+    # never part of the read-only install.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    # Symbolic rather than a literal ghcr.io/...:release-latest tag. A pinned
+    # release-latest is built only from main, so a fix on develop cannot reach
+    # a node -- which is exactly what happened to ARK when a stale X lock left
+    # Proton unable to start. The symbolic form follows whichever channel the
+    # control plane itself is on.
+    image: { base: steamcmd-proton }
+    # ygg-proton handles the Proton invocation details that fail obscurely when
+    # got wrong: creating the prefix directory, staging the native
+    # steamclient.so, resolving the executable to an absolute path, and using
+    # waitforexitandrun so the container does not exit while the game is still
+    # starting.
+    #
+    # NOT YET CONFIRMED AGAINST A RUNNING SERVER, and this is the line most
+    # likely to be wrong:
+    #
+    #   * The executable. Steam's own launch config for this app is
+    #     `EmpyrionLauncher.exe -startDediWithGfx`, and that is what is used
+    #     here because it is the only authoritative answer available. The
+    #     launcher may well spawn the real server and exit, which would end the
+    #     container while the game keeps running -- if the server starts and
+    #     then immediately stops, the dedicated binary in the same directory is
+    #     what to point this at instead.
+    #   * The config path. `-dedicated` takes a path the *Windows* side has to
+    #     resolve, and Proton maps Z: to /, so Z:\game\Saves\dedicated.yaml is
+    #     the Unix /game/Saves/dedicated.yaml the config block below renders.
+    #     Backslashes, since this is a Windows argument.
+    command: "ygg-proton ./EmpyrionLauncher.exe -startDediWithGfx -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    workdir: /game
+    env:
+      HOME: /home/steam
+      # The image always takes ownership of HOME; the game's own writable mount
+      # has to belong to the container's user too, or the game cannot write its
+      # galaxy and fails in ways that name neither the directory nor the uid.
+      YGG_PROTON_CHOWN_DIRS: "/game/Saves"
+    ports:
+      # Srv_Port. UDP, and the game claims the three ports above it as well --
+      # declared as offsets so they are allocated as one atomic group and can
+      # never be handed out to something else individually.
+      - { name: game, protocol: udp, default: 30000, kind: game }
+      - { name: game_plus1, protocol: udp, offset_from: game, offset: 1 }
+      - { name: game_plus2, protocol: udp, offset_from: game, offset: 2 }
+      - { name: game_plus3, protocol: udp, offset_from: game, offset: 3 }
+      # Tel_Port: the remote console, and the only TCP port this game opens.
+      # Allocated whether or not telnet is switched on, since a port an
+      # operator can enable later is cheaper to hold than one they cannot get
+      # without a rebuild.
+      - { name: telnet, protocol: tcp, default: 30004, kind: rcon }
+
+config:
+  files:
+    - path: saves/dedicated.yaml
+      source_path: configs/dedicated.yaml.tmpl
+      # Rewritten wholesale on every rebuild. The file is small and entirely
+      # seed-controlled, so there is nothing in it an operator would edit that
+      # a control on this page does not already cover.
+      manage: always
+
+ready:
+  # mode: port on the *telnet* port, which is the only TCP port here.
+  #
+  # Not the game port: it is UDP, and the readiness probe dials TCP, so a UDP
+  # port can never satisfy it -- every start would wait out the timeout and
+  # then be reported running anyway. That is a real failure this project has
+  # already had, on a game whose port was also UDP.
+  #
+  # Not a log pattern either: nobody has watched this server start, and an
+  # unverified pattern in a field looks active while matching nothing. Once a
+  # real startup line has been seen, this should become mode: log -- the
+  # telnet port only tells you the console is up, which is close to but not the
+  # same as the galaxy being ready.
+  #
+  # This does mean readiness depends on telnet staying enabled, which is why it
+  # defaults on.
+  mode: port
+  port: telnet
+  timeout: 600s
+
+# No crash block. A crash pattern kills the pod, so a wrong one stops a healthy
+# server rather than merely delaying it, and nothing here has been checked
+# against a real Empyrion failure.
+
+stop:
+  # SIGTERM with no console command. The graceful path this game documents is a
+  # telnet `saveandexit`, which a stop spec cannot reach -- it writes to the
+  # primary container's stdin, and the server reads none.
+  #
+  # Generous, because saving a large galaxy takes a while and being killed
+  # mid-write is how a save is lost.
+  timeout: 180s
+  then: SIGTERM
+
+connect:
+  # `copy` only. Empyrion's join flow is entering an address in the client's
+  # server browser, and no URI scheme has been watched working here.
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  # The whole writable root: the galaxy, the blueprints and the rendered
+  # config. `home` is deliberately excluded -- it holds only the Wine prefix
+  # and a staged steamclient.so, both of which the next start recreates.
+  include: [saves]
+
+groups:
+  - name: Server
+    description: Identity, access and who may connect.
+  - name: Remote access
+    description: The telnet console, which is also what readiness watches for.
+  - name: Galaxy
+    description: The world this server generates and runs.
+
+variables:
+  - name: server_name
+    group: Server
+    label: Server name
+    description: "Shown in the in-game server browser. Config key: Srv_Name."
+    default: "An Yggdrasil Empyrion server"
+    editable: true
+
+  - name: server_description
+    group: Server
+    type: text
+    label: Description
+    description: "Shown beneath the name in the browser. Config key: Srv_Description."
+    default: ""
+    editable: true
+
+  - name: server_password
+    group: Server
+    type: password
+    label: Server password
+    description: >-
+      Required to join when set. Leave empty for an open server. Config key:
+      Srv_Password.
+    default: ""
+    editable: true
+
+  - name: max_players
+    group: Server
+    type: number
+    min: 1
+    max: 64
+    step: 1
+    label: Maximum players
+    description: "Config key: Srv_MaxPlayers."
+    default: "20"
+    editable: true
+
+  - name: public
+    group: Server
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: List publicly
+    description: >-
+      Advertise this server in the public browser. Turning it off does not make
+      it private -- anyone with the address and password can still join. Config
+      key: Srv_Public.
+    default: "true"
+    editable: true
+
+  - name: eac
+    group: Server
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: Easy Anti-Cheat
+    description: >-
+      Leave on unless a mod or a scenario needs it off; clients are refused if
+      their setting does not match the server's. Config key: EACActive.
+    default: "true"
+    editable: true
+
+  - name: telnet_enabled
+    group: Remote access
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: Enable the telnet console
+    description: >-
+      Remote administration, and what readiness watches for -- with this off a
+      server takes the full readiness timeout to report itself up. Telnet is
+      unencrypted, so keep it to a trusted network. Config key: Tel_Enabled.
+    default: "true"
+    editable: true
+
+  - name: telnet_password
+    group: Remote access
+    type: password
+    generate: password
+    label: Telnet password
+    description: >-
+      Generated per server rather than left blank, since an open console on an
+      allocated port is worth avoiding even on a LAN. Config key: Tel_Pwd.
+    default: ""
+    editable: true
+
+  - name: game_name
+    group: Galaxy
+    label: Save name
+    description: >-
+      Names the directory the galaxy is saved into. Changing it starts a new
+      one and leaves the old save on disk. Config key: GameName.
+    default: "Yggdrasil"
+    editable: true
+
+  - name: mode
+    group: Galaxy
+    type: select
+    options:
+      - { value: Survival, label: Survival }
+      - { value: Creative, label: Creative }
+    label: Mode
+    description: "Config key: Mode."
+    default: Survival
+    editable: true
+
+  - name: seed
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Galaxy seed
+    description: >-
+      Determines the galaxy that gets generated. Changing it after the world
+      exists does nothing; it is read once, when the save is created. Config
+      key: Seed.
+    default: "1011345"
+    editable: true
+
+  - name: custom_scenario
+    group: Galaxy
+    label: Custom scenario
+    description: >-
+      Name of a scenario directory under Content/Scenarios in the install.
+      Empty runs the default game. Written only when set, since the key being
+      present but empty is not the same as it being absent. Config key:
+      CustomScenario.
+    default: ""
+    editable: true
+
+  - name: decay_time
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Structure decay (hours)
+    description: >-
+      Hours before an untouched structure decays. 0 disables decay entirely.
+      Config key: DecayTime.
+    default: "0"
+    editable: true
+
+  - name: max_structures
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Maximum structures per playfield
+    description: "0 leaves the game's own limit in place. Config key: MaxStructures."
+    default: "0"
+    editable: true

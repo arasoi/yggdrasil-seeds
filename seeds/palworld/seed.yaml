@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.4"
+version: "1.0.5"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -45,11 +45,22 @@ server:
     # the read-only install (ADR-018, and ADR-070's lesson about a HOME the
     # container's own uid cannot write).
     - { from: home, to: /home/steam }
-  file_denylist:
-    # The seed rewrites this on every rebuild, so offering it in the file
-    # browser invites an edit the next rebuild discards. Not a security
-    # boundary -- the sandbox is (ADR-033).
-    - "saved/Config/LinuxServer/PalWorldSettings.ini"
+  # No file_denylist. It should list PalWorldSettings.ini -- the seed rewrites
+  # that file on every rebuild, so offering it in the browser invites an edit
+  # the next rebuild discards, which is exactly what the field is for.
+  #
+  # It cannot, yet. The denylist is enforced on every file operation on the
+  # node, and the seed's own config write is a file operation, so denying the
+  # file the seed manages makes the seed unable to write it:
+  #
+  #     write config file saved/Config/LinuxServer/PalWorldSettings.ini:
+  #     this seed does not allow file operations on that path
+  #
+  # Every rebuild then failed, leaving the containers on their previous
+  # configuration -- and because the failure surfaced only as "the containers
+  # could not be rebuilt", it read as a container problem rather than a config
+  # one. Restore this once a seed's own writes are exempt from its browser
+  # denylist.
 
 containers:
   - role: game

@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.7"
+version: "1.0.8"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -73,39 +73,50 @@ containers:
     # waitforexitandrun so the container does not exit while the game is still
     # starting.
     #
-    # EmpyrionLauncher with -startDedi, which is what the depot's own
-    # EmpyrionDedicated_NoGraphics.cmd runs. Both shipped scripts run the
-    # launcher and differ only in -startDedi against -startDediWithGfx; an
-    # earlier version of this seed pointed at
-    # DedicatedServer/EmpyrionDedicated.exe instead, which is not how Eleon
-    # starts this, and the graphics variant is why a headless box was bringing
-    # up a D3D11 device.
+    # The dedicated server binary, not EmpyrionLauncher.exe -- and this is a
+    # deliberate return to it rather than a revert.
     #
-    # Three things a real run has now settled, none of which were inference:
-    # the launcher is reached and executes (it failed inside
-    # EmpyrionLauncher.Program.Main, so exec and argument parsing both work);
-    # workdir /game is right, since it resolved ./EmpyrionLauncher.exe from
-    # there; and Proton's Z: mapping is right, since the path it complained
-    # about came back as Z:\game\Logs -- the Windows spelling of the Unix
-    # /game this container actually has.
+    # The depot's own scripts both run the launcher, differing only in
+    # -startDedi against -startDediWithGfx, so the launcher is Eleon's
+    # documented path and was tried on that basis. It does not work here, for a
+    # reason that is a property of this container rather than of the flag: the
+    # NoGraphics script prints "Dedicated server was started as background
+    # process", and a real run confirmed it -- the launcher spawned the server,
+    # returned, and exited *zero*. ygg-proton uses waitforexitandrun, so the
+    # container went down with it and took the spawned server's whole PID
+    # namespace along, leaving an empty Logs directory and a Saves holding
+    # nothing but the config this seed wrote. A launcher whose job is to hand
+    # off and exit cannot be the process a container supervises.
     #
-    # STILL UNCONFIRMED, because the run died before either could happen:
+    # So the container has to own the real server process, which is this one.
+    # An earlier version of this seed ran exactly this command and hung after
+    # initialising a graphics device -- but at that point /game/Logs was not a
+    # writable mount, which is precisely the wall the launcher was later found
+    # to hit first. That is the single variable that has changed, and this is
+    # the retest of it.
     #
-    #   * That -dedicated reads the rendered config. The argument is a path
-    #     the *Windows* side resolves, so Z:\game\Saves\dedicated.yaml is the
-    #     Unix /game/Saves/dedicated.yaml the config block below writes --
+    # What a real run has settled, none of it inference: the executables are
+    # reached and execute; workdir /game is right, since ./ resolves against it;
+    # and Proton's Z: mapping is right, because the path Empyrion complained
+    # about came back as Z:\game\Logs -- the Windows spelling of the Unix /game
+    # this container actually has.
+    #
+    # STILL UNCONFIRMED:
+    #
+    #   * That -dedicated reads the rendered config. The argument is a path the
+    #     *Windows* side resolves, so Z:\game\Saves\dedicated.yaml is the Unix
+    #     /game/Saves/dedicated.yaml the config block below writes --
     #     backslashes, since this is a Windows argument. That the mapping is
-    #     correct is now proven; that Empyrion accepts a config outside its own
+    #     correct is proven; that Empyrion accepts a config outside its own
     #     default location is not.
-    #   * KNOWN RISK, stated because it is likely and will look like a crash:
-    #     the NoGraphics script prints "Dedicated server was started as
-    #     background process", so the launcher may spawn the real server and
-    #     return. ygg-proton uses waitforexitandrun, so if the launcher exits
-    #     the container exits with it and the supervisor reports a crash while
-    #     the game may still be running under Wine. If that happens the fix is
-    #     not another flag -- it is giving the container something to own the
-    #     lifecycle, which is its own change.
-    command: "ygg-proton ./EmpyrionLauncher.exe -startDedi -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    #   * Whether this still brings up a graphics device with no display. If it
+    #     hangs there again, the writable Logs mount was not what stopped it
+    #     last time, and the next thing to try is Unity's own headless pair,
+    #     -batchmode -nographics. Deliberately not added here: it would change
+    #     two things at once, and a run that failed would say nothing about
+    #     which. This game is a Unity title, so those flags are plausible --
+    #     plausible is the reason to test them next, not to ship them now.
+    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -dedicated Z:\\game\\Saves\\dedicated.yaml"
     workdir: /game
     env:
       HOME: /home/steam

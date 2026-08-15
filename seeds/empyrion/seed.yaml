@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.1"
+version: "1.0.2"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -94,6 +94,24 @@ containers:
       # never part of the read-only install.
       STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/530870
       STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
+      # Diagnostic, and meant to be removed once this game actually boots.
+      #
+      # With the prefix set, the container stopped failing in ygg-proton and
+      # started exiting 1 with *no output at all* -- which is not a console
+      # problem, since the earlier ygg-proton error reached the console
+      # through the same path. A silent exit says nothing about what died.
+      #
+      # +loaddll makes Wine name every module it loads, so the last one before
+      # the exit is the thing to look at; that is how ARK's own indefinite
+      # hang was finally identified, where the culprit turned out to be a DLL
+      # the depot itself shipped. PROTON_LOG writes Proton's own log into
+      # HOME, which is a per-server writable mount and therefore readable from
+      # the file browser afterwards -- worth having precisely because a
+      # crash-looping container's console is the thing you cannot read.
+      #
+      # Both are verbose. Drop them in the release that gets this booting.
+      WINEDEBUG: "+loaddll"
+      PROTON_LOG: "1"
     ports:
       # Srv_Port. UDP, and the game claims the three ports above it as well --
       # declared as offsets so they are allocated as one atomic group and can

@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.5"
+version: "1.0.6"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -45,22 +45,24 @@ server:
     # the read-only install (ADR-018, and ADR-070's lesson about a HOME the
     # container's own uid cannot write).
     - { from: home, to: /home/steam }
-  # No file_denylist. It should list PalWorldSettings.ini -- the seed rewrites
-  # that file on every rebuild, so offering it in the browser invites an edit
-  # the next rebuild discards, which is exactly what the field is for.
-  #
-  # It cannot, yet. The denylist is enforced on every file operation on the
-  # node, and the seed's own config write is a file operation, so denying the
-  # file the seed manages makes the seed unable to write it:
-  #
-  #     write config file saved/Config/LinuxServer/PalWorldSettings.ini:
-  #     this seed does not allow file operations on that path
-  #
-  # Every rebuild then failed, leaving the containers on their previous
-  # configuration -- and because the failure surfaced only as "the containers
-  # could not be rebuilt", it read as a container problem rather than a config
-  # one. Restore this once a seed's own writes are exempt from its browser
-  # denylist.
+  file_denylist:
+    # The seed rewrites this on every rebuild, so offering it in the file
+    # browser invites an edit the next rebuild discards. Not a security
+    # boundary -- the sandbox is that, unconditionally.
+    #
+    # NEEDS A NODE RUNNING PROTOCOL 5 OR NEWER. The denylist is enforced on
+    # every file operation on the node, and until protocol 5 the seed's own
+    # config write was one of them -- so this entry denied the seed the file it
+    # manages, and every rebuild failed with:
+    #
+    #     write config file saved/Config/LinuxServer/PalWorldSettings.ini:
+    #     this seed does not allow file operations on that path
+    #
+    # An older agent ignores the exemption and still refuses, so on such a node
+    # this line has to come back out. It is restored here because the agent
+    # carrying the fix and this seed promote through the same channels
+    # together: whatever installs this from a channel has the agent from it too.
+    - "saved/Config/LinuxServer/PalWorldSettings.ini"
 
 containers:
   - role: game

@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.11"
+version: "1.0.12"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -73,53 +73,6 @@ containers:
     # waitforexitandrun so the container does not exit while the game is still
     # starting.
     #
-    # TEMPORARY -- THIS VERSION DOES NOT RUN THE GAME.
-    #
-    # It prints the depot's own launch scripts and directory layout and then
-    # sleeps, so the console can be read. Publish the real command back over it
-    # once the output has been read; nothing below this block is changed, so
-    # reverting is a one-line edit.
-    #
-    # Why a diagnostic version rather than another flag: three walls have been
-    # found and cleared, each confirmed against a real run --
-    #
-    #   * /game/Logs was not a writable mount, so EmpyrionLauncher failed in
-    #     Main() creating Logs/<build>/ before reading any config.
-    #   * The launcher hands off and exits zero, taking the container and the
-    #     server it spawned down with it. A process whose job is to return
-    #     cannot be the one a container supervises.
-    #   * The dedicated binary brought up a D3D11 swapchain on a box with no
-    #     display; -batchmode -nographics removed that entirely.
-    #
-    # and past all three the server still loads, holds ~625 MiB, uses no
-    # measurable CPU, writes no log and creates no save game. Every remaining
-    # idea about *why* would be a guess, and guesses have now been wrong three
-    # times: the launcher was the documented path and was unusable, the Logs
-    # mount was not what caused the graphics hang, and `running` was read as
-    # proof the telnet port opened when a demonstrably hung earlier run reported
-    # exactly the same thing.
-    #
-    # So: read what Eleon's own launcher actually does. The scripts are the one
-    # authoritative answer available, they are already on disk, and nothing here
-    # can read them otherwise -- the file browser is rooted at the server's own
-    # directory and the install is not inside it.
-    #
-    # ygg-proton is deliberately not used: this runs no Windows binary, so there
-    # is no prefix to set up and no reason to involve Proton in reading a text
-    # file.
-    #
-    # The output goes to a FILE in the writable Saves mount, not to stdout. The
-    # first attempt printed it to the console and only the tail survived: the
-    # directory listings arrived and the file contents, which came first, never
-    # did. The shell was not at fault -- the identical loop was rerun locally
-    # and printed everything -- and a fresh attach replayed the same truncated
-    # output, so this is the container's opening burst being produced before the
-    # console attachment is established rather than anything scrolling past. A
-    # file cannot be missed that way, and the file browser can read it, so this
-    # is the reliable form of the same read.
-    #
-    # ---- the real command, restored by deleting the diagnostic one ----
-    #
     # The dedicated server binary, not EmpyrionLauncher.exe -- and this is a
     # deliberate return to it rather than a revert.
     #
@@ -164,12 +117,17 @@ containers:
     #     what ruled the mount out as the cause and left the renderer as the
     #     remaining explanation, rather than being guessed at from the start.
     #
-    # If it still hangs there, stop adding flags. The thing to do instead is
-    # read EmpyrionDedicated.cmd out of the depot to see what arguments Eleon's
-    # own launcher hands this binary, since inference has now been wrong twice.
-    #
-    #   command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
-    command: "sh -c \"o=/game/Saves/launch-scripts.txt; { for f in /game/*.cmd /game/*.bat /game/DedicatedServer/*.cmd /game/DedicatedServer/*.bat /game/*.props; do test -f $f && { echo ---- $f ----; cat $f; echo; }; done; echo ---- BuildNumber ----; cat /game/BuildNumber.txt; echo; echo ---- ls /game ----; ls -la /game; echo ---- ls DedicatedServer ----; ls -la /game/DedicatedServer; echo ---- end ----; } > $o 2>&1; echo wrote $o; sleep 900\""
+    # KNOWN WRONG, and left alone deliberately for now: -dedicated is not an
+    # argument Eleon passes. Both depot scripts run `EmpyrionLauncher -startDedi`
+    # (or -startDediWithGfx) with no config argument at all, read out of the
+    # depot rather than guessed -- the launcher takes dedicated.yaml from the
+    # game root by default, and the depot ships one there. Ours is in Saves
+    # because the game root is a read-only install mount, and an absolute
+    # Windows path may well not be what this option accepts; a filename relative
+    # to the game root is the conventional form. Changing it at the same time as
+    # the DLL override below would make a failure unattributable, which is the
+    # mistake that cost the most time here. It is the next thing to try.
+    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
     workdir: /game
     env:
       HOME: /home/steam
@@ -182,6 +140,29 @@ containers:
       # is still not writable -- which fails identically to not mounting it at
       # all, so the mount looks like it did not work.
       YGG_PROTON_CHOWN_DIRS: "/game/Saves /game/Logs"
+      # Empyrion's depot ships its own Windows steamclient64.dll (26 MB) in
+      # DedicatedServer/, right beside EmpyrionDedicated.exe -- confirmed by
+      # listing the install, not assumed. Windows resolves a DLL from the
+      # application directory first, so that copy wins over anything Proton
+      # stages into the prefix, and it then blocks forever waiting for a Steam
+      # client that does not exist in this container.
+      #
+      # `=b` is Wine's builtin-only override, which makes the load fail fast
+      # instead of hanging. steamclient is listed alongside steamclient64
+      # because the 32-bit name is resolved by the same rule and costs nothing
+      # to cover.
+      #
+      # This is not a guess: it is the same failure, with the same cause and the
+      # same fix, that stopped ARK booting under this image -- and the symptom
+      # here matches it exactly. The server loads, holds around 625 MiB, uses no
+      # measurable CPU, writes no log and never opens a port. Every other
+      # explanation tried so far has been ruled out against a real run: the Logs
+      # mount, the launcher's hand-off, and the renderer.
+      #
+      # Staging Proton's own lsteamclient.dll over the top was tried for ARK and
+      # does not work -- application-directory precedence still wins -- so do
+      # not reach for that if this needs revisiting.
+      WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
       # The Wine prefix, and the reason the first run of this seed never
       # reached the game at all. ygg-proton refuses a compat data path that
       # does not end in the Steam app id, because Proton's own protonfixes

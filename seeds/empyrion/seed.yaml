@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.0"
+version: "1.0.1"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -59,7 +59,9 @@ containers:
     # NOT YET CONFIRMED AGAINST A RUNNING SERVER, and this is the line most
     # likely to be wrong:
     #
-    #   * The executable. Steam's own launch config for this app is
+    #   * The executable, still unverified -- the first live run never got
+    #     as far as running it, failing in ygg-proton before exec. Steam's own
+    #     launch config for this app is
     #     `EmpyrionLauncher.exe -startDediWithGfx`, and that is what is used
     #     here because it is the only authoritative answer available. The
     #     launcher may well spawn the real server and exit, which would end the
@@ -78,6 +80,20 @@ containers:
       # has to belong to the container's user too, or the game cannot write its
       # galaxy and fails in ways that name neither the directory nor the uid.
       YGG_PROTON_CHOWN_DIRS: "/game/Saves"
+      # The Wine prefix, and the reason the first run of this seed never
+      # reached the game at all. ygg-proton refuses a compat data path that
+      # does not end in the Steam app id, because Proton's own protonfixes
+      # parses the id back out of it with a regex and raises otherwise -- so
+      # with these unset the container exited immediately with
+      #
+      #   ygg-proton: STEAM_COMPAT_DATA_PATH must end in the Steam app id
+      #
+      # which looks like a crash-loop with exit code 2 and says nothing about
+      # a missing variable unless you read the console. Both live under HOME,
+      # which is a per-server writable mount, so the prefix is per server and
+      # never part of the read-only install.
+      STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/530870
+      STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
     ports:
       # Srv_Port. UDP, and the game claims the three ports above it as well --
       # declared as offsets so they are allocated as one atomic group and can

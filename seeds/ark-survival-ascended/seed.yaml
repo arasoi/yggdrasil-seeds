@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.0.2"
+version: "5.0.3"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.
@@ -28,6 +28,18 @@ server:
   writable_paths:
     - { from: saved, to: /game/ShooterGame/Saved }
     - { from: config, to: /game/ShooterGame/Saved/Config }
+    # ARK's bundled CurseForge mod client writes here, inside the install
+    # rather than under Saved, and the install is mounted read-only. Without
+    # this the server initialises, prints its version, and then stops dead:
+    #
+    #     LogCFCore: Error: Unable to create a directory
+    #       .../ShooterGame/Binaries/Win64/ShooterGame/ModsUserData/83374
+    #
+    # and the log never advances again. Nothing says "crashed" -- the container
+    # keeps running and the readiness timeout eventually reports it up anyway,
+    # which is how this went unnoticed. Mounting a per-server directory over it
+    # lets the client write and start.
+    - { from: mods, to: /game/ShooterGame/Binaries/Win64/ShooterGame/ModsUserData }
     # HOME for the container's steam user. Everything Proton keeps per
     # server lives under here — the Wine prefix (compatdata), the native
     # steamclient.so ygg-proton stages into .steam/sdk64, and Proton's own

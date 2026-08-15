@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.8"
+version: "1.0.9"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -109,14 +109,18 @@ containers:
     #     backslashes, since this is a Windows argument. That the mapping is
     #     correct is proven; that Empyrion accepts a config outside its own
     #     default location is not.
-    #   * Whether this still brings up a graphics device with no display. If it
-    #     hangs there again, the writable Logs mount was not what stopped it
-    #     last time, and the next thing to try is Unity's own headless pair,
-    #     -batchmode -nographics. Deliberately not added here: it would change
-    #     two things at once, and a run that failed would say nothing about
-    #     which. This game is a Unity title, so those flags are plausible --
-    #     plausible is the reason to test them next, not to ship them now.
-    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    #   * Whether -batchmode -nographics is enough to get past a renderer this
+    #     container cannot provide. Empyrion is a Unity title and these are
+    #     Unity's own headless pair, handled by the player before any game code
+    #     runs. They are here because a real run with the writable Logs mount in
+    #     place still hung creating a D3D11 swapchain at 1024x768 -- which is
+    #     what ruled the mount out as the cause and left the renderer as the
+    #     remaining explanation, rather than being guessed at from the start.
+    #
+    # If it still hangs there, stop adding flags. The thing to do instead is
+    # read EmpyrionDedicated.cmd out of the depot to see what arguments Eleon's
+    # own launcher hands this binary, since inference has now been wrong twice.
+    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
     workdir: /game
     env:
       HOME: /home/steam

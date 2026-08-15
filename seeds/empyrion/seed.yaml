@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.4"
+version: "1.0.5"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -83,7 +83,15 @@ containers:
     # exits immediately, read that .cmd through the file browser -- the
     # install is readable from the console now that a rebuilt server's output
     # is no longer hidden behind a stale session.
-    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    # TEMPORARY DIAGNOSTIC RELEASE -- this does not start the game.
+    #
+    # 1.0.4 runs the right binary and gets as far as DXVK bringing up a D3D11
+    # device, then hangs: 26 minutes up, no save directory, no log, nothing in
+    # Saves but the config this seed wrote. The depot ships its own launch
+    # scripts, and one of them is explicitly the no-graphics path -- a
+    # headless box initialising a full renderer is the obvious suspect. Read
+    # what they actually do rather than guess the flags a fourth time.
+    command: "sh -c \"echo '=== NoGraphics ==='; cat /game/EmpyrionDedicated_NoGraphics.cmd; echo; echo '=== Dedicated ==='; cat /game/EmpyrionDedicated.cmd; echo; echo '=== end ==='; sleep 900\""
     workdir: /game
     env:
       HOME: /home/steam

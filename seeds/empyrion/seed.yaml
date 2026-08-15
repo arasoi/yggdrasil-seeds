@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.6"
+version: "1.0.7"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -32,10 +32,27 @@ install:
 
 server:
   writable_paths:
-    # The galaxy, every player's blueprints, and the game's own logs. Empyrion
+    # The galaxy, every player's blueprints, and the rendered config. Empyrion
     # writes Saves relative to the install root, which is mounted read-only, so
     # this is what makes the game able to write at all.
     - { from: saves, to: /game/Saves }
+    # The launcher's own logs, and the first thing it does. Confirmed against a
+    # real run: with this missing, EmpyrionLauncher fails in Main() before it
+    # reads any config at all --
+    #
+    #   System.UnauthorizedAccessException: Access to the path
+    #   'Z:\game\Logs\5150' is denied.
+    #     at System.IO.Directory.CreateDirectory
+    #     at EmpyrionLauncher.Program.Main ()
+    #
+    # 5150 is the game's build number, so the directory it wants is named by
+    # whatever build the depot is on -- which is why the mount has to be the
+    # whole Logs tree and not a fixed subdirectory of it.
+    #
+    # Deliberately out of backup.include: a log is reproducible noise, and
+    # including it would grow every archive with the one thing in the writable
+    # root nobody would ever restore.
+    - { from: logs, to: /game/Logs }
     # HOME for the container's user: the Wine prefix, the staged
     # steamclient.so, and Proton's own scratch state. Per-server and writable,
     # never part of the read-only install.
@@ -56,55 +73,51 @@ containers:
     # waitforexitandrun so the container does not exit while the game is still
     # starting.
     #
-    # NOT YET CONFIRMED AGAINST A RUNNING SERVER, and this is the line most
-    # likely to be wrong:
-    #
-    #   * The executable, still unverified -- the first live run never got
-    #     as far as running it, failing in ygg-proton before exec. Steam's own
-    #     launch config for this app is
-    #     `EmpyrionLauncher.exe -startDediWithGfx`, and that is what is used
-    #     here because it is the only authoritative answer available. The
-    #     launcher may well spawn the real server and exit, which would end the
-    #     container while the game keeps running -- if the server starts and
-    #     then immediately stops, the dedicated binary in the same directory is
-    #     what to point this at instead.
-    #   * The config path. `-dedicated` takes a path the *Windows* side has to
-    #     resolve, and Proton maps Z: to /, so Z:\game\Saves\dedicated.yaml is
-    #     the Unix /game/Saves/dedicated.yaml the config block below renders.
-    #     Backslashes, since this is a Windows argument.
-    # The dedicated server binary, not EmpyrionLauncher.exe. Both exist --
-    # the listing that settled this showed the launcher at /game (97 KB, a
-    # launcher) and the real server at DedicatedServer/EmpyrionDedicated.exe.
-    #
-    # Still unproven: whether this wants its working directory at /game or at
-    # DedicatedServer/, and whether -dedicated takes the Z: absolute path or
-    # one relative to the game root. The depot ships its own dedicated.yaml at
-    # /game and an EmpyrionDedicated.cmd that presumably answers both; if this
-    # exits immediately, read that .cmd through the file browser -- the
-    # install is readable from the console now that a rebuilt server's output
-    # is no longer hidden behind a stale session.
     # EmpyrionLauncher with -startDedi, which is what the depot's own
-    # EmpyrionDedicated_NoGraphics.cmd runs. 1.0.4 pointed at
+    # EmpyrionDedicated_NoGraphics.cmd runs. Both shipped scripts run the
+    # launcher and differ only in -startDedi against -startDediWithGfx; an
+    # earlier version of this seed pointed at
     # DedicatedServer/EmpyrionDedicated.exe instead, which is not how Eleon
-    # starts this: both shipped scripts run the launcher, and the only
-    # difference between them is -startDedi against -startDediWithGfx. The
-    # graphics variant is why a headless box was bringing up a D3D11 device.
+    # starts this, and the graphics variant is why a headless box was bringing
+    # up a D3D11 device.
     #
-    # KNOWN RISK, stated because it is likely and will look like a crash: that
-    # script prints "Dedicated server was started as background process", so
-    # the launcher spawns the real server and returns. ygg-proton uses
-    # waitforexitandrun, so if the launcher exits the container exits with it
-    # and the supervisor reports a crash while the game may still be running
-    # under Wine. If that happens the fix is not another flag -- it is giving
-    # the container something to own the lifecycle, which is its own change.
+    # Three things a real run has now settled, none of which were inference:
+    # the launcher is reached and executes (it failed inside
+    # EmpyrionLauncher.Program.Main, so exec and argument parsing both work);
+    # workdir /game is right, since it resolved ./EmpyrionLauncher.exe from
+    # there; and Proton's Z: mapping is right, since the path it complained
+    # about came back as Z:\game\Logs -- the Windows spelling of the Unix
+    # /game this container actually has.
+    #
+    # STILL UNCONFIRMED, because the run died before either could happen:
+    #
+    #   * That -dedicated reads the rendered config. The argument is a path
+    #     the *Windows* side resolves, so Z:\game\Saves\dedicated.yaml is the
+    #     Unix /game/Saves/dedicated.yaml the config block below writes --
+    #     backslashes, since this is a Windows argument. That the mapping is
+    #     correct is now proven; that Empyrion accepts a config outside its own
+    #     default location is not.
+    #   * KNOWN RISK, stated because it is likely and will look like a crash:
+    #     the NoGraphics script prints "Dedicated server was started as
+    #     background process", so the launcher may spawn the real server and
+    #     return. ygg-proton uses waitforexitandrun, so if the launcher exits
+    #     the container exits with it and the supervisor reports a crash while
+    #     the game may still be running under Wine. If that happens the fix is
+    #     not another flag -- it is giving the container something to own the
+    #     lifecycle, which is its own change.
     command: "ygg-proton ./EmpyrionLauncher.exe -startDedi -dedicated Z:\\game\\Saves\\dedicated.yaml"
     workdir: /game
     env:
       HOME: /home/steam
-      # The image always takes ownership of HOME; the game's own writable mount
-      # has to belong to the container's user too, or the game cannot write its
+      # The image always takes ownership of HOME; the game's own writable mounts
+      # have to belong to the container's user too, or the game cannot write its
       # galaxy and fails in ways that name neither the directory nor the uid.
-      YGG_PROTON_CHOWN_DIRS: "/game/Saves"
+      #
+      # Every writable_paths entry under /game belongs here. Adding a mount and
+      # forgetting this line produces a directory that exists, is mounted, and
+      # is still not writable -- which fails identically to not mounting it at
+      # all, so the mount looks like it did not work.
+      YGG_PROTON_CHOWN_DIRS: "/game/Saves /game/Logs"
       # The Wine prefix, and the reason the first run of this seed never
       # reached the game at all. ygg-proton refuses a compat data path that
       # does not end in the Steam app id, because Proton's own protonfixes
@@ -203,9 +216,11 @@ connect:
   copy: "{{.Endpoint.game}}"
 
 backup:
-  # The whole writable root: the galaxy, the blueprints and the rendered
-  # config. `home` is deliberately excluded -- it holds only the Wine prefix
-  # and a staged steamclient.so, both of which the next start recreates.
+  # The galaxy, the blueprints and the rendered config -- one of the three
+  # writable paths, and the only one worth an archive. `home` holds the Wine
+  # prefix and a staged steamclient.so, both of which the next start recreates;
+  # `logs` is reproducible noise. Including either would grow every archive
+  # with something nobody would restore.
   include: [saves]
 
 groups:

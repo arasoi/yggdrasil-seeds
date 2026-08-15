@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# A locally downloaded packer, so it is never committed by accident
+/ygg-seed
+/SHA256SUMS
+/SHA256SUMS.bin
+
+# Local pack output
+/dist/

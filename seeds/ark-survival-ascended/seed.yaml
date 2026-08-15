@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.0.1"
+version: "5.0.2"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.
@@ -43,10 +43,18 @@ cluster:
 containers:
   - role: game
     primary: true
-    # base-steamcmd-proton directly, not a dedicated yggdrasil/ark-asa
-    # image: nothing ARK-specific is baked in, so the same image serves any
-    # Steam-distributed Windows-only dedicated server.
-    image: ghcr.io/arasoi/base-steamcmd-proton:release-latest
+    # base-steamcmd-proton, not a dedicated yggdrasil/ark-asa image: nothing
+    # ARK-specific is baked in, so the same image serves any Steam-distributed
+    # Windows-only dedicated server.
+    #
+    # Named symbolically rather than pinned to a literal
+    # ghcr.io/arasoi/base-steamcmd-proton:release-latest, which is what this was.
+    # release-latest is built only from main, so a fix on develop could not reach
+    # a node at all -- and one had to: a stale X lock left Xvfb unable to start,
+    # so every restart of a crashed container failed before the game launched.
+    # The symbolic form resolves against whichever channel the control plane
+    # itself follows, which is the whole reason it exists.
+    image: { base: steamcmd-proton }
     # ygg-proton handles the Proton invocation details that are easy to get
     # wrong and fail obscurely (prefix directory creation, the native
     # steamclient.so staging, absolute-path resolution, and using

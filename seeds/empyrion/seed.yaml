@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.10"
+version: "1.0.11"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -106,9 +106,17 @@ containers:
     #
     # ygg-proton is deliberately not used: this runs no Windows binary, so there
     # is no prefix to set up and no reason to involve Proton in reading a text
-    # file. sleep keeps the container alive long enough for the console to be
-    # opened; without it the output scrolls past and the container exits before
-    # anyone can look.
+    # file.
+    #
+    # The output goes to a FILE in the writable Saves mount, not to stdout. The
+    # first attempt printed it to the console and only the tail survived: the
+    # directory listings arrived and the file contents, which came first, never
+    # did. The shell was not at fault -- the identical loop was rerun locally
+    # and printed everything -- and a fresh attach replayed the same truncated
+    # output, so this is the container's opening burst being produced before the
+    # console attachment is established rather than anything scrolling past. A
+    # file cannot be missed that way, and the file browser can read it, so this
+    # is the reliable form of the same read.
     #
     # ---- the real command, restored by deleting the diagnostic one ----
     #
@@ -161,7 +169,7 @@ containers:
     # own launcher hands this binary, since inference has now been wrong twice.
     #
     #   command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
-    command: "sh -c \"for f in /game/*.cmd /game/*.bat /game/DedicatedServer/*.cmd /game/DedicatedServer/*.bat; do test -f $f && { echo ---- $f ----; cat $f; echo; }; done; echo ---- ls /game ----; ls -la /game; echo ---- ls DedicatedServer ----; ls -la /game/DedicatedServer; echo ---- end ----; sleep 900\""
+    command: "sh -c \"o=/game/Saves/launch-scripts.txt; { for f in /game/*.cmd /game/*.bat /game/DedicatedServer/*.cmd /game/DedicatedServer/*.bat /game/*.props; do test -f $f && { echo ---- $f ----; cat $f; echo; }; done; echo ---- BuildNumber ----; cat /game/BuildNumber.txt; echo; echo ---- ls /game ----; ls -la /game; echo ---- ls DedicatedServer ----; ls -la /game/DedicatedServer; echo ---- end ----; } > $o 2>&1; echo wrote $o; sleep 900\""
     workdir: /game
     env:
       HOME: /home/steam

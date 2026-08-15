@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.3"
+version: "1.0.4"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -111,7 +111,8 @@ containers:
       -log
       -port={{.Ports.game}}
       -players={{.Vars.server_player_max_num}}
-      -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS'
+      -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+      {{.Vars.community_server}}'
     workdir: /game
     env:
       # base-steamcmd honours HOME (its own descriptor says so), and the
@@ -1260,6 +1261,29 @@ variables:
     max: 32
     step: 1
     default: "32"
+    editable: true
+  - name: community_server
+    group: Server
+    type: bool
+    # A whole flag as the true value, empty as the false one: the game has no
+    # -publiclobby=0, so "off" is the flag being absent. It sits on the command
+    # line rather than in the config file because registration is a launch
+    # decision, not one of the 119 ini keys.
+    true_value: "-publiclobby"
+    false_value: ""
+    label: List in the community server browser
+    description: >-
+      Registers the server with Palworld's public Community Servers list, so
+      players can find it by name in-game instead of being handed an address.
+      The name, description and password above are what they see. Needs the
+      server to be reachable from the internet -- the port forwarded, and
+      Public IP set if it cannot be detected -- since the browser lists an
+      address players then connect to directly.
+    # Off by default. Turning it on publishes this server, its name and its
+    # description to a public list, which is an operator's decision to make
+    # rather than a default to inherit; and a server that is not reachable from
+    # the internet would be listed as something nobody can join.
+    default: ""
     editable: true
   - name: server_name
     group: Server

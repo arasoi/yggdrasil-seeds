@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.2"
+version: "1.0.3"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -72,7 +72,24 @@ containers:
     #     resolve, and Proton maps Z: to /, so Z:\game\Saves\dedicated.yaml is
     #     the Unix /game/Saves/dedicated.yaml the config block below renders.
     #     Backslashes, since this is a Windows argument.
-    command: "ygg-proton ./EmpyrionLauncher.exe -startDediWithGfx -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    # TEMPORARY DIAGNOSTIC RELEASE -- this does not start the game.
+    #
+    # Three attempts have now failed without ever reaching it, and the last
+    # one proved why: home/compatdata/<app id> was an hour old after a fresh
+    # run, so Proton never executed at all and neither PROTON_LOG nor
+    # WINEDEBUG could produce anything. That puts the failure inside
+    # ygg-proton before it launches, and the one input nothing has verified
+    # is whether ./EmpyrionLauncher.exe is actually where this depot puts it.
+    #
+    # The file browser is sandboxed to the server's own writable directory, so
+    # it cannot see a read-only install -- which makes the console the only
+    # way to read one without a shell on the node. Hence: list it, then sleep
+    # so the container stays up long enough to be read rather than exiting
+    # into a restart backoff.
+    #
+    # Replace this with the real invocation once the listing names the
+    # executable. `command` is not run through a shell, so sh -c is explicit.
+    command: "sh -c \"ls -la /game; echo '--- exe ---'; find /game -maxdepth 3 -iname '*.exe'; echo '--- end ---'; sleep 900\""
     workdir: /game
     env:
       HOME: /home/steam

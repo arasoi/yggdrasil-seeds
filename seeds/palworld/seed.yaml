@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.6"
+version: "1.0.7"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -174,13 +174,21 @@ config:
       manage: always
 
 ready:
-  # mode: port, not a log pattern. Palworld does print a startup line, but
-  # nobody here has captured one from a real run, and this project does not put
-  # an unverified pattern in a field where it would look active (ADR-067). The
-  # port needs no game-specific knowledge, which makes it the right first
-  # choice for a game added without a server to watch (ADR-077).
-  mode: port
-  port: game
+  # mode: log now that a real run has been watched. 1.0.0 chose mode: port
+  # because no startup line had been captured, which was the right call then and
+  # the wrong one for this game: the readiness probe dials TCP, and this game's
+  # port is UDP, so it can never connect. Every start sat in `starting` for the
+  # full timeout and was then reported running anyway with
+  #
+  #     reported running without 127.0.0.1:4007 accepting a connection
+  #
+  # -- correct, and indistinguishable from a server that really had failed.
+  #
+  # This line is verified: copied from a real server's console, on a run a
+  # player then connected to. The port is left out of the pattern because it is
+  # allocated per server and would differ on every one.
+  mode: log
+  pattern: "Running Palworld dedicated server on :[0-9]+"
   timeout: 300s
 
 # No crash block. `crash: {mode: log}` kills the pod so the ordinary exit path

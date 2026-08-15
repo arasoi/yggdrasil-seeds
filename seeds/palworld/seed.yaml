@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.7"
+version: "1.0.8"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -205,6 +205,30 @@ stop:
   # generous because a large world takes a while to flush.
   timeout: 120s
   then: SIGTERM
+
+logs:
+  events:
+    # Both patterns are copied from a real server's console, on a run a player
+    # joined and then left -- which is the whole bar for putting one in a field
+    # rather than a comment.
+    #
+    # Anchored on the `[LOG]` tag so the timestamp the game prefixes to every
+    # line cannot end up inside the captured name, and non-greedy so a name
+    # containing spaces still stops at the verb rather than swallowing it.
+    #
+    # The pair keys on the *character* name, which is what the join and leave
+    # lines both carry:
+    #
+    #     [LOG] Merio joined the server. (User id: steam_..., Player id: ...)
+    #     [LOG] Merio left the server. (User id: steam_...)
+    #
+    # Deliberately not the `connected the server` line, which arrives a few
+    # seconds earlier carrying the *Steam account* name and an IP address. It
+    # has no matching disconnect line, so pairing on it would leave a player
+    # list that only ever grows -- and it would count one person twice, since
+    # both lines fire for a single player joining.
+    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\.' }
+    - { event: leave, pattern: '\[LOG\] (?P<player>.+?) left the server\.' }
 
 connect:
   # `copy` only, no `uri`: Palworld's join flow is pasting an address into the

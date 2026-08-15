@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.9"
+version: "1.0.10"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -73,6 +73,45 @@ containers:
     # waitforexitandrun so the container does not exit while the game is still
     # starting.
     #
+    # TEMPORARY -- THIS VERSION DOES NOT RUN THE GAME.
+    #
+    # It prints the depot's own launch scripts and directory layout and then
+    # sleeps, so the console can be read. Publish the real command back over it
+    # once the output has been read; nothing below this block is changed, so
+    # reverting is a one-line edit.
+    #
+    # Why a diagnostic version rather than another flag: three walls have been
+    # found and cleared, each confirmed against a real run --
+    #
+    #   * /game/Logs was not a writable mount, so EmpyrionLauncher failed in
+    #     Main() creating Logs/<build>/ before reading any config.
+    #   * The launcher hands off and exits zero, taking the container and the
+    #     server it spawned down with it. A process whose job is to return
+    #     cannot be the one a container supervises.
+    #   * The dedicated binary brought up a D3D11 swapchain on a box with no
+    #     display; -batchmode -nographics removed that entirely.
+    #
+    # and past all three the server still loads, holds ~625 MiB, uses no
+    # measurable CPU, writes no log and creates no save game. Every remaining
+    # idea about *why* would be a guess, and guesses have now been wrong three
+    # times: the launcher was the documented path and was unusable, the Logs
+    # mount was not what caused the graphics hang, and `running` was read as
+    # proof the telnet port opened when a demonstrably hung earlier run reported
+    # exactly the same thing.
+    #
+    # So: read what Eleon's own launcher actually does. The scripts are the one
+    # authoritative answer available, they are already on disk, and nothing here
+    # can read them otherwise -- the file browser is rooted at the server's own
+    # directory and the install is not inside it.
+    #
+    # ygg-proton is deliberately not used: this runs no Windows binary, so there
+    # is no prefix to set up and no reason to involve Proton in reading a text
+    # file. sleep keeps the container alive long enough for the console to be
+    # opened; without it the output scrolls past and the container exits before
+    # anyone can look.
+    #
+    # ---- the real command, restored by deleting the diagnostic one ----
+    #
     # The dedicated server binary, not EmpyrionLauncher.exe -- and this is a
     # deliberate return to it rather than a revert.
     #
@@ -120,7 +159,9 @@ containers:
     # If it still hangs there, stop adding flags. The thing to do instead is
     # read EmpyrionDedicated.cmd out of the depot to see what arguments Eleon's
     # own launcher hands this binary, since inference has now been wrong twice.
-    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    #
+    #   command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    command: "sh -c \"for f in /game/*.cmd /game/*.bat /game/DedicatedServer/*.cmd /game/DedicatedServer/*.bat; do test -f $f && { echo ---- $f ----; cat $f; echo; }; done; echo ---- ls /game ----; ls -la /game; echo ---- ls DedicatedServer ----; ls -la /game/DedicatedServer; echo ---- end ----; sleep 900\""
     workdir: /game
     env:
       HOME: /home/steam

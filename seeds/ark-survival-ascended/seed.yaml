@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.0.3"
+version: "5.1.0"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.
@@ -72,7 +72,26 @@ containers:
     # steamclient.so staging, absolute-path resolution, and using
     # waitforexitandrun so the container does not exit while the game is
     # still starting). See that script for why each step exists.
-    command: "ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}"
+    # Wrapped in a shell for one reason: ARK writes nothing to stdout.
+    #
+    # Everything it logs goes to ShooterGame.log under Saved, so the console
+    # showed only Proton's own startup and stayed empty for the life of the
+    # server -- and readiness, which matches on what the container prints, could
+    # never see "has successfully started!" no matter how correct the pattern
+    # was. The server reached that line and sat in `starting` until the 900s
+    # timeout reported it up anyway.
+    #
+    # tail -F rather than -f: the file does not exist yet at this point, and ARK
+    # rotates the previous run's log out from under it on start. Following by
+    # name survives both. It is a background child, so the container still exits
+    # when the server does.
+    #
+    # This is what the community's own ARK containers do; no flag makes the
+    # engine print to stdout under Proton.
+    command: >-
+      sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
+      tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}'
     workdir: /game
     env:
       HOME: /home/steam

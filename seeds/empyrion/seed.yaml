@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.5"
+version: "1.0.6"
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -83,15 +83,21 @@ containers:
     # exits immediately, read that .cmd through the file browser -- the
     # install is readable from the console now that a rebuilt server's output
     # is no longer hidden behind a stale session.
-    # TEMPORARY DIAGNOSTIC RELEASE -- this does not start the game.
+    # EmpyrionLauncher with -startDedi, which is what the depot's own
+    # EmpyrionDedicated_NoGraphics.cmd runs. 1.0.4 pointed at
+    # DedicatedServer/EmpyrionDedicated.exe instead, which is not how Eleon
+    # starts this: both shipped scripts run the launcher, and the only
+    # difference between them is -startDedi against -startDediWithGfx. The
+    # graphics variant is why a headless box was bringing up a D3D11 device.
     #
-    # 1.0.4 runs the right binary and gets as far as DXVK bringing up a D3D11
-    # device, then hangs: 26 minutes up, no save directory, no log, nothing in
-    # Saves but the config this seed wrote. The depot ships its own launch
-    # scripts, and one of them is explicitly the no-graphics path -- a
-    # headless box initialising a full renderer is the obvious suspect. Read
-    # what they actually do rather than guess the flags a fourth time.
-    command: "sh -c \"echo '=== NoGraphics ==='; cat /game/EmpyrionDedicated_NoGraphics.cmd; echo; echo '=== Dedicated ==='; cat /game/EmpyrionDedicated.cmd; echo; echo '=== end ==='; sleep 900\""
+    # KNOWN RISK, stated because it is likely and will look like a crash: that
+    # script prints "Dedicated server was started as background process", so
+    # the launcher spawns the real server and returns. ygg-proton uses
+    # waitforexitandrun, so if the launcher exits the container exits with it
+    # and the supervisor reports a crash while the game may still be running
+    # under Wine. If that happens the fix is not another flag -- it is giving
+    # the container something to own the lifecycle, which is its own change.
+    command: "ygg-proton ./EmpyrionLauncher.exe -startDedi -dedicated Z:\\game\\Saves\\dedicated.yaml"
     workdir: /game
     env:
       HOME: /home/steam

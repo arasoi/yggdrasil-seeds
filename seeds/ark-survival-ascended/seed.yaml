@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.1.0"
+version: "5.2.0"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.
@@ -127,6 +127,24 @@ containers:
       WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
     ports:
       - { name: game, protocol: udp, default: 7777 }
+      # ARK binds a second UDP socket at game+1, its raw/reliable channel, and
+      # derives that number from Port itself: there is no argument or ini key
+      # for it, which is why nothing below references this port. Declared all
+      # the same, because a port the game binds and the control plane does not
+      # know about is one it will hand to another server.
+      #
+      # That is not hypothetical. It was found on a live fleet: an ARK map on
+      # game 4001 needed 4002, and 4002 had been allocated to an unrelated
+      # server -- silently, because neither side ever said it wanted it.
+      #
+      # offset_from is what makes the pair atomic (ADR-083): a base candidate
+      # is only accepted once game+1 is confirmed free too, so the two move
+      # together instead of one being claimed without the other.
+      - { name: game_raw, protocol: udp, offset_from: game, offset: 1 }
+      # Independent, unlike game_raw: ARK takes ?QueryPort= and will bind
+      # whatever it is given, so this does not have to sit next to the game
+      # port -- and must not be assumed to, which is how it ended up on game+1
+      # and collided with the raw socket on a freshly created server.
       - { name: query, protocol: udp, default: 27015 }
       - { name: rcon, protocol: tcp, default: 27020 }
 

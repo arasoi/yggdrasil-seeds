@@ -1,0 +1,429 @@
+id: empyrion
+schema: 3
+name: Empyrion - Galactic Survival
+icon: "🚀"
+description: >
+  Space survival sandbox. Build ships and bases, mine planets and fight through
+  a persistent galaxy, alone or with others on one server.
+version: "1.0.12"
+
+# amd64 only, and the architecture here is the *node's* rather than the
+# binary's: Eleon ship no Linux build of the dedicated server at all, so this
+# runs the Windows one under Proton, the same way ARK does.
+architectures: [amd64]
+
+install:
+  # Each server gets its own copy. Two Empyrion galaxies have nothing to share
+  # the way ARK's identical map data does across a cluster.
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      # The *dedicated server* app (530870), not the game (383120). It is
+      # free to download, so an anonymous login works.
+      #
+      # Its only depots are Windows ones -- the `1006` depot alongside them is
+      # the Steamworks Linux redistributable, not the game -- and that is fine:
+      # the installer forces the Linux *platform*, and a Windows-only app still
+      # resolves its depots through it. Confirmed against ARK, which is
+      # Windows-only in exactly the same way and installs correctly.
+      app_id: 530870
+
+server:
+  writable_paths:
+    # The galaxy, every player's blueprints, and the rendered config. Empyrion
+    # writes Saves relative to the install root, which is mounted read-only, so
+    # this is what makes the game able to write at all.
+    - { from: saves, to: /game/Saves }
+    # The launcher's own logs, and the first thing it does. Confirmed against a
+    # real run: with this missing, EmpyrionLauncher fails in Main() before it
+    # reads any config at all --
+    #
+    #   System.UnauthorizedAccessException: Access to the path
+    #   'Z:\game\Logs\5150' is denied.
+    #     at System.IO.Directory.CreateDirectory
+    #     at EmpyrionLauncher.Program.Main ()
+    #
+    # 5150 is the game's build number, so the directory it wants is named by
+    # whatever build the depot is on -- which is why the mount has to be the
+    # whole Logs tree and not a fixed subdirectory of it.
+    #
+    # Deliberately out of backup.include: a log is reproducible noise, and
+    # including it would grow every archive with the one thing in the writable
+    # root nobody would ever restore.
+    - { from: logs, to: /game/Logs }
+    # HOME for the container's user: the Wine prefix, the staged
+    # steamclient.so, and Proton's own scratch state. Per-server and writable,
+    # never part of the read-only install.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    # Symbolic rather than a literal ghcr.io/...:release-latest tag. A pinned
+    # release-latest is built only from main, so a fix on develop cannot reach
+    # a node -- which is exactly what happened to ARK when a stale X lock left
+    # Proton unable to start. The symbolic form follows whichever channel the
+    # control plane itself is on.
+    image: { base: steamcmd-proton }
+    # ygg-proton handles the Proton invocation details that fail obscurely when
+    # got wrong: creating the prefix directory, staging the native
+    # steamclient.so, resolving the executable to an absolute path, and using
+    # waitforexitandrun so the container does not exit while the game is still
+    # starting.
+    #
+    # The dedicated server binary, not EmpyrionLauncher.exe -- and this is a
+    # deliberate return to it rather than a revert.
+    #
+    # The depot's own scripts both run the launcher, differing only in
+    # -startDedi against -startDediWithGfx, so the launcher is Eleon's
+    # documented path and was tried on that basis. It does not work here, for a
+    # reason that is a property of this container rather than of the flag: the
+    # NoGraphics script prints "Dedicated server was started as background
+    # process", and a real run confirmed it -- the launcher spawned the server,
+    # returned, and exited *zero*. ygg-proton uses waitforexitandrun, so the
+    # container went down with it and took the spawned server's whole PID
+    # namespace along, leaving an empty Logs directory and a Saves holding
+    # nothing but the config this seed wrote. A launcher whose job is to hand
+    # off and exit cannot be the process a container supervises.
+    #
+    # So the container has to own the real server process, which is this one.
+    # An earlier version of this seed ran exactly this command and hung after
+    # initialising a graphics device -- but at that point /game/Logs was not a
+    # writable mount, which is precisely the wall the launcher was later found
+    # to hit first. That is the single variable that has changed, and this is
+    # the retest of it.
+    #
+    # What a real run has settled, none of it inference: the executables are
+    # reached and execute; workdir /game is right, since ./ resolves against it;
+    # and Proton's Z: mapping is right, because the path Empyrion complained
+    # about came back as Z:\game\Logs -- the Windows spelling of the Unix /game
+    # this container actually has.
+    #
+    # STILL UNCONFIRMED:
+    #
+    #   * That -dedicated reads the rendered config. The argument is a path the
+    #     *Windows* side resolves, so Z:\game\Saves\dedicated.yaml is the Unix
+    #     /game/Saves/dedicated.yaml the config block below writes --
+    #     backslashes, since this is a Windows argument. That the mapping is
+    #     correct is proven; that Empyrion accepts a config outside its own
+    #     default location is not.
+    #   * Whether -batchmode -nographics is enough to get past a renderer this
+    #     container cannot provide. Empyrion is a Unity title and these are
+    #     Unity's own headless pair, handled by the player before any game code
+    #     runs. They are here because a real run with the writable Logs mount in
+    #     place still hung creating a D3D11 swapchain at 1024x768 -- which is
+    #     what ruled the mount out as the cause and left the renderer as the
+    #     remaining explanation, rather than being guessed at from the start.
+    #
+    # KNOWN WRONG, and left alone deliberately for now: -dedicated is not an
+    # argument Eleon passes. Both depot scripts run `EmpyrionLauncher -startDedi`
+    # (or -startDediWithGfx) with no config argument at all, read out of the
+    # depot rather than guessed -- the launcher takes dedicated.yaml from the
+    # game root by default, and the depot ships one there. Ours is in Saves
+    # because the game root is a read-only install mount, and an absolute
+    # Windows path may well not be what this option accepts; a filename relative
+    # to the game root is the conventional form. Changing it at the same time as
+    # the DLL override below would make a failure unattributable, which is the
+    # mistake that cost the most time here. It is the next thing to try.
+    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    workdir: /game
+    env:
+      HOME: /home/steam
+      # The image always takes ownership of HOME; the game's own writable mounts
+      # have to belong to the container's user too, or the game cannot write its
+      # galaxy and fails in ways that name neither the directory nor the uid.
+      #
+      # Every writable_paths entry under /game belongs here. Adding a mount and
+      # forgetting this line produces a directory that exists, is mounted, and
+      # is still not writable -- which fails identically to not mounting it at
+      # all, so the mount looks like it did not work.
+      YGG_PROTON_CHOWN_DIRS: "/game/Saves /game/Logs"
+      # Empyrion's depot ships its own Windows steamclient64.dll (26 MB) in
+      # DedicatedServer/, right beside EmpyrionDedicated.exe -- confirmed by
+      # listing the install, not assumed. Windows resolves a DLL from the
+      # application directory first, so that copy wins over anything Proton
+      # stages into the prefix, and it then blocks forever waiting for a Steam
+      # client that does not exist in this container.
+      #
+      # `=b` is Wine's builtin-only override, which makes the load fail fast
+      # instead of hanging. steamclient is listed alongside steamclient64
+      # because the 32-bit name is resolved by the same rule and costs nothing
+      # to cover.
+      #
+      # This is not a guess: it is the same failure, with the same cause and the
+      # same fix, that stopped ARK booting under this image -- and the symptom
+      # here matches it exactly. The server loads, holds around 625 MiB, uses no
+      # measurable CPU, writes no log and never opens a port. Every other
+      # explanation tried so far has been ruled out against a real run: the Logs
+      # mount, the launcher's hand-off, and the renderer.
+      #
+      # Staging Proton's own lsteamclient.dll over the top was tried for ARK and
+      # does not work -- application-directory precedence still wins -- so do
+      # not reach for that if this needs revisiting.
+      WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
+      # The Wine prefix, and the reason the first run of this seed never
+      # reached the game at all. ygg-proton refuses a compat data path that
+      # does not end in the Steam app id, because Proton's own protonfixes
+      # parses the id back out of it with a regex and raises otherwise -- so
+      # with these unset the container exited immediately with
+      #
+      #   ygg-proton: STEAM_COMPAT_DATA_PATH must end in the Steam app id
+      #
+      # which looks like a crash-loop with exit code 2 and says nothing about
+      # a missing variable unless you read the console. Both live under HOME,
+      # which is a per-server writable mount, so the prefix is per server and
+      # never part of the read-only install.
+      STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/530870
+      STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
+      # Diagnostic, and meant to be removed once this game actually boots.
+      #
+      # With the prefix set, the container stopped failing in ygg-proton and
+      # started exiting 1 with *no output at all* -- which is not a console
+      # problem, since the earlier ygg-proton error reached the console
+      # through the same path. A silent exit says nothing about what died.
+      #
+      # +loaddll makes Wine name every module it loads, so the last one before
+      # the exit is the thing to look at; that is how ARK's own indefinite
+      # hang was finally identified, where the culprit turned out to be a DLL
+      # the depot itself shipped. PROTON_LOG writes Proton's own log into
+      # HOME, which is a per-server writable mount and therefore readable from
+      # the file browser afterwards -- worth having precisely because a
+      # crash-looping container's console is the thing you cannot read.
+      #
+      # WINEDEBUG=+loaddll was here too and is deliberately gone: the console
+      # backlog is bounded, and Wine narrating every module load would evict
+      # the one error worth reading. PROTON_LOG writes to a file instead, so
+      # it costs the console nothing. Drop this once the game boots.
+      PROTON_LOG: "1"
+    ports:
+      # Srv_Port. UDP, and the game claims the three ports above it as well --
+      # declared as offsets so they are allocated as one atomic group and can
+      # never be handed out to something else individually.
+      - { name: game, protocol: udp, default: 30000, kind: game }
+      - { name: game_plus1, protocol: udp, offset_from: game, offset: 1 }
+      - { name: game_plus2, protocol: udp, offset_from: game, offset: 2 }
+      - { name: game_plus3, protocol: udp, offset_from: game, offset: 3 }
+      # Tel_Port: the remote console, and the only TCP port this game opens.
+      # Allocated whether or not telnet is switched on, since a port an
+      # operator can enable later is cheaper to hold than one they cannot get
+      # without a rebuild.
+      - { name: telnet, protocol: tcp, default: 30004, kind: rcon }
+
+config:
+  files:
+    - path: saves/dedicated.yaml
+      source_path: configs/dedicated.yaml.tmpl
+      # Rewritten wholesale on every rebuild. The file is small and entirely
+      # seed-controlled, so there is nothing in it an operator would edit that
+      # a control on this page does not already cover.
+      manage: always
+
+ready:
+  # mode: port on the *telnet* port, which is the only TCP port here.
+  #
+  # Not the game port: it is UDP, and the readiness probe dials TCP, so a UDP
+  # port can never satisfy it -- every start would wait out the timeout and
+  # then be reported running anyway. That is a real failure this project has
+  # already had, on a game whose port was also UDP.
+  #
+  # Not a log pattern either: nobody has watched this server start, and an
+  # unverified pattern in a field looks active while matching nothing. Once a
+  # real startup line has been seen, this should become mode: log -- the
+  # telnet port only tells you the console is up, which is close to but not the
+  # same as the galaxy being ready.
+  #
+  # This does mean readiness depends on telnet staying enabled, which is why it
+  # defaults on.
+  mode: port
+  port: telnet
+  timeout: 600s
+
+# No crash block. A crash pattern kills the pod, so a wrong one stops a healthy
+# server rather than merely delaying it, and nothing here has been checked
+# against a real Empyrion failure.
+
+stop:
+  # SIGTERM with no console command. The graceful path this game documents is a
+  # telnet `saveandexit`, which a stop spec cannot reach -- it writes to the
+  # primary container's stdin, and the server reads none.
+  #
+  # Generous, because saving a large galaxy takes a while and being killed
+  # mid-write is how a save is lost.
+  timeout: 180s
+  then: SIGTERM
+
+connect:
+  # `copy` only. Empyrion's join flow is entering an address in the client's
+  # server browser, and no URI scheme has been watched working here.
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  # The galaxy, the blueprints and the rendered config -- one of the three
+  # writable paths, and the only one worth an archive. `home` holds the Wine
+  # prefix and a staged steamclient.so, both of which the next start recreates;
+  # `logs` is reproducible noise. Including either would grow every archive
+  # with something nobody would restore.
+  include: [saves]
+
+groups:
+  - name: Server
+    description: Identity, access and who may connect.
+  - name: Remote access
+    description: The telnet console, which is also what readiness watches for.
+  - name: Galaxy
+    description: The world this server generates and runs.
+
+variables:
+  - name: server_name
+    group: Server
+    label: Server name
+    description: "Shown in the in-game server browser. Config key: Srv_Name."
+    default: "An Yggdrasil Empyrion server"
+    editable: true
+
+  - name: server_description
+    group: Server
+    type: text
+    label: Description
+    description: "Shown beneath the name in the browser. Config key: Srv_Description."
+    default: ""
+    editable: true
+
+  - name: server_password
+    group: Server
+    type: password
+    label: Server password
+    description: >-
+      Required to join when set. Leave empty for an open server. Config key:
+      Srv_Password.
+    default: ""
+    editable: true
+
+  - name: max_players
+    group: Server
+    type: number
+    min: 1
+    max: 64
+    step: 1
+    label: Maximum players
+    description: "Config key: Srv_MaxPlayers."
+    default: "20"
+    editable: true
+
+  - name: public
+    group: Server
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: List publicly
+    description: >-
+      Advertise this server in the public browser. Turning it off does not make
+      it private -- anyone with the address and password can still join. Config
+      key: Srv_Public.
+    default: "true"
+    editable: true
+
+  - name: eac
+    group: Server
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: Easy Anti-Cheat
+    description: >-
+      Leave on unless a mod or a scenario needs it off; clients are refused if
+      their setting does not match the server's. Config key: EACActive.
+    default: "true"
+    editable: true
+
+  - name: telnet_enabled
+    group: Remote access
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: Enable the telnet console
+    description: >-
+      Remote administration, and what readiness watches for -- with this off a
+      server takes the full readiness timeout to report itself up. Telnet is
+      unencrypted, so keep it to a trusted network. Config key: Tel_Enabled.
+    default: "true"
+    editable: true
+
+  - name: telnet_password
+    group: Remote access
+    type: password
+    generate: password
+    label: Telnet password
+    description: >-
+      Generated per server rather than left blank, since an open console on an
+      allocated port is worth avoiding even on a LAN. Config key: Tel_Pwd.
+    default: ""
+    editable: true
+
+  - name: game_name
+    group: Galaxy
+    label: Save name
+    description: >-
+      Names the directory the galaxy is saved into. Changing it starts a new
+      one and leaves the old save on disk. Config key: GameName.
+    default: "Yggdrasil"
+    editable: true
+
+  - name: mode
+    group: Galaxy
+    type: select
+    options:
+      - { value: Survival, label: Survival }
+      - { value: Creative, label: Creative }
+    label: Mode
+    description: "Config key: Mode."
+    default: Survival
+    editable: true
+
+  - name: seed
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Galaxy seed
+    description: >-
+      Determines the galaxy that gets generated. Changing it after the world
+      exists does nothing; it is read once, when the save is created. Config
+      key: Seed.
+    default: "1011345"
+    editable: true
+
+  - name: custom_scenario
+    group: Galaxy
+    label: Custom scenario
+    description: >-
+      Name of a scenario directory under Content/Scenarios in the install.
+      Empty runs the default game. Written only when set, since the key being
+      present but empty is not the same as it being absent. Config key:
+      CustomScenario.
+    default: ""
+    editable: true
+
+  - name: decay_time
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Structure decay (hours)
+    description: >-
+      Hours before an untouched structure decays. 0 disables decay entirely.
+      Config key: DecayTime.
+    default: "0"
+    editable: true
+
+  - name: max_structures
+    group: Galaxy
+    type: number
+    min: 0
+    step: 1
+    label: Maximum structures per playfield
+    description: "0 leaves the game's own limit in place. Config key: MaxStructures."
+    default: "0"
+    editable: true

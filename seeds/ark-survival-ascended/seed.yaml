@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.0.1"
+version: "5.2.0"
 
 # The bundled target is the x86_64 Windows dedicated server, run under
 # Proton. The architecture here is the *node's*, not the binary's.
@@ -28,6 +28,18 @@ server:
   writable_paths:
     - { from: saved, to: /game/ShooterGame/Saved }
     - { from: config, to: /game/ShooterGame/Saved/Config }
+    # ARK's bundled CurseForge mod client writes here, inside the install
+    # rather than under Saved, and the install is mounted read-only. Without
+    # this the server initialises, prints its version, and then stops dead:
+    #
+    #     LogCFCore: Error: Unable to create a directory
+    #       .../ShooterGame/Binaries/Win64/ShooterGame/ModsUserData/83374
+    #
+    # and the log never advances again. Nothing says "crashed" -- the container
+    # keeps running and the readiness timeout eventually reports it up anyway,
+    # which is how this went unnoticed. Mounting a per-server directory over it
+    # lets the client write and start.
+    - { from: mods, to: /game/ShooterGame/Binaries/Win64/ShooterGame/ModsUserData }
     # HOME for the container's steam user. Everything Proton keeps per
     # server lives under here — the Wine prefix (compatdata), the native
     # steamclient.so ygg-proton stages into .steam/sdk64, and Proton's own
@@ -43,16 +55,43 @@ cluster:
 containers:
   - role: game
     primary: true
-    # base-steamcmd-proton directly, not a dedicated yggdrasil/ark-asa
-    # image: nothing ARK-specific is baked in, so the same image serves any
-    # Steam-distributed Windows-only dedicated server.
-    image: ghcr.io/arasoi/base-steamcmd-proton:release-latest
+    # base-steamcmd-proton, not a dedicated yggdrasil/ark-asa image: nothing
+    # ARK-specific is baked in, so the same image serves any Steam-distributed
+    # Windows-only dedicated server.
+    #
+    # Named symbolically rather than pinned to a literal
+    # ghcr.io/arasoi/base-steamcmd-proton:release-latest, which is what this was.
+    # release-latest is built only from main, so a fix on develop could not reach
+    # a node at all -- and one had to: a stale X lock left Xvfb unable to start,
+    # so every restart of a crashed container failed before the game launched.
+    # The symbolic form resolves against whichever channel the control plane
+    # itself follows, which is the whole reason it exists.
+    image: { base: steamcmd-proton }
     # ygg-proton handles the Proton invocation details that are easy to get
     # wrong and fail obscurely (prefix directory creation, the native
     # steamclient.so staging, absolute-path resolution, and using
     # waitforexitandrun so the container does not exit while the game is
     # still starting). See that script for why each step exists.
-    command: "ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}"
+    # Wrapped in a shell for one reason: ARK writes nothing to stdout.
+    #
+    # Everything it logs goes to ShooterGame.log under Saved, so the console
+    # showed only Proton's own startup and stayed empty for the life of the
+    # server -- and readiness, which matches on what the container prints, could
+    # never see "has successfully started!" no matter how correct the pattern
+    # was. The server reached that line and sat in `starting` until the 900s
+    # timeout reported it up anyway.
+    #
+    # tail -F rather than -f: the file does not exist yet at this point, and ARK
+    # rotates the previous run's log out from under it on start. Following by
+    # name survives both. It is a background child, so the container still exits
+    # when the server does.
+    #
+    # This is what the community's own ARK containers do; no flag makes the
+    # engine print to stdout under Proton.
+    command: >-
+      sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
+      tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}'
     workdir: /game
     env:
       HOME: /home/steam
@@ -88,6 +127,24 @@ containers:
       WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
     ports:
       - { name: game, protocol: udp, default: 7777 }
+      # ARK binds a second UDP socket at game+1, its raw/reliable channel, and
+      # derives that number from Port itself: there is no argument or ini key
+      # for it, which is why nothing below references this port. Declared all
+      # the same, because a port the game binds and the control plane does not
+      # know about is one it will hand to another server.
+      #
+      # That is not hypothetical. It was found on a live fleet: an ARK map on
+      # game 4001 needed 4002, and 4002 had been allocated to an unrelated
+      # server -- silently, because neither side ever said it wanted it.
+      #
+      # offset_from is what makes the pair atomic (ADR-083): a base candidate
+      # is only accepted once game+1 is confirmed free too, so the two move
+      # together instead of one being claimed without the other.
+      - { name: game_raw, protocol: udp, offset_from: game, offset: 1 }
+      # Independent, unlike game_raw: ARK takes ?QueryPort= and will bind
+      # whatever it is given, so this does not have to sit next to the game
+      # port -- and must not be assumed to, which is how it ended up on game+1
+      # and collided with the raw socket on a freshly created server.
       - { name: query, protocol: udp, default: 27015 }
       - { name: rcon, protocol: tcp, default: 27020 }
 

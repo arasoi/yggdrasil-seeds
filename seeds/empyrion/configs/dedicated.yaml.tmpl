@@ -1,0 +1,30 @@
+# Rendered by Yggdrasil on every rebuild. Edits here are discarded.
+#
+# YAML here is whitespace-sensitive and the game is unforgiving about it: a tab
+# or a misaligned key stops the server starting with no useful message. Two
+# spaces per level throughout, and no tabs anywhere.
+ServerConfig:
+  Srv_Port: {{.Ports.game}}
+  Srv_Name: "{{.Vars.server_name}}"
+  Srv_Password: "{{.Vars.server_password}}"
+  Srv_MaxPlayers: {{.Vars.max_players}}
+  Srv_Description: "{{.Vars.server_description}}"
+  Srv_Public: {{.Vars.public}}
+  Srv_StopPeriod: 0
+  Tel_Enabled: {{.Vars.telnet_enabled}}
+  Tel_Port: {{.Ports.telnet}}
+  Tel_Pwd: "{{.Vars.telnet_password}}"
+  EACActive: {{.Vars.eac}}
+  DecayTime: {{.Vars.decay_time}}
+  MaxStructures: {{.Vars.max_structures}}
+  # Relative to the install root, which is where the game resolves it from.
+  # Saves is a per-server writable mount over the read-only install, so the
+  # game's own default location is already the right one here.
+  SaveDirectory: Saves
+
+GameConfig:
+  GameName: "{{.Vars.game_name}}"
+  Mode: {{.Vars.mode}}
+  Seed: {{.Vars.seed}}
+{{if .Vars.custom_scenario}}  CustomScenario: "{{.Vars.custom_scenario}}"
+{{end}}

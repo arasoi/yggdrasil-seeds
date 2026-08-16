@@ -203,6 +203,20 @@ ports:
 - **`offset_from`** is for a game that hardcodes a relationship it gives you no
   flag to change, like Valheim's query port at `game_port + 1`. Do not use it for
   ports that merely happen to be adjacent.
+- **Declare every port the game binds, including one nothing references.** ARK
+  opens a second UDP socket at `game + 1` and derives the number itself: there is
+  no argument, no ini key, and nothing in the seed to template it into. It still
+  has to be declared, because a port the control plane does not know about is one
+  it will allocate to somebody else — which is exactly what happened on a live
+  fleet, where one map's raw socket was another server's game port and a new map
+  was handed its own query port on `game + 1`. Both were silent: every server
+  started, and the conflict only showed as players unable to connect.
+  `offset_from` is what makes that safe, since a base and its siblings are
+  reserved as one group (the pair moves together or not at all).
+- **Order matters when a base has siblings.** Ports are allocated in declaration
+  order, each base together with everything derived from it, so declare a base
+  before the independent ports that follow it. Otherwise an independent port can
+  be granted the number a sibling was going to need.
 - Name the main port `game` and mark it `kind: game`, so the UI can show an
   operator the address that matters.
 

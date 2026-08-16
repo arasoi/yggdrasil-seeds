@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.0"
+version: "1.0.8"
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -26,6 +26,14 @@ install:
       # works, and there is a native Linux build, so no Proton wrapper is
       # needed the way ARK Survival Ascended needs one.
       app_id: 2394010
+    # PalServer.sh is no longer the entry point (see the command below), and it
+    # was the thing that chmod +x'd the binary before exec'ing it. SteamCMD
+    # preserves the executable bit on download, so this is belt and braces --
+    # but it runs while the install directory is still writable, which is the
+    # only moment anything can set a mode inside it.
+    - op: chmod
+      path: Pal/Binaries/Linux/PalServer-Linux-Shipping
+      mode: "0755"
 
 server:
   writable_paths:
@@ -40,7 +48,20 @@ server:
   file_denylist:
     # The seed rewrites this on every rebuild, so offering it in the file
     # browser invites an edit the next rebuild discards. Not a security
-    # boundary -- the sandbox is (ADR-033).
+    # boundary -- the sandbox is that, unconditionally.
+    #
+    # NEEDS A NODE RUNNING PROTOCOL 5 OR NEWER. The denylist is enforced on
+    # every file operation on the node, and until protocol 5 the seed's own
+    # config write was one of them -- so this entry denied the seed the file it
+    # manages, and every rebuild failed with:
+    #
+    #     write config file saved/Config/LinuxServer/PalWorldSettings.ini:
+    #     this seed does not allow file operations on that path
+    #
+    # An older agent ignores the exemption and still refuses, so on such a node
+    # this line has to come back out. It is restored here because the agent
+    # carrying the fix and this seed promote through the same channels
+    # together: whatever installs this from a channel has the agent from it too.
     - "saved/Config/LinuxServer/PalWorldSettings.ini"
 
 containers:
@@ -63,32 +84,69 @@ containers:
     #   * -port is the allocated port, never the seed's declared default
     #     (ADR-061). PublicPort in the config file is set from the same
     #     allocation, so what the server binds and what it advertises agree.
+    #   * -log is what puts the engine's output on stdout. Without it Unreal
+    #     writes to Pal/Saved/Logs and prints nothing to the console at all --
+    #     so a server that is running perfectly well shows an empty console,
+    #     and every line an operator did see up to this point came from the
+    #     shell rather than from the game. It is also the prerequisite for
+    #     anything reading the output: a logs.values or logs.events rule
+    #     matches what the container prints, and without this it prints
+    #     nothing to match.
     #   * The three -use/-No flags are Pocketpair's own documented performance
     #     switches for dedicated servers.
     #
-    # One interaction worth knowing about and NOT yet confirmed against a real
-    # run: PalServer.sh chmod +x's the shipped binary before exec'ing it, and
-    # the install is mounted read-only (ADR-018), so that chmod fails. The
-    # script carries no `set -e`, and SteamCMD preserves the executable bit on
-    # download, so this should be a printed error and nothing more -- but "should
-    # be" is the honest word. If a server never starts and the console shows a
-    # chmod failure, invoking Pal/Binaries/Linux/PalServer-Linux-Shipping
-    # directly is the fix. The documented entry point is used here because
-    # second-guessing it without a server to test against would be the larger
-    # risk (ADR-064 is this project's own record of a read-only install breaking
-    # something nobody expected).
+    # The shipping binary is exec'd directly rather than through PalServer.sh,
+    # which 1.0.0 used. That script writes into the install directory on every
+    # start, and an install is mounted read-only, so it cannot:
+    #
+    #     cp: cannot create regular file '/game/Pal/Binaries/Linux/steamclient.so':
+    #         Read-only file system
+    #     Failed to copy the file: /game/linux64/steamclient.so ->
+    #         /game/Pal/Binaries/Linux/steamclient.so
+    #
+    # 1.0.0 anticipated this and named the wrong write: it expected the script's
+    # chmod +x to be what failed, and reasoned that a printed error was all it
+    # would cost. The chmod may well fail too. What an operator actually hit
+    # first is the steamclient.so copy, and pre-placing that file does not help,
+    # because a copy onto a read-only filesystem fails whether or not the
+    # destination is already correct.
+    #
+    # Bypassing the script costs nothing here. The two things it does are stage
+    # steamclient.so -- which the line below already does, into
+    # $HOME/.steam/sdk64, the path PalServer actually dlopen()s -- and chmod the
+    # binary, now an install step where the directory is still writable. `Pal`
+    # is the project name the script passes as the first argument; Unreal needs
+    # it and dropping it is the one way to get this wrong quietly.
     command: >-
       sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
       cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
-      exec /game/PalServer.sh
+      exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
+      -log
       -port={{.Ports.game}}
       -players={{.Vars.server_player_max_num}}
-      -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS'
+      -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+      {{.Vars.community_server}}'
     workdir: /game
     env:
       # base-steamcmd honours HOME (its own descriptor says so), and the
       # writable path above is what makes this one writable.
       HOME: /home/steam
+      # Unreal Engine refuses to run as root -- "Refusing to run with the root
+      # privileges.", no flag and no override -- and a container otherwise runs
+      # as the image's default user, which is root. Without this the server
+      # prints that one line and stops, having done nothing else.
+      #
+      # The uid is not named here on purpose: the image takes it from whoever
+      # owns HOME, which is the agent that created the writable paths on the
+      # host. That is the only uid which leaves the game able to write its saves
+      # and the agent able to read them back for a backup, and it is right on a
+      # fleet whose agent runs as root and one whose agent does not, without a
+      # seed having to know which.
+      YGG_DROP_PRIVS: "1"
+      # HOME is made writable by the image without being asked; anything else
+      # the game writes to has to be named. Pal/Saved is the world, the player
+      # data and the config this seed renders.
+      YGG_CHOWN_DIRS: "/game/Pal/Saved"
     ports:
       - { name: game, protocol: udp, default: 8211, kind: game }
       # RCON and the REST API are both allocated whether or not they are turned
@@ -116,13 +174,21 @@ config:
       manage: always
 
 ready:
-  # mode: port, not a log pattern. Palworld does print a startup line, but
-  # nobody here has captured one from a real run, and this project does not put
-  # an unverified pattern in a field where it would look active (ADR-067). The
-  # port needs no game-specific knowledge, which makes it the right first
-  # choice for a game added without a server to watch (ADR-077).
-  mode: port
-  port: game
+  # mode: log now that a real run has been watched. 1.0.0 chose mode: port
+  # because no startup line had been captured, which was the right call then and
+  # the wrong one for this game: the readiness probe dials TCP, and this game's
+  # port is UDP, so it can never connect. Every start sat in `starting` for the
+  # full timeout and was then reported running anyway with
+  #
+  #     reported running without 127.0.0.1:4007 accepting a connection
+  #
+  # -- correct, and indistinguishable from a server that really had failed.
+  #
+  # This line is verified: copied from a real server's console, on a run a
+  # player then connected to. The port is left out of the pattern because it is
+  # allocated per server and would differ on every one.
+  mode: log
+  pattern: "Running Palworld dedicated server on :[0-9]+"
   timeout: 300s
 
 # No crash block. `crash: {mode: log}` kills the pod so the ordinary exit path
@@ -139,6 +205,30 @@ stop:
   # generous because a large world takes a while to flush.
   timeout: 120s
   then: SIGTERM
+
+logs:
+  events:
+    # Both patterns are copied from a real server's console, on a run a player
+    # joined and then left -- which is the whole bar for putting one in a field
+    # rather than a comment.
+    #
+    # Anchored on the `[LOG]` tag so the timestamp the game prefixes to every
+    # line cannot end up inside the captured name, and non-greedy so a name
+    # containing spaces still stops at the verb rather than swallowing it.
+    #
+    # The pair keys on the *character* name, which is what the join and leave
+    # lines both carry:
+    #
+    #     [LOG] Merio joined the server. (User id: steam_..., Player id: ...)
+    #     [LOG] Merio left the server. (User id: steam_...)
+    #
+    # Deliberately not the `connected the server` line, which arrives a few
+    # seconds earlier carrying the *Steam account* name and an IP address. It
+    # has no matching disconnect line, so pairing on it would leave a player
+    # list that only ever grows -- and it would count one person twice, since
+    # both lines fire for a single player joining.
+    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\.' }
+    - { event: leave, pattern: '\[LOG\] (?P<player>.+?) left the server\.' }
 
 connect:
   # `copy` only, no `uri`: Palworld's join flow is pasting an address into the
@@ -1216,6 +1306,29 @@ variables:
     max: 32
     step: 1
     default: "32"
+    editable: true
+  - name: community_server
+    group: Server
+    type: bool
+    # A whole flag as the true value, empty as the false one: the game has no
+    # -publiclobby=0, so "off" is the flag being absent. It sits on the command
+    # line rather than in the config file because registration is a launch
+    # decision, not one of the 119 ini keys.
+    true_value: "-publiclobby"
+    false_value: ""
+    label: List in the community server browser
+    description: >-
+      Registers the server with Palworld's public Community Servers list, so
+      players can find it by name in-game instead of being handed an address.
+      The name, description and password above are what they see. Needs the
+      server to be reachable from the internet -- the port forwarded, and
+      Public IP set if it cannot be detected -- since the browser lists an
+      address players then connect to directly.
+    # Off by default. Turning it on publishes this server, its name and its
+    # description to a public list, which is an operator's decision to make
+    # rather than a default to inherit; and a server that is not reachable from
+    # the internet would be listed as something nobody can join.
+    default: ""
     editable: true
   - name: server_name
     group: Server

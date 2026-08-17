@@ -5,7 +5,14 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.8"
+version: "1.0.9"
+
+# The base game's own Steam listing — distinct from 2394010, the dedicated
+# server tool app installed below.
+branding:
+  steam_app_id: 1623730
+  logo: logo.png
+  banner: banner.jpg
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than

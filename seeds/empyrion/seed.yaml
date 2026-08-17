@@ -5,7 +5,14 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.12"
+version: "1.0.13"
+
+# The base game's own Steam listing — distinct from 530870, the dedicated
+# server tool app installed below.
+branding:
+  steam_app_id: 383120
+  logo: logo.png
+  banner: banner.jpg
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this

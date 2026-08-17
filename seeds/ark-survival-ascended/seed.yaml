@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.2.1"
+version: "5.2.2"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -165,8 +165,12 @@ variables:
   # RCON only actually binds its port when an admin password is set —
   # verified live: without this the server starts normally but nothing
   # listens on the RCON port at all. Change it before exposing a server;
-  # it is also the in-game EnableCheats password.
-  - { name: admin_password, default: changeme, editable: true }
+  # it is also the in-game EnableCheats password. type: password matches
+  # server_password/spectator_password below -- this is exactly as
+  # sensitive as either and was the one password-shaped control in this
+  # seed left as plain text, found live: a cluster's settings page showed
+  # it unmasked next to two siblings that correctly render as dots.
+  - { name: admin_password, type: password, default: changeme, editable: true }
 
 # Groups exist to give the settings below a shape. The server page renders a
 # section of four or more groups as a tab rail with a filter over the whole

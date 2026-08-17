@@ -6,10 +6,12 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 346110
+  logo: logo.png
+  banner: banner.jpg
 
 # Unlike ARK Survival Ascended (ADR-047's whole account of a Windows-only
 # depot run under Proton), ASE ships a real native Linux dedicated server.

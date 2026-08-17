@@ -1,0 +1,1849 @@
+id: ark-survival-evolved
+schema: 3
+name: ARK Survival Evolved
+icon: "🦴"
+description: >
+  Dedicated server for the original ARK: Survival Evolved. Several maps can
+  share one copy of the game files and a cluster volume, so players keep
+  their characters and items when they travel between maps.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 346110
+
+# Unlike ARK Survival Ascended (ADR-047's whole account of a Windows-only
+# depot run under Proton), ASE ships a real native Linux dedicated server.
+# No Proton, no Wine, no wrapper script -- base-steamcmd is enough, and the
+# architecture here is genuinely the binary's, not merely the node's.
+architectures: [amd64]
+
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    # The dedicated-server tool's own app id (376030), not the base game's
+    # (346110) -- the same split ADR-051 already records for Valheim, and
+    # the two are commonly confused for exactly this game.
+    - op: steamcmd
+      app_id: 376030
+
+server:
+  writable_paths:
+    - { from: saved, to: /game/ShooterGame/Saved }
+    - { from: config, to: /game/ShooterGame/Saved/Config }
+
+cluster:
+  supported: true
+  mount: /cluster
+  args: ["-clusterid={{.ClusterID}}", "-ClusterDirOverride=/cluster"]
+
+containers:
+  - role: game
+    primary: true
+    image: { base: linux }
+    # No shell wrapper, no log-tailing trick: unlike ASA under Proton (whose
+    # own seed has to background a `tail -F` because Proton's own startup
+    # noise drowns out the one line readiness needs), a native Linux server
+    # writes ShooterGame.log the same way and ALSO prints its own console
+    # output straight to stdout, so the console shows the real thing and
+    # readiness can match it directly.
+    #
+    # -clusterid=/-ClusterDirOverride= are appended by the cluster block
+    # above, only when this server is actually a cluster member.
+    command: >-
+      ./ShooterGame/Binaries/Linux/ShooterGameServer
+      {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}}
+      -server -log -NoBattlEye -servergamelog
+    workdir: /game
+    env:
+      # A Steamworks-linked binary loads its native client library from this
+      # fixed, Linux-Steam-convention path regardless of anything else on the
+      # command line -- ADR-047's final amendment traces the identical
+      # requirement for ASA back to lsteamclient.so's own hardcoded search
+      # path, and ASE's Linux depot ships its own copy the same way ASA's
+      # Windows one does. Untested against a real ASE server (no Linux depot
+      # has been fetched for it here); named because it is the documented,
+      # load-bearing fix for the identical symptom in the sibling seed, not
+      # because it has been reproduced for this one.
+      HOME: /home/steam
+    ports:
+      - { name: game, protocol: udp, default: 7777 }
+      # ARK binds a second UDP socket at game+1 -- its raw/reliable channel --
+      # and derives that number from Port itself: there is no argument or ini
+      # key for it, which is why nothing below references this port. Declared
+      # all the same, because a port the game binds and the control plane
+      # does not know about is one it will hand to another server.
+      #
+      # Not hypothetical: this is the exact fix ARK Survival Ascended's own
+      # seed needed after a live incident (game_raw on one ASA map silently
+      # collided with another server's game port). ASE shares the same
+      # underlying networking code, so the same socket is declared here from
+      # the start rather than waiting to rediscover it independently.
+      #
+      # offset_from is what makes the pair atomic (ADR-083): a base candidate
+      # is only accepted once game+1 is confirmed free too, so the two move
+      # together instead of one being claimed without the other. Declared
+      # before query for the same reason ASA's own fix records: ports
+      # allocate in declaration order, and an independent port declared first
+      # could otherwise be granted the number this sibling needs.
+      - { name: game_raw, protocol: udp, offset_from: game, offset: 1 }
+      # Independent, unlike game_raw: ARK takes ?QueryPort= and binds
+      # whatever it is given, so this does not have to sit next to the game
+      # port -- and must not be assumed to.
+      - { name: query, protocol: udp, default: 27015 }
+      - { name: rcon, protocol: tcp, default: 27020 }
+
+variables:
+  # Plain "TheIsland", never ASA's "TheIsland_WP" -- the "_WP" suffix names
+  # ASA's Unreal Engine 5 World Partition rebuild of the map and does not
+  # exist in ASE's own install at all.
+  - { name: map, default: TheIsland, editable: true }
+  - { name: session_name, default: YggdrasilARK, editable: true }
+  - { name: max_players, default: "70", editable: true }
+  # RCON only actually binds its port when an admin password is set, the
+  # same behaviour ASA's own seed already records against a live server;
+  # not independently re-verified against ASE, but it is the same engine
+  # option (ServerAdminPassword) on both games. Change it before exposing a
+  # server; it is also the in-game EnableCheats password.
+  - { name: admin_password, default: changeme, editable: true }
+
+groups:
+  - name: Server
+    description: Identity, passwords, and how often the world is written to disk.
+  - name: Rules and access
+    description: What the client is allowed to show and do.
+    collapsed: true
+  - name: "Rates: experience"
+    collapsed: true
+  - name: "Rates: harvesting"
+    collapsed: true
+  - name: "Rates: taming"
+    collapsed: true
+  - name: Players
+    description: Survivor stats, drain rates, and crafting.
+    collapsed: true
+  - name: Dinos
+    description: Wild and tamed creature stats, limits, and decay.
+    collapsed: true
+  - name: Breeding and imprinting
+    collapsed: true
+  - name: Structures
+    collapsed: true
+  - name: PvP and raiding
+    collapsed: true
+  - name: Tribes
+    collapsed: true
+  - name: World and time
+    collapsed: true
+  - name: Cluster transfers
+    description: >-
+      What may cross between servers sharing this cluster. Only meaningful on a
+      server that is in one.
+    collapsed: true
+  - name: Advanced
+    description: >-
+      Engine-level and rarely-touched keys. Every one of these has a default the
+      game itself supplies, so leaving them alone is the ordinary case.
+    collapsed: true
+
+# ARK's own configuration, written into GameUserSettings.ini and Game.ini.
+#
+# WHY THESE ARE SETTINGS AND NOT VARIABLES: a variable reaches the command line
+# and rebuilds the pod; a setting declares where its value lands (ADR-077). All
+# of these are ini keys, so they are settings, and the four variables above stay
+# variables because they are genuinely command-line arguments.
+#
+# DELIBERATELY ABSENT: SessionName, MaxPlayers, ServerAdminPassword, RCONEnabled,
+# RCONPort, Port and QueryPort. Every one of them is already passed on the
+# command line above, where ARK gives it precedence over the ini, so declaring
+# both would create two writers for one value and a precedence rule an operator
+# would have to know. The command line wins; these are not offered twice.
+#
+# EVERY ONE OF THESE IS `optional: true`, and that is load-bearing rather than
+# tidy. An absent optional setting leaves its destination alone entirely — the
+# key is not written at all (ADR-077's tri-state) — so a brand-new server gets
+# ARK's own defaults, exactly as an operator installing by hand would see,
+# because nothing here is written until an operator asks for it. The protection
+# is real but not permanent: the settings form renders every control, so the
+# first save makes every setting present and writes it. An operator with an ini
+# they care about (installed by some other means before adopting this seed)
+# should use "Import from disk" on the settings page first — both files below
+# are marked importable for exactly this — which reads their values back and
+# adopts them, so the first save writes what they already had.
+#
+# THE KEY NAMES, SECTIONS AND DEFAULTS ARE CARRIED OVER FROM THIS PROJECT'S
+# ARK SURVIVAL ASCENDED SEED, not independently re-sourced for this game. That
+# is deliberate rather than lazy: the two games share the overwhelming
+# majority of their GameUserSettings.ini/Game.ini surface, since ASA is built
+# on the same server-configuration lineage ASE established, and every key name
+# below matches ARK's own long-published wiki documentation for both games.
+# NOT VERIFIED AGAINST A RUNNING ASE SERVER, though — this seed has never run
+# end to end through yggd. A key whose spelling is wrong is *silently ignored*
+# by Unreal rather than rejected, so a setting that appears to save and does
+# nothing is the failure mode to expect here, and a key genuinely specific to
+# one game and not the other (if one exists among these) would fail the same
+# silent way. Treat a value that seems not to take effect as a seed bug worth
+# reporting, not as an operator error.
+settings:
+  # ---- Server ------------------------------------------------------------
+  - name: server_password
+    group: Server
+    type: password
+    label: Join password
+    description: Required to connect. Blank leaves the server open.
+    default: ""
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerPassword }
+  - name: spectator_password
+    group: Server
+    type: password
+    label: Spectator password
+    description: Lets a non-admin enter spectator mode with /spectator.
+    default: ""
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/SpectatorPassword }
+  - name: server_pve
+    group: Server
+    type: bool
+    label: PvE mode
+    description: Players cannot damage each other or each other's structures.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerPVE }
+  - name: server_hardcore
+    group: Server
+    type: bool
+    label: Hardcore
+    description: Death resets the survivor to level 1.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerHardcore }
+  - name: difficulty_offset
+    group: Server
+    type: number
+    label: Difficulty offset
+    description: >-
+      0 to 1, scaling wild creature levels. Use with "Override official
+      difficulty" below, which is what actually sets the level cap.
+    min: 0
+    max: 1
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DifficultyOffset }
+  - name: override_official_difficulty
+    group: Server
+    type: number
+    label: Override official difficulty
+    description: >-
+      Max wild level is this times 30. 5.0 gives level 150 wilds, the official
+      value; 1.0 gives level 30.
+    min: 0
+    step: 0.001
+    default: "5.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/OverrideOfficialDifficulty }
+  - name: auto_save_period_minutes
+    group: Server
+    type: number
+    label: Autosave interval (minutes)
+    description: How often the world is written to disk. Saving briefly stalls the server.
+    min: 1
+    max: 240
+    step: 1
+    default: "15"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AutoSavePeriodMinutes }
+  - name: kick_idle_players_period
+    group: Server
+    type: number
+    label: Kick idle after (seconds)
+    description: 0 never kicks.
+    min: 0
+    step: 1
+    default: "3600"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/KickIdlePlayersPeriod }
+  - name: motd
+    group: Server
+    label: Message of the day
+    description: Shown to a player as they join.
+    default: ""
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: MessageOfTheDay/Message }
+  - name: motd_duration
+    group: Server
+    type: number
+    label: Message of the day duration (seconds)
+    min: 1
+    max: 120
+    step: 1
+    default: "20"
+    show_if: { name: motd, not_equals: "" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: MessageOfTheDay/Duration }
+  - name: ban_list_url
+    group: Server
+    label: Ban list URL
+    description: A shared ban list this server honours. Blank uses only the local one.
+    default: ""
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/BanListURL }
+  - name: global_voice_chat
+    group: Server
+    type: bool
+    label: Global voice chat
+    description: Voice reaches the whole server rather than only nearby players.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/GlobalVoiceChat }
+  - name: proximity_chat
+    group: Server
+    type: bool
+    label: Proximity text chat
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ProximityChat }
+  - name: always_notify_player_joined
+    group: Server
+    type: bool
+    label: Announce joins
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AlwaysNotifyPlayerJoined }
+  - name: always_notify_player_left
+    group: Server
+    type: bool
+    label: Announce leaves
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AlwaysNotifyPlayerLeft }
+
+  # ---- Rules and access --------------------------------------------------
+  - name: allow_third_person
+    group: Rules and access
+    type: bool
+    label: Allow third person
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowThirdPersonPlayer }
+  - name: server_crosshair
+    group: Rules and access
+    type: bool
+    label: Crosshair
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerCrosshair }
+  - name: server_force_no_hud
+    group: Rules and access
+    type: bool
+    label: Force HUD off
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerForceNoHUD }
+  - name: show_map_player_location
+    group: Rules and access
+    type: bool
+    label: Show own position on the map
+    description: Off means a player has to work out where they are.
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ShowMapPlayerLocation }
+  - name: show_floating_damage_text
+    group: Rules and access
+    type: bool
+    label: Floating damage numbers
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ShowFloatingDamageText }
+  - name: allow_hit_markers
+    group: Rules and access
+    type: bool
+    label: Hit markers
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowHitMarkers }
+  - name: enable_pvp_gamma
+    group: Rules and access
+    type: bool
+    label: Allow gamma adjustment in PvP
+    description: On lets a player brighten their own night, which is usually the point of turning it off.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/EnablePvPGamma }
+  - name: disable_pve_gamma
+    group: Rules and access
+    type: bool
+    label: Block gamma adjustment in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisablePvEGamma }
+  - name: use_corpse_locator
+    group: Rules and access
+    type: bool
+    label: Corpse locator beam
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/UseCorpseLocator }
+  - name: prevent_spawn_animations
+    group: Rules and access
+    type: bool
+    label: Skip spawn animation
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventSpawnAnimations }
+  - name: prevent_diseases
+    group: Rules and access
+    type: bool
+    label: Disable diseases
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventDiseases }
+  - name: non_permanent_diseases
+    group: Rules and access
+    type: bool
+    label: Diseases are curable
+    description: A disease is lost on respawn rather than kept for the character's life.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    show_if: { name: prevent_diseases, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/NonPermanentDiseases }
+  - name: allow_hide_damage_source_from_logs
+    group: Rules and access
+    type: bool
+    label: Hide damage source in the tribe log
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowHideDamageSourceFromLogs }
+
+  # ---- Rates: experience -------------------------------------------------
+  - name: xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Experience multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/XPMultiplier }
+  - name: kill_xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Kill XP multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/KillXPMultiplier }
+  - name: harvest_xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Harvest XP multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/HarvestXPMultiplier }
+  - name: craft_xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Craft XP multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CraftXPMultiplier }
+  - name: generic_xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Generic XP multiplier
+    description: Passive experience, earned just for being alive.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/GenericXPMultiplier }
+  - name: special_xp_multiplier
+    group: "Rates: experience"
+    type: number
+    label: Special event XP multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/SpecialXPMultiplier }
+
+  # ---- Rates: harvesting -------------------------------------------------
+  - name: harvest_amount_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Harvest amount multiplier
+    description: How much a single harvest yields.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/HarvestAmountMultiplier }
+  - name: harvest_health_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Resource health multiplier
+    description: How much punishment a tree or rock takes before it is used up.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/HarvestHealthMultiplier }
+  - name: resources_respawn_period_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Resource respawn period multiplier
+    description: Lower is faster. This one is inverted relative to the others here.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ResourcesRespawnPeriodMultiplier }
+  - name: player_harvesting_damage_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Player harvesting damage multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/PlayerHarvestingDamageMultiplier }
+  - name: dino_harvesting_damage_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Creature harvesting damage multiplier
+    min: 0
+    step: 0.001
+    default: "3.2"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/DinoHarvestingDamageMultiplier }
+  - name: supply_crate_loot_quality_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Supply crate loot quality multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/SupplyCrateLootQualityMultiplier }
+  - name: crop_growth_speed_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Crop growth speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CropGrowthSpeedMultiplier }
+  - name: crop_decay_speed_multiplier
+    group: "Rates: harvesting"
+    type: number
+    label: Crop decay speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CropDecaySpeedMultiplier }
+  - name: use_optimized_harvesting_health
+    group: "Rates: harvesting"
+    type: bool
+    label: Optimised harvesting health
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/UseOptimizedHarvestingHealth }
+  - name: clamp_resource_harvest_damage
+    group: "Rates: harvesting"
+    type: bool
+    label: Clamp resource harvest damage
+    description: Stops a very high-damage creature wasting most of a resource node.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ClampResourceHarvestDamage }
+  - name: resource_no_replenish_radius_players
+    group: "Rates: harvesting"
+    type: number
+    label: No-replenish radius around players
+    description: Resources do not respawn this close to a player. Lower means they respawn nearer.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ResourceNoReplenishRadiusPlayers }
+  - name: resource_no_replenish_radius_structures
+    group: "Rates: harvesting"
+    type: number
+    label: No-replenish radius around structures
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ResourceNoReplenishRadiusStructures }
+
+  # ---- Rates: taming -----------------------------------------------------
+  - name: taming_speed_multiplier
+    group: "Rates: taming"
+    type: number
+    label: Taming speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TamingSpeedMultiplier }
+  - name: passive_tame_interval_multiplier
+    group: "Rates: taming"
+    type: number
+    label: Passive tame interval multiplier
+    description: The wait between feeds when passive-taming. Lower is faster.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PassiveTameIntervalMultiplier }
+  - name: dino_character_food_drain_multiplier
+    group: "Rates: taming"
+    type: number
+    label: Creature food drain multiplier
+    description: Also affects how fast a creature being tamed eats.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterFoodDrainMultiplier }
+  - name: allow_raid_dino_feeding
+    group: "Rates: taming"
+    type: bool
+    label: Allow feeding raid creatures
+    description: Titanosaurs and similar can be kept fed rather than being lost after a fixed time.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowRaidDinoFeeding }
+  - name: raid_dino_character_food_drain_multiplier
+    group: "Rates: taming"
+    type: number
+    label: Raid creature food drain multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    show_if: { name: allow_raid_dino_feeding, equals: "True" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/RaidDinoCharacterFoodDrainMultiplier }
+
+  # ---- Players -----------------------------------------------------------
+  - name: player_damage_multiplier
+    group: Players
+    type: number
+    label: Player damage multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerDamageMultiplier }
+  - name: player_resistance_multiplier
+    group: Players
+    type: number
+    label: Player resistance multiplier
+    description: Higher means players take *less* damage.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerResistanceMultiplier }
+  - name: player_character_food_drain_multiplier
+    group: Players
+    type: number
+    label: Food drain multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterFoodDrainMultiplier }
+  - name: player_character_water_drain_multiplier
+    group: Players
+    type: number
+    label: Water drain multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterWaterDrainMultiplier }
+  - name: player_character_stamina_drain_multiplier
+    group: Players
+    type: number
+    label: Stamina drain multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterStaminaDrainMultiplier }
+  - name: player_character_health_recovery_multiplier
+    group: Players
+    type: number
+    label: Health recovery multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterHealthRecoveryMultiplier }
+  - name: oxygen_swim_speed_stat_multiplier
+    group: Players
+    type: number
+    label: Oxygen swim speed multiplier
+    description: How much the oxygen stat contributes to swimming speed.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/OxygenSwimSpeedStatMultiplier }
+  - name: crafting_skill_bonus_multiplier
+    group: Players
+    type: number
+    label: Crafting skill bonus multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/CraftingSkillBonusMultiplier }
+  - name: custom_recipe_effectiveness_multiplier
+    group: Players
+    type: number
+    label: Custom recipe effectiveness multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CustomRecipeEffectivenessMultiplier }
+  - name: custom_recipe_skill_multiplier
+    group: Players
+    type: number
+    label: Custom recipe skill multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CustomRecipeSkillMultiplier }
+  - name: item_stack_size_multiplier
+    group: Players
+    type: number
+    label: Item stack size multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ItemStackSizeMultiplier }
+  - name: clamp_item_spoiling_times
+    group: Players
+    type: bool
+    label: Clamp item spoiling times
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ClampItemSpoilingTimes }
+  - name: allow_unlimited_respecs
+    group: Players
+    type: bool
+    label: Unlimited respecs
+    description: A mindwipe tonic can be used more than once every 24 hours.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bAllowUnlimitedRespecs }
+  - name: auto_unlock_all_engrams
+    group: Players
+    type: bool
+    label: Unlock all engrams automatically
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bAutoUnlockAllEngrams }
+  - name: max_hexagons_per_character
+    group: Players
+    type: number
+    label: Max hexagons per character
+    min: 0
+    step: 1
+    default: "2000000000"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxHexagonsPerCharacter }
+
+  # ---- Dinos -------------------------------------------------------------
+  - name: dino_damage_multiplier
+    group: Dinos
+    type: number
+    label: Wild creature damage multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoDamageMultiplier }
+  - name: dino_resistance_multiplier
+    group: Dinos
+    type: number
+    label: Wild creature resistance multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoResistanceMultiplier }
+  - name: tamed_dino_damage_multiplier
+    group: Dinos
+    type: number
+    label: Tamed creature damage multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TamedDinoDamageMultiplier }
+  - name: tamed_dino_resistance_multiplier
+    group: Dinos
+    type: number
+    label: Tamed creature resistance multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TamedDinoResistanceMultiplier }
+  - name: dino_character_health_recovery_multiplier
+    group: Dinos
+    type: number
+    label: Creature health recovery multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterHealthRecoveryMultiplier }
+  - name: dino_character_stamina_drain_multiplier
+    group: Dinos
+    type: number
+    label: Creature stamina drain multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterStaminaDrainMultiplier }
+  - name: dino_count_multiplier
+    group: Dinos
+    type: number
+    label: Wild creature count multiplier
+    description: How densely the map is populated. Raising this costs CPU on the node.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DinoCountMultiplier }
+  - name: max_tamed_dinos
+    group: Dinos
+    type: number
+    label: Max tamed creatures on the server
+    min: 0
+    step: 1
+    default: "5000"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxTamedDinos }
+  - name: max_personal_tamed_dinos
+    group: Dinos
+    type: number
+    label: Max tamed creatures per tribe
+    description: 0 means no per-tribe limit.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxPersonalTamedDinos }
+  - name: personal_tamed_dinos_saddle_structure_cost
+    group: Dinos
+    type: number
+    label: Platform saddle structure cost
+    description: How many of the tribe's tame slots each structure on a platform saddle uses.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PersonalTamedDinosSaddleStructureCost }
+  - name: allow_flyer_carry_pve
+    group: Dinos
+    type: bool
+    label: Flyers can carry in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowFlyerCarryPvE }
+  - name: force_can_ride_fliers
+    group: Dinos
+    type: bool
+    label: Allow flyers on maps that ban them
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/bForceCanRideFliers }
+  - name: prevent_mate_boost
+    group: Dinos
+    type: bool
+    label: Disable mate boost
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventMateBoost }
+  - name: passive_defenses_damage_riderless_dinos
+    group: Dinos
+    type: bool
+    label: Spikes damage riderless creatures
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bPassiveDefensesDamageRiderlessDinos }
+  - name: disable_dino_decay_pve
+    group: Dinos
+    type: bool
+    label: Disable creature decay in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableDinoDecayPvE }
+  - name: pve_dino_decay_period_multiplier
+    group: Dinos
+    type: number
+    label: PvE creature decay period multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    show_if: { name: disable_dino_decay_pve, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PvEDinoDecayPeriodMultiplier }
+  - name: auto_destroy_decayed_dinos
+    group: Dinos
+    type: bool
+    label: Auto-destroy decayed creatures
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AutoDestroyDecayedDinos }
+  - name: server_auto_force_respawn_wild_dinos_interval
+    group: Dinos
+    type: number
+    label: Force wild respawn interval (seconds)
+    description: 0 leaves the wild population alone between restarts.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ServerAutoForceRespawnWildDinosInterval }
+  - name: disable_cryopod_enemy_check
+    group: Dinos
+    type: bool
+    label: Allow cryopod deploy near enemies
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableCryopodEnemyCheck }
+  - name: disable_cryopod_fridge_requirement
+    group: Dinos
+    type: bool
+    label: Cryopods work without a fridge
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableCryopodFridgeRequirement }
+  - name: enable_cryopod_nerf
+    group: Dinos
+    type: bool
+    label: Cryopod deploy debuff
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/EnableCryopodNerf }
+  - name: poop_interval_multiplier
+    group: Dinos
+    type: number
+    label: Defecation interval multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/PoopIntervalMultiplier }
+
+  # ---- Breeding and imprinting -------------------------------------------
+  - name: mating_interval_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Mating interval multiplier
+    description: The cooldown between matings. Lower is faster.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/MatingIntervalMultiplier }
+  - name: mating_speed_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Mating speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/MatingSpeedMultiplier }
+  - name: egg_hatch_speed_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Egg hatch speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/EggHatchSpeedMultiplier }
+  - name: lay_egg_interval_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Egg laying interval multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LayEggIntervalMultiplier }
+  - name: baby_mature_speed_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Baby maturation speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyMatureSpeedMultiplier }
+  - name: baby_food_consumption_speed_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Baby food consumption multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyFoodConsumptionSpeedMultiplier }
+  - name: baby_cuddle_interval_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Cuddle interval multiplier
+    description: How often a baby wants attention while imprinting. Lower means more often.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleIntervalMultiplier }
+  - name: baby_cuddle_grace_period_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Cuddle grace period multiplier
+    description: How long you have to answer a cuddle request before quality is lost.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleGracePeriodMultiplier }
+  - name: baby_cuddle_lose_imprint_quality_speed_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Imprint quality loss speed multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleLoseImprintQualitySpeedMultiplier }
+  - name: baby_imprinting_stat_scale_multiplier
+    group: Breeding and imprinting
+    type: number
+    label: Imprinting stat bonus multiplier
+    description: How much a fully imprinted creature gains. 0 removes the bonus entirely.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyImprintingStatScaleMultiplier }
+  - name: allow_anyone_baby_imprint_cuddle
+    group: Breeding and imprinting
+    type: bool
+    label: Anyone in the tribe can imprint
+    description: Off means only the survivor who claimed the baby can raise its imprint.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowAnyoneBabyImprintCuddle }
+  - name: disable_imprint_dino_buff
+    group: Breeding and imprinting
+    type: bool
+    label: Disable the imprint rider bonus
+    description: The imprinted stat bonus applies regardless of who is riding.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableImprintDinoBuff }
+
+  # ---- Structures --------------------------------------------------------
+  - name: structure_damage_multiplier
+    group: Structures
+    type: number
+    label: Structure damage multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructureDamageMultiplier }
+  - name: structure_resistance_multiplier
+    group: Structures
+    type: number
+    label: Structure resistance multiplier
+    description: Higher means structures take less damage.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructureResistanceMultiplier }
+  - name: structure_damage_repair_cooldown
+    group: Structures
+    type: number
+    label: Repair cooldown after damage (seconds)
+    description: 0 allows repairing immediately, which in PvP means repairing mid-raid.
+    min: 0
+    step: 1
+    default: "180"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructureDamageRepairCooldown }
+  - name: the_max_structures_in_range
+    group: Structures
+    type: number
+    label: Max structures in range
+    description: The cap on how much can be built in one area.
+    min: 0
+    step: 1
+    default: "10500"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TheMaxStructuresInRange }
+  - name: max_platform_saddle_structure_limit
+    group: Structures
+    type: number
+    label: Max structures on a platform saddle
+    min: 0
+    step: 1
+    default: "75"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxPlatformSaddleStructureLimit }
+  - name: per_platform_max_structures_multiplier
+    group: Structures
+    type: number
+    label: Platform structure limit multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PerPlatformMaxStructuresMultiplier }
+  - name: platform_saddle_build_area_bounds_multiplier
+    group: Structures
+    type: number
+    label: Platform build area multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PlatformSaddleBuildAreaBoundsMultiplier }
+  - name: override_structure_platform_prevention
+    group: Structures
+    type: bool
+    label: Allow normally-banned structures on platforms
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/OverrideStructurePlatformPrevention }
+  - name: max_gate_frame_on_saddles
+    group: Structures
+    type: number
+    label: Max gateways on a platform saddle
+    min: 0
+    step: 1
+    default: "2"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxGateFrameOnSaddles }
+  - name: structure_prevent_resource_radius_multiplier
+    group: Structures
+    type: number
+    label: Structure resource-prevention radius multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructurePreventResourceRadiusMultiplier }
+  - name: always_allow_structure_pickup
+    group: Structures
+    type: bool
+    label: Always allow structure pickup
+    description: Removes the timer after which a placed structure can no longer be picked up.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AlwaysAllowStructurePickup }
+  - name: structure_pickup_time_after_placement
+    group: Structures
+    type: number
+    label: Pickup window after placement (seconds)
+    min: 0
+    step: 1
+    default: "30"
+    show_if: { name: always_allow_structure_pickup, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructurePickupTimeAfterPlacement }
+  - name: structure_pickup_hold_duration
+    group: Structures
+    type: number
+    label: Pickup hold duration (seconds)
+    description: 0 picks up on a press rather than a hold.
+    min: 0
+    step: 0.001
+    default: "0.5"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/StructurePickupHoldDuration }
+  - name: disable_structure_decay_pve
+    group: Structures
+    type: bool
+    label: Disable structure decay in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableStructureDecayPvE }
+  - name: pve_structure_decay_period_multiplier
+    group: Structures
+    type: number
+    label: PvE structure decay period multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    show_if: { name: disable_structure_decay_pve, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PvEStructureDecayPeriodMultiplier }
+  - name: auto_destroy_old_structures_multiplier
+    group: Structures
+    type: number
+    label: Auto-destroy old structures multiplier
+    description: 0 never auto-destroys.
+    min: 0
+    step: 0.001
+    default: "0.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AutoDestroyOldStructuresMultiplier }
+  - name: only_auto_destroy_core_structures
+    group: Structures
+    type: bool
+    label: Only auto-destroy core structures
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/OnlyAutoDestroyCoreStructures }
+  - name: fast_decay_unsnapped_core_structures
+    group: Structures
+    type: bool
+    label: Fast-decay unsnapped core structures
+    description: Deals with pillar spam by decaying lone foundations quickly.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/FastDecayUnsnappedCoreStructures }
+  - name: force_all_structure_locking
+    group: Structures
+    type: bool
+    label: Lock all structures by default
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/ForceAllStructureLocking }
+  - name: enable_extra_structure_prevention_volumes
+    group: Structures
+    type: bool
+    label: Extra no-build zones
+    description: Blocks building in areas the map does not otherwise protect.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/EnableExtraStructurePreventionVolumes }
+  - name: ignore_limit_max_structures_in_range_type_flag
+    group: Structures
+    type: bool
+    label: Ignore the per-type structure limit
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/IgnoreLimitMaxStructuresInRangeTypeFlag }
+  - name: allow_crate_spawns_on_top_of_structures
+    group: Structures
+    type: bool
+    label: Supply crates can land on structures
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowCrateSpawnsOnTopOfStructures }
+  - name: pve_allow_structures_at_supply_drops
+    group: Structures
+    type: bool
+    label: Allow building at supply drops in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PvEAllowStructuresAtSupplyDrops }
+  - name: disable_structure_placement_collision
+    group: Structures
+    type: bool
+    label: Ignore terrain collision when placing
+    description: Lets structures clip into rock and terrain.
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bDisableStructurePlacementCollision }
+
+  # ---- PvP and raiding ---------------------------------------------------
+  - name: allow_cave_building_pve
+    group: PvP and raiding
+    type: bool
+    label: Allow cave building in PvE
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowCaveBuildingPvE }
+  - name: allow_cave_building_pvp
+    group: PvP and raiding
+    type: bool
+    label: Allow cave building in PvP
+    true_value: "True"
+    false_value: "False"
+    default: "True"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowCaveBuildingPvP }
+  - name: prevent_offline_pvp
+    group: PvP and raiding
+    type: bool
+    label: Offline raid protection
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventOfflinePvP }
+  - name: prevent_offline_pvp_interval
+    group: PvP and raiding
+    type: number
+    label: Offline protection kicks in after (seconds)
+    min: 0
+    step: 1
+    default: "900"
+    show_if: { name: prevent_offline_pvp, equals: "True" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventOfflinePvPInterval }
+  - name: pvp_structure_decay
+    group: PvP and raiding
+    type: bool
+    label: Structure decay in PvP
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PvPStructureDecay }
+  - name: pvp_dino_decay
+    group: PvP and raiding
+    type: bool
+    label: Creature decay in PvP
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PvPDinoDecay }
+  - name: allow_multiple_attached_c4
+    group: PvP and raiding
+    type: bool
+    label: Allow multiple C4 on one creature
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/AllowMultipleAttachedC4 }
+  - name: increase_pvp_respawn_interval_base_amount
+    group: PvP and raiding
+    type: number
+    label: PvP respawn penalty base (seconds)
+    description: Added to the respawn wait after being killed by another player.
+    min: 0
+    step: 0.001
+    default: "60.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalBaseAmount }
+  - name: increase_pvp_respawn_interval_check_period
+    group: PvP and raiding
+    type: number
+    label: PvP respawn penalty window (seconds)
+    min: 0
+    step: 0.001
+    default: "300.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalCheckPeriod }
+  - name: increase_pvp_respawn_interval_multiplier
+    group: PvP and raiding
+    type: number
+    label: PvP respawn penalty multiplier
+    min: 0
+    step: 0.001
+    default: "2.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalMultiplier }
+
+  # ---- Tribes ------------------------------------------------------------
+  - name: max_number_of_players_in_tribe
+    group: Tribes
+    type: number
+    label: Max players per tribe
+    description: 0 means no limit.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxNumberOfPlayersInTribe }
+  - name: prevent_tribe_alliances
+    group: Tribes
+    type: bool
+    label: Disable alliances
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventTribeAlliances }
+  - name: max_alliances_per_tribe
+    group: Tribes
+    type: number
+    label: Max alliances per tribe
+    min: 0
+    step: 1
+    default: "10"
+    show_if: { name: prevent_tribe_alliances, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxAlliancesPerTribe }
+  - name: max_tribes_per_alliance
+    group: Tribes
+    type: number
+    label: Max tribes per alliance
+    min: 0
+    step: 1
+    default: "10"
+    show_if: { name: prevent_tribe_alliances, equals: "False" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxTribesPerAlliance }
+  - name: tribe_name_change_cooldown
+    group: Tribes
+    type: number
+    label: Tribe rename cooldown (minutes)
+    min: 0
+    step: 1
+    default: "15"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TribeNameChangeCooldown }
+  - name: max_tribe_logs
+    group: Tribes
+    type: number
+    label: Tribe log entries kept
+    min: 0
+    step: 1
+    default: "400"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxTribeLogs }
+  - name: tribe_log_destroyed_enemy_structures
+    group: Tribes
+    type: bool
+    label: Log destroyed enemy structures
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/TribeLogDestroyedEnemyStructures }
+
+  # ---- World and time ----------------------------------------------------
+  - name: day_cycle_speed_scale
+    group: World and time
+    type: number
+    label: Day cycle speed
+    description: The whole day/night cycle. Lower means longer days and nights.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DayCycleSpeedScale }
+  - name: day_time_speed_scale
+    group: World and time
+    type: number
+    label: Daytime speed
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DayTimeSpeedScale }
+  - name: night_time_speed_scale
+    group: World and time
+    type: number
+    label: Night speed
+    description: Raise this to make nights pass more quickly than days.
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/NightTimeSpeedScale }
+  - name: disable_weather_fog
+    group: World and time
+    type: bool
+    label: Disable fog
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/DisableWeatherFog }
+  - name: random_supply_crate_points
+    group: World and time
+    type: bool
+    label: Randomise supply crate positions
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/RandomSupplyCratePoints }
+
+  # ---- Cluster transfers -------------------------------------------------
+  - name: prevent_download_survivors
+    group: Cluster transfers
+    type: bool
+    label: Block survivor downloads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadSurvivors }
+  - name: prevent_download_items
+    group: Cluster transfers
+    type: bool
+    label: Block item downloads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadItems }
+  - name: prevent_download_dinos
+    group: Cluster transfers
+    type: bool
+    label: Block creature downloads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadDinos }
+  - name: prevent_upload_survivors
+    group: Cluster transfers
+    type: bool
+    label: Block survivor uploads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventUploadSurvivors }
+  - name: prevent_upload_items
+    group: Cluster transfers
+    type: bool
+    label: Block item uploads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventUploadItems }
+  - name: prevent_upload_dinos
+    group: Cluster transfers
+    type: bool
+    label: Block creature uploads
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/PreventUploadDinos }
+  - name: cross_ark_allow_foreign_dino_downloads
+    group: Cluster transfers
+    type: bool
+    label: Allow creatures from other clusters
+    true_value: "True"
+    false_value: "False"
+    default: "False"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/CrossARKAllowForeignDinoDownloads }
+  - name: minimum_dino_reupload_interval
+    group: Cluster transfers
+    type: number
+    label: Minimum creature re-upload interval (seconds)
+    description: Stops a creature being bounced between servers to dodge a fight.
+    min: 0
+    step: 0.001
+    default: "0.0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MinimumDinoReuploadInterval }
+  - name: max_tribute_dinos
+    group: Cluster transfers
+    type: number
+    label: Max creatures in the transfer inventory
+    min: 0
+    step: 1
+    default: "20"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxTributeDinos }
+  - name: max_tribute_items
+    group: Cluster transfers
+    type: number
+    label: Max items in the transfer inventory
+    min: 0
+    step: 1
+    default: "50"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/MaxTributeItems }
+
+  # ---- Advanced ----------------------------------------------------------
+  - name: custom_dynamic_config_url
+    group: Advanced
+    label: Dynamic config URL
+    description: >-
+      A URL the server re-reads periodically for a small set of live-tunable
+      rates, without a restart. Blank disables it.
+    default: ""
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/CustomDynamicConfigUrl }
+  - name: rcon_server_game_log_buffer
+    group: Advanced
+    type: number
+    label: RCON game log buffer (lines)
+    min: 0
+    step: 1
+    default: "600"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/RCONServerGameLogBuffer }
+  - name: fast_decay_interval
+    group: Advanced
+    type: number
+    label: Fast decay interval (seconds)
+    min: 0
+    step: 1
+    default: "43200"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/FastDecayInterval }
+  - name: use_corpse_life_span_multiplier
+    group: Advanced
+    type: number
+    label: Corpse and drop lifespan multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/UseCorpseLifeSpanMultiplier }
+  - name: global_powered_battery_durability_decrease_per_second
+    group: Advanced
+    type: number
+    label: Battery drain per second
+    min: 0
+    step: 0.001
+    default: "4.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/GlobalPoweredBatteryDurabilityDecreasePerSecond }
+  - name: fuel_consumption_interval_multiplier
+    group: Advanced
+    type: number
+    label: Fuel consumption interval multiplier
+    min: 0
+    step: 0.001
+    default: "1.0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/FuelConsumptionIntervalMultiplier }
+  - name: limit_non_player_dropped_items_range
+    group: Advanced
+    type: number
+    label: Dropped item limit radius
+    description: 0 disables the limit. Used together with the count below to control litter.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LimitNonPlayerDroppedItemsRange }
+  - name: limit_non_player_dropped_items_count
+    group: Advanced
+    type: number
+    label: Dropped item limit count
+    min: 0
+    step: 1
+    default: "0"
+    show_if: { name: limit_non_player_dropped_items_range, not_equals: "0" }
+    optional: true
+    to: { file: config/LinuxServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LimitNonPlayerDroppedItemsCount }
+  - name: npc_network_stasis_range_scale_player_count_start
+    group: Advanced
+    type: number
+    label: Creature stasis scaling starts at (players)
+    description: >-
+      Above this many players the server shrinks how far away creatures stay
+      active, trading fidelity for CPU. 0 disables the scaling.
+    min: 0
+    step: 1
+    default: "0"
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePlayerCountStart }
+  - name: npc_network_stasis_range_scale_player_count_end
+    group: Advanced
+    type: number
+    label: Creature stasis scaling ends at (players)
+    min: 0
+    step: 1
+    default: "0"
+    show_if: { name: npc_network_stasis_range_scale_player_count_start, not_equals: "0" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePlayerCountEnd }
+  - name: npc_network_stasis_range_scale_percent_end
+    group: Advanced
+    type: number
+    label: Creature stasis range floor (fraction)
+    min: 0
+    max: 1
+    step: 0.001
+    default: "0.55"
+    show_if: { name: npc_network_stasis_range_scale_player_count_start, not_equals: "0" }
+    optional: true
+    to: { file: config/LinuxServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePercentEnd }
+
+
+# ARK's own ini files, patched rather than rewritten.
+#
+# `patch` is the only mode that is safe here, and the reason is worth stating.
+# ARK writes both of these itself — GameUserSettings.ini on first run and again
+# on shutdown, adding any key it did not find — so a mode that rewrote the file
+# wholesale (`always`) would throw away everything the game had added, and
+# `once` would mean no setting here ever reached a server that had already
+# started. `patch` sets the keys this seed names and leaves every other line,
+# comment and section exactly as it found it (ADR-077).
+#
+# On a brand-new server the file does not exist yet, so the first patch writes
+# only the keys named above. That is safe for Unreal in a way it was NOT for
+# Vintage Story's JSON (ADR-084): Unreal resolves a missing ini key to that
+# property's compiled default, key by key, so an absent key means "use the
+# game's own default" rather than "this collection is empty".
+#
+# Both are marked importable, which is the migration path for a server somebody
+# already configured by hand: read the file back off the node and adopt the
+# values this seed recognises, rather than having the next rebuild quietly
+# patch over them.
+config:
+  files:
+    - path: config/LinuxServer/GameUserSettings.ini
+      parser: ini
+      manage: patch
+      importable: true
+    - path: config/LinuxServer/Game.ini
+      parser: ini
+      manage: patch
+      importable: true
+
+# mode: port rather than a log pattern, deliberately. Community server tools
+# widely cite "Server has completed startup!" as ASE's own readiness line —
+# distinct from ASA's "has successfully started!" — but it has not been seen
+# in real output from this seed's own install, and a wrong readiness pattern
+# strands a healthy server in `starting` for the whole timeout rather than
+# merely delaying it. Port needs no game-specific knowledge at all, which is
+# the documented right first choice for a seed added blind (docs/seed-spec.md
+# §9.1). Revisit once a real depot has been run and the line confirmed.
+#
+# `game` itself is UDP and mode: port only ever dials TCP -- naming it would
+# never succeed and would silently burn the whole timeout on every start
+# (docs/conventions.md's own recorded pitfall for this exact mode). `rcon` is
+# the only TCP port this seed declares, and it binds reliably: the command
+# always passes RCONEnabled=True and admin_password always carries a default
+# ("changeme"), so RCON is never conditionally absent the way a bare port:
+# game seed might have one. The trade is real and worth naming: RCON can bind
+# before the world save has finished loading, so this may report ready a
+# little ahead of the game genuinely being able to serve players.
+ready:
+  mode: port
+  port: rcon
+  timeout: 300s
+
+# No crash block, for the same reason ASA's own seed leaves one commented out
+# rather than declared: a wrong crash pattern stops a healthy server, which is
+# a materially worse failure than a wrong readiness pattern, and nothing here
+# has been checked against real output.
+#
+# crash:
+#   mode: log
+#   pattern: "Fatal error"
+
+backup:
+  include: [saved, config]

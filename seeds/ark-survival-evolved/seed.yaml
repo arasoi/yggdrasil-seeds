@@ -69,12 +69,28 @@ containers:
       HOME: /home/steam
     ports:
       - { name: game, protocol: udp, default: 7777 }
-      # ASE's own dedicated-server documentation calls this the "alternate"
-      # query port and has the client probe both; unlike ASA, which only
-      # ever needed one. offset_from ties it to game+1 rather than declaring
-      # a second independent default, since the two must always be adjacent
-      # for ASE's own querying to find it (ADR-048).
-      - { name: raw, protocol: udp, offset_from: game, offset: 1 }
+      # ARK binds a second UDP socket at game+1 -- its raw/reliable channel --
+      # and derives that number from Port itself: there is no argument or ini
+      # key for it, which is why nothing below references this port. Declared
+      # all the same, because a port the game binds and the control plane
+      # does not know about is one it will hand to another server.
+      #
+      # Not hypothetical: this is the exact fix ARK Survival Ascended's own
+      # seed needed after a live incident (game_raw on one ASA map silently
+      # collided with another server's game port). ASE shares the same
+      # underlying networking code, so the same socket is declared here from
+      # the start rather than waiting to rediscover it independently.
+      #
+      # offset_from is what makes the pair atomic (ADR-083): a base candidate
+      # is only accepted once game+1 is confirmed free too, so the two move
+      # together instead of one being claimed without the other. Declared
+      # before query for the same reason ASA's own fix records: ports
+      # allocate in declaration order, and an independent port declared first
+      # could otherwise be granted the number this sibling needs.
+      - { name: game_raw, protocol: udp, offset_from: game, offset: 1 }
+      # Independent, unlike game_raw: ARK takes ?QueryPort= and binds
+      # whatever it is given, so this does not have to sit next to the game
+      # port -- and must not be assumed to.
       - { name: query, protocol: udp, default: 27015 }
       - { name: rcon, protocol: tcp, default: 27020 }
 

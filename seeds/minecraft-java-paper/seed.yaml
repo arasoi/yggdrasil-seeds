@@ -5,7 +5,15 @@ icon: "☕"
 description: >
   Vanilla-compatible Minecraft Java Edition server running Paper, with
   plugin support. Runs on any architecture with a JRE.
-version: "3.0.0"
+version: "3.0.1"
+
+# Not on Steam. The logo is PaperMC's own project mark (papermc.io); the
+# banner is Mojang's 2024 key art, mirrored on the Minecraft Wiki -- this
+# seed runs genuine Minecraft Java under Paper, so the base game's own art
+# fits, with Paper's own logo distinguishing it from the Bedrock seed.
+branding:
+  logo: logo.png
+  banner: banner.jpg
 
 # Any JRE-capable node: Paper itself ships no native code.
 architectures: [amd64, arm64]

@@ -6,7 +6,14 @@ description: >
   Dedicated server for Vintage Story, a sandbox survival and building game.
   Each server gets its own copy of the game files, so different worlds can run
   different versions.
-version: "2.0.1"
+version: "2.0.2"
+
+# Not on Steam, so no steam_app_id -- both images come from the developer's
+# own wiki (wiki.vintagestory.at, run by Anego Studios themselves): the
+# game's own square logo, and their release-announcement key art as banner.
+branding:
+  logo: logo.png
+  banner: banner.png
 
 # Confirmed only against the linux-x64 server tarball (the templated URL
 # below). An ARM64 dedicated server tarball was not found published anywhere

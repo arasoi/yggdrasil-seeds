@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.2.2"
+version: "5.3.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -285,6 +285,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ServerPVE }
   - name: server_hardcore
     group: Server
@@ -295,6 +296,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ServerHardcore }
   - name: difficulty_offset
     group: Server
@@ -308,6 +310,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DifficultyOffset }
   - name: override_official_difficulty
     group: Server
@@ -320,6 +323,7 @@ settings:
     step: 0.001
     default: "5.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/OverrideOfficialDifficulty }
   - name: auto_save_period_minutes
     group: Server
@@ -331,6 +335,7 @@ settings:
     step: 1
     default: "15"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AutoSavePeriodMinutes }
   - name: kick_idle_players_period
     group: Server
@@ -341,6 +346,7 @@ settings:
     step: 1
     default: "3600"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/KickIdlePlayersPeriod }
   - name: motd
     group: Server
@@ -366,6 +372,7 @@ settings:
     description: A shared ban list this server honours. Blank uses only the local one.
     default: ""
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/BanListURL }
   - name: global_voice_chat
     group: Server
@@ -376,6 +383,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/GlobalVoiceChat }
   - name: proximity_chat
     group: Server
@@ -385,6 +393,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ProximityChat }
   - name: always_notify_player_joined
     group: Server
@@ -394,6 +403,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AlwaysNotifyPlayerJoined }
   - name: always_notify_player_left
     group: Server
@@ -403,6 +413,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AlwaysNotifyPlayerLeft }
 
   # ---- Rules and access --------------------------------------------------
@@ -414,6 +425,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowThirdPersonPlayer }
   - name: server_crosshair
     group: Rules and access
@@ -423,6 +435,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ServerCrosshair }
   - name: server_force_no_hud
     group: Rules and access
@@ -432,6 +445,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ServerForceNoHUD }
   - name: show_map_player_location
     group: Rules and access
@@ -442,6 +456,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ShowMapPlayerLocation }
   - name: show_floating_damage_text
     group: Rules and access
@@ -451,6 +466,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ShowFloatingDamageText }
   - name: allow_hit_markers
     group: Rules and access
@@ -460,6 +476,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowHitMarkers }
   - name: enable_pvp_gamma
     group: Rules and access
@@ -470,6 +487,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/EnablePvPGamma }
   - name: disable_pve_gamma
     group: Rules and access
@@ -479,6 +497,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisablePvEGamma }
   - name: use_corpse_locator
     group: Rules and access
@@ -488,6 +507,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/UseCorpseLocator }
   - name: prevent_spawn_animations
     group: Rules and access
@@ -497,6 +517,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventSpawnAnimations }
   - name: prevent_diseases
     group: Rules and access
@@ -506,6 +527,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventDiseases }
   - name: non_permanent_diseases
     group: Rules and access
@@ -517,6 +539,7 @@ settings:
     default: "False"
     show_if: { name: prevent_diseases, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/NonPermanentDiseases }
   - name: allow_hide_damage_source_from_logs
     group: Rules and access
@@ -526,6 +549,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowHideDamageSourceFromLogs }
 
   # ---- Rates: experience -------------------------------------------------
@@ -537,6 +561,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/XPMultiplier }
   - name: kill_xp_multiplier
     group: "Rates: experience"
@@ -546,6 +571,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/KillXPMultiplier }
   - name: harvest_xp_multiplier
     group: "Rates: experience"
@@ -555,6 +581,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/HarvestXPMultiplier }
   - name: craft_xp_multiplier
     group: "Rates: experience"
@@ -564,6 +591,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CraftXPMultiplier }
   - name: generic_xp_multiplier
     group: "Rates: experience"
@@ -574,6 +602,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/GenericXPMultiplier }
   - name: special_xp_multiplier
     group: "Rates: experience"
@@ -583,6 +612,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/SpecialXPMultiplier }
 
   # ---- Rates: harvesting -------------------------------------------------
@@ -595,6 +625,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/HarvestAmountMultiplier }
   - name: harvest_health_multiplier
     group: "Rates: harvesting"
@@ -605,6 +636,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/HarvestHealthMultiplier }
   - name: resources_respawn_period_multiplier
     group: "Rates: harvesting"
@@ -615,6 +647,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ResourcesRespawnPeriodMultiplier }
   - name: player_harvesting_damage_multiplier
     group: "Rates: harvesting"
@@ -624,6 +657,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/PlayerHarvestingDamageMultiplier }
   - name: dino_harvesting_damage_multiplier
     group: "Rates: harvesting"
@@ -633,6 +667,7 @@ settings:
     step: 0.001
     default: "3.2"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/DinoHarvestingDamageMultiplier }
   - name: supply_crate_loot_quality_multiplier
     group: "Rates: harvesting"
@@ -642,6 +677,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/SupplyCrateLootQualityMultiplier }
   - name: crop_growth_speed_multiplier
     group: "Rates: harvesting"
@@ -651,6 +687,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CropGrowthSpeedMultiplier }
   - name: crop_decay_speed_multiplier
     group: "Rates: harvesting"
@@ -660,6 +697,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CropDecaySpeedMultiplier }
   - name: use_optimized_harvesting_health
     group: "Rates: harvesting"
@@ -669,6 +707,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/UseOptimizedHarvestingHealth }
   - name: clamp_resource_harvest_damage
     group: "Rates: harvesting"
@@ -679,6 +718,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ClampResourceHarvestDamage }
   - name: resource_no_replenish_radius_players
     group: "Rates: harvesting"
@@ -689,6 +729,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ResourceNoReplenishRadiusPlayers }
   - name: resource_no_replenish_radius_structures
     group: "Rates: harvesting"
@@ -698,6 +739,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ResourceNoReplenishRadiusStructures }
 
   # ---- Rates: taming -----------------------------------------------------
@@ -709,6 +751,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TamingSpeedMultiplier }
   - name: passive_tame_interval_multiplier
     group: "Rates: taming"
@@ -719,6 +762,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PassiveTameIntervalMultiplier }
   - name: dino_character_food_drain_multiplier
     group: "Rates: taming"
@@ -729,6 +773,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterFoodDrainMultiplier }
   - name: allow_raid_dino_feeding
     group: "Rates: taming"
@@ -739,6 +784,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowRaidDinoFeeding }
   - name: raid_dino_character_food_drain_multiplier
     group: "Rates: taming"
@@ -749,6 +795,7 @@ settings:
     default: "1.0"
     show_if: { name: allow_raid_dino_feeding, equals: "True" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/RaidDinoCharacterFoodDrainMultiplier }
 
   # ---- Players -----------------------------------------------------------
@@ -760,6 +807,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerDamageMultiplier }
   - name: player_resistance_multiplier
     group: Players
@@ -770,6 +818,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerResistanceMultiplier }
   - name: player_character_food_drain_multiplier
     group: Players
@@ -779,6 +828,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterFoodDrainMultiplier }
   - name: player_character_water_drain_multiplier
     group: Players
@@ -788,6 +838,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterWaterDrainMultiplier }
   - name: player_character_stamina_drain_multiplier
     group: Players
@@ -797,6 +848,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterStaminaDrainMultiplier }
   - name: player_character_health_recovery_multiplier
     group: Players
@@ -806,6 +858,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlayerCharacterHealthRecoveryMultiplier }
   - name: oxygen_swim_speed_stat_multiplier
     group: Players
@@ -816,6 +869,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/OxygenSwimSpeedStatMultiplier }
   - name: crafting_skill_bonus_multiplier
     group: Players
@@ -825,6 +879,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/CraftingSkillBonusMultiplier }
   - name: custom_recipe_effectiveness_multiplier
     group: Players
@@ -834,6 +889,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CustomRecipeEffectivenessMultiplier }
   - name: custom_recipe_skill_multiplier
     group: Players
@@ -843,6 +899,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/CustomRecipeSkillMultiplier }
   - name: item_stack_size_multiplier
     group: Players
@@ -852,6 +909,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ItemStackSizeMultiplier }
   - name: clamp_item_spoiling_times
     group: Players
@@ -861,6 +919,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ClampItemSpoilingTimes }
   - name: allow_unlimited_respecs
     group: Players
@@ -871,6 +930,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bAllowUnlimitedRespecs }
   - name: auto_unlock_all_engrams
     group: Players
@@ -880,6 +940,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bAutoUnlockAllEngrams }
   - name: max_hexagons_per_character
     group: Players
@@ -889,6 +950,7 @@ settings:
     step: 1
     default: "2000000000"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxHexagonsPerCharacter }
 
   # ---- Dinos -------------------------------------------------------------
@@ -900,6 +962,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoDamageMultiplier }
   - name: dino_resistance_multiplier
     group: Dinos
@@ -909,6 +972,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoResistanceMultiplier }
   - name: tamed_dino_damage_multiplier
     group: Dinos
@@ -918,6 +982,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TamedDinoDamageMultiplier }
   - name: tamed_dino_resistance_multiplier
     group: Dinos
@@ -927,6 +992,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TamedDinoResistanceMultiplier }
   - name: dino_character_health_recovery_multiplier
     group: Dinos
@@ -936,6 +1002,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterHealthRecoveryMultiplier }
   - name: dino_character_stamina_drain_multiplier
     group: Dinos
@@ -945,6 +1012,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoCharacterStaminaDrainMultiplier }
   - name: dino_count_multiplier
     group: Dinos
@@ -955,6 +1023,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DinoCountMultiplier }
   - name: max_tamed_dinos
     group: Dinos
@@ -964,6 +1033,7 @@ settings:
     step: 1
     default: "5000"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxTamedDinos }
   - name: max_personal_tamed_dinos
     group: Dinos
@@ -974,6 +1044,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxPersonalTamedDinos }
   - name: personal_tamed_dinos_saddle_structure_cost
     group: Dinos
@@ -984,6 +1055,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PersonalTamedDinosSaddleStructureCost }
   - name: allow_flyer_carry_pve
     group: Dinos
@@ -993,6 +1065,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowFlyerCarryPvE }
   - name: force_can_ride_fliers
     group: Dinos
@@ -1002,6 +1075,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/bForceCanRideFliers }
   - name: prevent_mate_boost
     group: Dinos
@@ -1011,6 +1085,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventMateBoost }
   - name: passive_defenses_damage_riderless_dinos
     group: Dinos
@@ -1020,6 +1095,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bPassiveDefensesDamageRiderlessDinos }
   - name: disable_dino_decay_pve
     group: Dinos
@@ -1029,6 +1105,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableDinoDecayPvE }
   - name: pve_dino_decay_period_multiplier
     group: Dinos
@@ -1039,6 +1116,7 @@ settings:
     default: "1.0"
     show_if: { name: disable_dino_decay_pve, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PvEDinoDecayPeriodMultiplier }
   - name: auto_destroy_decayed_dinos
     group: Dinos
@@ -1048,6 +1126,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AutoDestroyDecayedDinos }
   - name: server_auto_force_respawn_wild_dinos_interval
     group: Dinos
@@ -1058,6 +1137,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ServerAutoForceRespawnWildDinosInterval }
   - name: disable_cryopod_enemy_check
     group: Dinos
@@ -1067,6 +1147,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableCryopodEnemyCheck }
   - name: disable_cryopod_fridge_requirement
     group: Dinos
@@ -1076,6 +1157,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableCryopodFridgeRequirement }
   - name: enable_cryopod_nerf
     group: Dinos
@@ -1085,6 +1167,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/EnableCryopodNerf }
   - name: poop_interval_multiplier
     group: Dinos
@@ -1094,6 +1177,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/PoopIntervalMultiplier }
 
   # ---- Breeding and imprinting -------------------------------------------
@@ -1106,6 +1190,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/MatingIntervalMultiplier }
   - name: mating_speed_multiplier
     group: Breeding and imprinting
@@ -1115,6 +1200,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/MatingSpeedMultiplier }
   - name: egg_hatch_speed_multiplier
     group: Breeding and imprinting
@@ -1124,6 +1210,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/EggHatchSpeedMultiplier }
   - name: lay_egg_interval_multiplier
     group: Breeding and imprinting
@@ -1133,6 +1220,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LayEggIntervalMultiplier }
   - name: baby_mature_speed_multiplier
     group: Breeding and imprinting
@@ -1142,6 +1230,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyMatureSpeedMultiplier }
   - name: baby_food_consumption_speed_multiplier
     group: Breeding and imprinting
@@ -1151,6 +1240,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyFoodConsumptionSpeedMultiplier }
   - name: baby_cuddle_interval_multiplier
     group: Breeding and imprinting
@@ -1161,6 +1251,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleIntervalMultiplier }
   - name: baby_cuddle_grace_period_multiplier
     group: Breeding and imprinting
@@ -1171,6 +1262,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleGracePeriodMultiplier }
   - name: baby_cuddle_lose_imprint_quality_speed_multiplier
     group: Breeding and imprinting
@@ -1180,6 +1272,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyCuddleLoseImprintQualitySpeedMultiplier }
   - name: baby_imprinting_stat_scale_multiplier
     group: Breeding and imprinting
@@ -1190,6 +1283,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/BabyImprintingStatScaleMultiplier }
   - name: allow_anyone_baby_imprint_cuddle
     group: Breeding and imprinting
@@ -1200,6 +1294,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowAnyoneBabyImprintCuddle }
   - name: disable_imprint_dino_buff
     group: Breeding and imprinting
@@ -1210,6 +1305,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableImprintDinoBuff }
 
   # ---- Structures --------------------------------------------------------
@@ -1221,6 +1317,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructureDamageMultiplier }
   - name: structure_resistance_multiplier
     group: Structures
@@ -1231,6 +1328,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructureResistanceMultiplier }
   - name: structure_damage_repair_cooldown
     group: Structures
@@ -1241,6 +1339,7 @@ settings:
     step: 1
     default: "180"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructureDamageRepairCooldown }
   - name: the_max_structures_in_range
     group: Structures
@@ -1251,6 +1350,7 @@ settings:
     step: 1
     default: "10500"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TheMaxStructuresInRange }
   - name: max_platform_saddle_structure_limit
     group: Structures
@@ -1260,6 +1360,7 @@ settings:
     step: 1
     default: "75"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxPlatformSaddleStructureLimit }
   - name: per_platform_max_structures_multiplier
     group: Structures
@@ -1269,6 +1370,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PerPlatformMaxStructuresMultiplier }
   - name: platform_saddle_build_area_bounds_multiplier
     group: Structures
@@ -1278,6 +1380,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PlatformSaddleBuildAreaBoundsMultiplier }
   - name: override_structure_platform_prevention
     group: Structures
@@ -1287,6 +1390,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/OverrideStructurePlatformPrevention }
   - name: max_gate_frame_on_saddles
     group: Structures
@@ -1296,6 +1400,7 @@ settings:
     step: 1
     default: "2"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxGateFrameOnSaddles }
   - name: structure_prevent_resource_radius_multiplier
     group: Structures
@@ -1305,6 +1410,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructurePreventResourceRadiusMultiplier }
   - name: always_allow_structure_pickup
     group: Structures
@@ -1315,6 +1421,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AlwaysAllowStructurePickup }
   - name: structure_pickup_time_after_placement
     group: Structures
@@ -1325,6 +1432,7 @@ settings:
     default: "30"
     show_if: { name: always_allow_structure_pickup, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructurePickupTimeAfterPlacement }
   - name: structure_pickup_hold_duration
     group: Structures
@@ -1335,6 +1443,7 @@ settings:
     step: 0.001
     default: "0.5"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/StructurePickupHoldDuration }
   - name: disable_structure_decay_pve
     group: Structures
@@ -1344,6 +1453,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableStructureDecayPvE }
   - name: pve_structure_decay_period_multiplier
     group: Structures
@@ -1354,6 +1464,7 @@ settings:
     default: "1.0"
     show_if: { name: disable_structure_decay_pve, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PvEStructureDecayPeriodMultiplier }
   - name: auto_destroy_old_structures_multiplier
     group: Structures
@@ -1364,6 +1475,7 @@ settings:
     step: 0.001
     default: "0.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AutoDestroyOldStructuresMultiplier }
   - name: only_auto_destroy_core_structures
     group: Structures
@@ -1373,6 +1485,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/OnlyAutoDestroyCoreStructures }
   - name: fast_decay_unsnapped_core_structures
     group: Structures
@@ -1383,6 +1496,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/FastDecayUnsnappedCoreStructures }
   - name: force_all_structure_locking
     group: Structures
@@ -1392,6 +1506,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/ForceAllStructureLocking }
   - name: enable_extra_structure_prevention_volumes
     group: Structures
@@ -1402,6 +1517,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/EnableExtraStructurePreventionVolumes }
   - name: ignore_limit_max_structures_in_range_type_flag
     group: Structures
@@ -1411,6 +1527,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/IgnoreLimitMaxStructuresInRangeTypeFlag }
   - name: allow_crate_spawns_on_top_of_structures
     group: Structures
@@ -1420,6 +1537,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowCrateSpawnsOnTopOfStructures }
   - name: pve_allow_structures_at_supply_drops
     group: Structures
@@ -1429,6 +1547,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PvEAllowStructuresAtSupplyDrops }
   - name: disable_structure_placement_collision
     group: Structures
@@ -1439,6 +1558,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/bDisableStructurePlacementCollision }
 
   # ---- PvP and raiding ---------------------------------------------------
@@ -1450,6 +1570,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowCaveBuildingPvE }
   - name: allow_cave_building_pvp
     group: PvP and raiding
@@ -1459,6 +1580,7 @@ settings:
     false_value: "False"
     default: "True"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowCaveBuildingPvP }
   - name: prevent_offline_pvp
     group: PvP and raiding
@@ -1468,6 +1590,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventOfflinePvP }
   - name: prevent_offline_pvp_interval
     group: PvP and raiding
@@ -1478,6 +1601,7 @@ settings:
     default: "900"
     show_if: { name: prevent_offline_pvp, equals: "True" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventOfflinePvPInterval }
   - name: pvp_structure_decay
     group: PvP and raiding
@@ -1487,6 +1611,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PvPStructureDecay }
   - name: pvp_dino_decay
     group: PvP and raiding
@@ -1496,6 +1621,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PvPDinoDecay }
   - name: allow_multiple_attached_c4
     group: PvP and raiding
@@ -1505,6 +1631,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/AllowMultipleAttachedC4 }
   - name: increase_pvp_respawn_interval_base_amount
     group: PvP and raiding
@@ -1515,6 +1642,7 @@ settings:
     step: 0.001
     default: "60.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalBaseAmount }
   - name: increase_pvp_respawn_interval_check_period
     group: PvP and raiding
@@ -1524,6 +1652,7 @@ settings:
     step: 0.001
     default: "300.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalCheckPeriod }
   - name: increase_pvp_respawn_interval_multiplier
     group: PvP and raiding
@@ -1533,6 +1662,7 @@ settings:
     step: 0.001
     default: "2.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/IncreasePvPRespawnIntervalMultiplier }
 
   # ---- Tribes ------------------------------------------------------------
@@ -1545,6 +1675,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxNumberOfPlayersInTribe }
   - name: prevent_tribe_alliances
     group: Tribes
@@ -1554,6 +1685,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventTribeAlliances }
   - name: max_alliances_per_tribe
     group: Tribes
@@ -1564,6 +1696,7 @@ settings:
     default: "10"
     show_if: { name: prevent_tribe_alliances, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxAlliancesPerTribe }
   - name: max_tribes_per_alliance
     group: Tribes
@@ -1574,6 +1707,7 @@ settings:
     default: "10"
     show_if: { name: prevent_tribe_alliances, equals: "False" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxTribesPerAlliance }
   - name: tribe_name_change_cooldown
     group: Tribes
@@ -1583,6 +1717,7 @@ settings:
     step: 1
     default: "15"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TribeNameChangeCooldown }
   - name: max_tribe_logs
     group: Tribes
@@ -1592,6 +1727,7 @@ settings:
     step: 1
     default: "400"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxTribeLogs }
   - name: tribe_log_destroyed_enemy_structures
     group: Tribes
@@ -1601,6 +1737,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/TribeLogDestroyedEnemyStructures }
 
   # ---- World and time ----------------------------------------------------
@@ -1613,6 +1750,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DayCycleSpeedScale }
   - name: day_time_speed_scale
     group: World and time
@@ -1622,6 +1760,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DayTimeSpeedScale }
   - name: night_time_speed_scale
     group: World and time
@@ -1632,6 +1771,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/NightTimeSpeedScale }
   - name: disable_weather_fog
     group: World and time
@@ -1641,6 +1781,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/DisableWeatherFog }
   - name: random_supply_crate_points
     group: World and time
@@ -1650,6 +1791,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/RandomSupplyCratePoints }
 
   # ---- Cluster transfers -------------------------------------------------
@@ -1661,6 +1803,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadSurvivors }
   - name: prevent_download_items
     group: Cluster transfers
@@ -1670,6 +1813,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadItems }
   - name: prevent_download_dinos
     group: Cluster transfers
@@ -1679,6 +1823,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventDownloadDinos }
   - name: prevent_upload_survivors
     group: Cluster transfers
@@ -1688,6 +1833,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventUploadSurvivors }
   - name: prevent_upload_items
     group: Cluster transfers
@@ -1697,6 +1843,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventUploadItems }
   - name: prevent_upload_dinos
     group: Cluster transfers
@@ -1706,6 +1853,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/PreventUploadDinos }
   - name: cross_ark_allow_foreign_dino_downloads
     group: Cluster transfers
@@ -1715,6 +1863,7 @@ settings:
     false_value: "False"
     default: "False"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/CrossARKAllowForeignDinoDownloads }
   - name: minimum_dino_reupload_interval
     group: Cluster transfers
@@ -1725,6 +1874,7 @@ settings:
     step: 0.001
     default: "0.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MinimumDinoReuploadInterval }
   - name: max_tribute_dinos
     group: Cluster transfers
@@ -1734,6 +1884,7 @@ settings:
     step: 1
     default: "20"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxTributeDinos }
   - name: max_tribute_items
     group: Cluster transfers
@@ -1743,6 +1894,7 @@ settings:
     step: 1
     default: "50"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/MaxTributeItems }
 
   # ---- Advanced ----------------------------------------------------------
@@ -1754,6 +1906,7 @@ settings:
       rates, without a restart. Blank disables it.
     default: ""
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/CustomDynamicConfigUrl }
   - name: rcon_server_game_log_buffer
     group: Advanced
@@ -1763,6 +1916,7 @@ settings:
     step: 1
     default: "600"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/RCONServerGameLogBuffer }
   - name: fast_decay_interval
     group: Advanced
@@ -1772,6 +1926,7 @@ settings:
     step: 1
     default: "43200"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/FastDecayInterval }
   - name: use_corpse_life_span_multiplier
     group: Advanced
@@ -1781,6 +1936,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/UseCorpseLifeSpanMultiplier }
   - name: global_powered_battery_durability_decrease_per_second
     group: Advanced
@@ -1790,6 +1946,7 @@ settings:
     step: 0.001
     default: "4.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/GlobalPoweredBatteryDurabilityDecreasePerSecond }
   - name: fuel_consumption_interval_multiplier
     group: Advanced
@@ -1799,6 +1956,7 @@ settings:
     step: 0.001
     default: "1.0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/FuelConsumptionIntervalMultiplier }
   - name: limit_non_player_dropped_items_range
     group: Advanced
@@ -1809,6 +1967,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LimitNonPlayerDroppedItemsRange }
   - name: limit_non_player_dropped_items_count
     group: Advanced
@@ -1819,6 +1978,7 @@ settings:
     default: "0"
     show_if: { name: limit_non_player_dropped_items_range, not_equals: "0" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/Game.ini, key: /Script/ShooterGame.ShooterGameMode/LimitNonPlayerDroppedItemsCount }
   - name: npc_network_stasis_range_scale_player_count_start
     group: Advanced
@@ -1831,6 +1991,7 @@ settings:
     step: 1
     default: "0"
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePlayerCountStart }
   - name: npc_network_stasis_range_scale_player_count_end
     group: Advanced
@@ -1841,6 +2002,7 @@ settings:
     default: "0"
     show_if: { name: npc_network_stasis_range_scale_player_count_start, not_equals: "0" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePlayerCountEnd }
   - name: npc_network_stasis_range_scale_percent_end
     group: Advanced
@@ -1852,6 +2014,7 @@ settings:
     default: "0.55"
     show_if: { name: npc_network_stasis_range_scale_player_count_start, not_equals: "0" }
     optional: true
+    cluster_default: true
     to: { file: config/WindowsServer/GameUserSettings.ini, key: ServerSettings/NPCNetworkStasisRangeScalePercentEnd }
 
 # ARK's own ini files, patched rather than rewritten.

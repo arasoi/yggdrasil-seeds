@@ -6,7 +6,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.2.0"
+version: "1.2.1"
 
 branding:
   steam_app_id: 346110
@@ -109,15 +109,15 @@ variables:
   # rather than assumed — Aquatica (a non-canonical 10th-anniversary DLC
   # map) shipped 2025-07-15 and is recent enough to be easy to miss.
   #
-  # This costs custom/mod maps, which are a real and common ASE use case: a
-  # select control can only hold what it declares, so an operator running a
-  # Workshop map now has no field to type its code into. Accepted knowingly
-  # for the maps operators actually ask to run by name; revisit if mod-map
-  # support turns out to matter here.
+  # type: combo, not select: these options are suggestions, not the whole
+  # set of legal values, so a custom or Steam Workshop mod map -- a real,
+  # common way this game is actually run -- still has a field to be typed
+  # into. A previous release used select here and lost that; combo restores
+  # it while keeping the same dropdown-of-known-maps experience.
   - name: map
     label: Map
-    description: Which official map this server runs.
-    type: select
+    description: Which official map this server runs. Not in the list? Type it -- this also accepts a custom or mod map code.
+    type: combo
     default: TheIsland
     editable: true
     options:

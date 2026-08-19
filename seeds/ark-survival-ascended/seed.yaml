@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.3.0"
+version: "5.4.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -159,7 +159,40 @@ containers:
 variables:
   # ASA's maps carry a "_WP" suffix (Unreal Engine 5 World Partition).
   # Plain "TheIsland" is the ASE name and does not exist in ASA's install.
-  - { name: map, default: TheIsland_WP, editable: true }
+  #
+  # A dropdown rather than free text: the exact spelling is easy to get
+  # wrong by hand (the suffix, the underscore, Genesis: Part 1 rendering as
+  # bare "Genesis_WP" with no "1"), and a typo here does not fail loudly —
+  # ARK just refuses to find the map and the server never comes up. This is
+  # every map the dedicated server binary accepts as of 2026-08, confirmed
+  # against ARK's own official wiki (ark.wiki.gg/wiki/Server_configuration)
+  # rather than assumed: Genesis: Part 1 (Genesis_WP) shipped 2026-07-03,
+  # Lost Colony (LostColony_WP) 2025-12-19, and Astraeos (Astraeos_WP)
+  # 2025-02-14 are all recent enough to be easy to miss.
+  #
+  # This costs custom/mod maps, which are a real and common ARK use case:
+  # a select control can only hold what it declares, so an operator running
+  # a Workshop map now has no field to type its code into. Accepted
+  # knowingly for the maps operators actually ask to run by name; revisit
+  # if mod-map support turns out to matter here.
+  - name: map
+    label: Map
+    description: Which official map this server runs.
+    type: select
+    default: TheIsland_WP
+    editable: true
+    options:
+      - { value: TheIsland_WP, label: The Island }
+      - { value: TheCenter_WP, label: The Center }
+      - { value: ScorchedEarth_WP, label: Scorched Earth }
+      - { value: Ragnarok_WP, label: Ragnarok }
+      - { value: Aberration_WP, label: Aberration }
+      - { value: Extinction_WP, label: Extinction }
+      - { value: Valguero_WP, label: Valguero }
+      - { value: Genesis_WP, label: "Genesis: Part 1" }
+      - { value: Astraeos_WP, label: Astraeos, description: Paid DLC map. }
+      - { value: LostColony_WP, label: Lost Colony, description: Paid DLC expansion map. }
+      - { value: BobsMissions_WP, label: Club ARK, description: A minigame hub, not an open-world survival map. }
   - { name: session_name, default: YggdrasilARK, editable: true }
   - { name: max_players, default: "70", editable: true }
   # RCON only actually binds its port when an admin password is set —

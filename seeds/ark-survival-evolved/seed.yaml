@@ -6,7 +6,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.1.0"
+version: "1.2.0"
 
 branding:
   steam_app_id: 346110
@@ -100,7 +100,40 @@ variables:
   # Plain "TheIsland", never ASA's "TheIsland_WP" -- the "_WP" suffix names
   # ASA's Unreal Engine 5 World Partition rebuild of the map and does not
   # exist in ASE's own install at all.
-  - { name: map, default: TheIsland, editable: true }
+  #
+  # A dropdown rather than free text, the same reasoning ASA's own seed
+  # records: the exact spelling is easy to get wrong by hand and a typo
+  # does not fail loudly, ARK just refuses to find the map. This is every
+  # map ASE's dedicated server binary accepts as of 2026-08, confirmed
+  # against ARK's own official wiki (ark.wiki.gg/wiki/Server_configuration)
+  # rather than assumed — Aquatica (a non-canonical 10th-anniversary DLC
+  # map) shipped 2025-07-15 and is recent enough to be easy to miss.
+  #
+  # This costs custom/mod maps, which are a real and common ASE use case: a
+  # select control can only hold what it declares, so an operator running a
+  # Workshop map now has no field to type its code into. Accepted knowingly
+  # for the maps operators actually ask to run by name; revisit if mod-map
+  # support turns out to matter here.
+  - name: map
+    label: Map
+    description: Which official map this server runs.
+    type: select
+    default: TheIsland
+    editable: true
+    options:
+      - { value: TheIsland, label: The Island }
+      - { value: TheCenter, label: The Center }
+      - { value: ScorchedEarth_P, label: Scorched Earth }
+      - { value: Ragnarok, label: Ragnarok }
+      - { value: Aberration_P, label: Aberration }
+      - { value: Extinction, label: Extinction }
+      - { value: Valguero_P, label: Valguero }
+      - { value: Genesis, label: "Genesis: Part 1" }
+      - { value: CrystalIsles, label: Crystal Isles }
+      - { value: Gen2, label: "Genesis: Part 2" }
+      - { value: LostIsland, label: Lost Island }
+      - { value: Fjordur, label: Fjordur }
+      - { value: Aquatica, label: Aquatica, description: Non-canonical 10th-anniversary DLC map. }
   - { name: session_name, default: YggdrasilARK, editable: true }
   - { name: max_players, default: "70", editable: true }
   # RCON only actually binds its port when an admin password is set, the

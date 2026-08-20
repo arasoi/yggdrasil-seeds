@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.4.0"
+version: "5.4.1"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -96,10 +96,20 @@ containers:
     #
     # This is what the community's own ARK containers do; no flag makes the
     # engine print to stdout under Proton.
+    #
+    # -WinLiveMaxPlayers and -oldconsole were dropped (present in earlier
+    # drafts, copied from a community server config). -WinLiveMaxPlayers sets
+    # a Games-for-Windows-Live/Xbox crossplay slot count, and nothing in this
+    # seed ever passes -crossplay; -oldconsole changes stdout's own text
+    # formatting, and this seed never reads stdout for anything -- readiness
+    # and the console both come from tailing ShooterGame.log above. Neither
+    # removal has been verified against a running server; if a rebuilt
+    # server behaves differently after this change, these two are the first
+    # thing to restore.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
-      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog -NoBattlEye -Port={{.Ports.game}}'
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -servergamelog -NoBattlEye -Port={{.Ports.game}}'
     workdir: /game
     env:
       HOME: /home/steam
@@ -107,8 +117,15 @@ containers:
       # writable mounts that also have to belong to the container's user.
       # Unreal fails softly without it — unable to create ShooterGame.log it
       # falls back to Wine's stubbed Windows event log and dies with nothing
-      # to read (ADR-047).
-      YGG_PROTON_CHOWN_DIRS: "/game/ShooterGame/Saved /cluster"
+      # to read (ADR-047). Config is not listed separately: it is bind-mounted
+      # nested under Saved, and chown -R crosses that mount boundary from the
+      # container's own view. mods is a sibling path under the read-only
+      # install root, not nested under Saved or cluster, so it needs its own
+      # entry -- without it, the exact CurseForge-client write failure the
+      # mods mount above exists to fix can still happen if this server's
+      # writable directories land under a uid the steam user isn't remapped
+      # to. Not yet hit live; added on inspection, not from an incident.
+      YGG_PROTON_CHOWN_DIRS: "/game/ShooterGame/Saved /game/ShooterGame/Binaries/Win64/ShooterGame/ModsUserData /cluster"
       # Must end in the Steam app id — Proton's protonfixes parses it back
       # out of this path with a regex.
       STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/2430930

@@ -6,7 +6,14 @@ description: >
   Dedicated server for Valheim, a Norse survival and exploration game.
   Crossplay is on by default, so the server prints a join code players can
   use instead of an address.
-version: "2.2.1"
+version: "2.2.2"
+
+# The base game's own Steam listing (896660, the dedicated-server tool app
+# id installed below, has no store page and so no artwork of its own).
+branding:
+  steam_app_id: 892970
+  logo: logo.png
+  banner: banner.jpg
 
 # The dedicated server ships amd64 Linux binaries only.
 architectures: [amd64]

@@ -6,7 +6,14 @@ description: >
   Dedicated server for Vintage Story, a sandbox survival and building game.
   Each server gets its own copy of the game files, so different worlds can run
   different versions.
-version: "2.0.1"
+version: "2.0.2"
+
+# Not on Steam, so no steam_app_id -- both images come from the developer's
+# own wiki (wiki.vintagestory.at, run by Anego Studios themselves): the
+# game's own square logo, and their release-announcement key art as banner.
+branding:
+  logo: logo.png
+  banner: banner.png
 
 # Confirmed only against the linux-x64 server tarball (the templated URL
 # below). An ARM64 dedicated server tarball was not found published anywhere
@@ -144,11 +151,16 @@ containers:
       # ports would do the moment a second Vintage Story server shares a node.
       #
       # Which protocol actually carries player connections was not settled
-      # with confidence from the wiki alone; `kind: game` (and therefore the
-      # connect link below) is put on the TCP port as the better-documented
-      # guess. Getting that guess wrong costs a cosmetic connect label, not a
-      # working server — both numbers are always identical either way, so
-      # both protocols are open regardless of which one is "correct".
+      # with confidence from the wiki alone, so `kind: game` (and therefore
+      # the connect link below) went on the TCP port as the better-documented
+      # guess. Corroborated since: AMP's own Vintage Story template (an
+      # actively-maintained third party actually running this game) declares
+      # exactly one port, TCP, for game traffic, and nothing else -- not
+      # independent proof against a live connection here, but real evidence
+      # in the same direction rather than a second guess. Getting it wrong
+      # either way costs a cosmetic connect label, not a working server —
+      # both numbers are always identical, so both protocols are open
+      # regardless of which one is "correct".
       - { name: game, protocol: tcp, default: 42420, kind: game }
       - { name: game-udp, protocol: udp, offset_from: game, offset: 0 }
 

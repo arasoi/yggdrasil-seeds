@@ -5,7 +5,14 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.0.8"
+version: "1.1.0"
+
+# The base game's own Steam listing — distinct from 2394010, the dedicated
+# server tool app installed below.
+branding:
+  steam_app_id: 1623730
+  logo: logo.png
+  banner: banner.jpg
 
 # amd64 only. Pocketpair ship no arm64 build of the dedicated server, and a
 # node declaring the wrong architecture is refused at creation rather than
@@ -123,6 +130,7 @@ containers:
       exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
       -log
       -port={{.Ports.game}}
+      -queryport={{.Ports.query}}
       -players={{.Vars.server_player_max_num}}
       -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
       {{.Vars.community_server}}'
@@ -154,12 +162,20 @@ containers:
       # cannot get without a rebuild, and a node's range is not scarce (ADR-076).
       - { name: rcon, protocol: tcp, default: 25575, kind: rcon }
       - { name: rest, protocol: tcp, default: 8212, kind: web }
-      #
-      # No query port. Palworld's own config file has no query-port key among
-      # its 119, which is the authority this seed has -- several hosting guides
-      # mention 27015, but nothing in the shipped configuration asks for it, and
-      # declaring a port the game never binds would allocate a number that means
-      # nothing.
+      # A query port was previously declared absent here on the reasoning that
+      # PalWorldSettings.ini has no query-port key among its 119 -- true, but
+      # the wrong question: -queryport is a real command-line argument, not an
+      # ini key, and the ini file was the only thing checked. It is genuinely
+      # undocumented on Palworld's own official arguments page as of 2026-07,
+      # but confirmed live by a third party who inspected a running server's
+      # actual open sockets (Get-NetUDPEndpoint) and found it listening on UDP
+      # 27015 for Steam queries -- a separate socket from the game port -- and
+      # confirmed -queryport=<n> changes it. Undeclared, every server built
+      # from this seed silently competed for the same fixed 27015 on its node,
+      # exactly the game_raw shape ARK's own seed was bitten by on a live
+      # fleet: a port the game binds and the control plane does not know about
+      # is one it will hand to another server.
+      - { name: query, protocol: udp, default: 27015, kind: query }
 
 config:
   files:

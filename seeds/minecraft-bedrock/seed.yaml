@@ -6,7 +6,15 @@ description: >
   Dedicated server for Minecraft Bedrock Edition — the version played on
   consoles, phones and Windows. The server downloads itself when it first
   starts, so there is no separate install step.
-version: "4.0.1"
+version: "4.0.2"
+
+# Minecraft is not sold on Steam, so there is no steam_app_id here -- both
+# images are Mojang's own official franchise assets (minecraft.net's press
+# logo, and the Minecraft Wiki's mirror of Mojang's 2024 key art), not
+# fan-made substitutes.
+branding:
+  logo: logo.jpg
+  banner: banner.jpg
 
 # Bedrock Dedicated Server ships amd64-only Linux binaries.
 architectures: [amd64]

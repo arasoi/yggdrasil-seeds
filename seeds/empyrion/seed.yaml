@@ -5,7 +5,14 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.12"
+version: "1.0.14"
+
+# The base game's own Steam listing — distinct from 530870, the dedicated
+# server tool app installed below.
+branding:
+  steam_app_id: 383120
+  logo: logo.png
+  banner: banner.jpg
 
 # amd64 only, and the architecture here is the *node's* rather than the
 # binary's: Eleon ship no Linux build of the dedicated server at all, so this
@@ -117,20 +124,44 @@ containers:
     #     what ruled the mount out as the cause and left the renderer as the
     #     remaining explanation, rather than being guessed at from the start.
     #
-    # KNOWN WRONG, and left alone deliberately for now: -dedicated is not an
-    # argument Eleon passes. Both depot scripts run `EmpyrionLauncher -startDedi`
-    # (or -startDediWithGfx) with no config argument at all, read out of the
-    # depot rather than guessed -- the launcher takes dedicated.yaml from the
-    # game root by default, and the depot ships one there. Ours is in Saves
-    # because the game root is a read-only install mount, and an absolute
-    # Windows path may well not be what this option accepts; a filename relative
-    # to the game root is the conventional form. Changing it at the same time as
-    # the DLL override below would make a failure unattributable, which is the
-    # mistake that cost the most time here. It is the next thing to try.
-    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated Z:\\game\\Saves\\dedicated.yaml"
+    # UPDATED, still unverified against a real run: the previous line here was
+    # flagged KNOWN WRONG (an absolute Z:\game\... path) and left alone
+    # deliberately, one variable at a time. Checking AMP's own Empyrion
+    # template (CubeCoders/AMPTemplates, actively maintained, run against this
+    # exact binary -- DedicatedServer/EmpyrionDedicated.exe, confirming this
+    # seed's own choice to bypass EmpyrionLauncher.exe was right) resolves it:
+    # AMP passes -dedicated as a bare filename relative to the working
+    # directory, never an absolute path -- exactly the form this comment
+    # already suspected but had not confirmed. Multiple independent Empyrion
+    # server guides show the same shape (-dedicated renntech.yaml,
+    # -dedicated MyDedicatedConfig.yaml), never a drive-letter path. Saves\ is
+    # this seed's own subdirectory of the writable mount, since AMP has no
+    # read-only/writable split to route around and puts its config at the
+    # working directory root directly.
+    #
+    # -logFile - is also new here, and worth explaining because it may be the
+    # actual fix for the "exits 1 with no output at all" failure this seed was
+    # stuck on: it is a standard Unity engine argument (not Empyrion-specific)
+    # that redirects the player log to stdout instead of a file. If whatever
+    # was killing the process was writing to a log file this container never
+    # reads, this is what would have made it invisible.
+    #
+    # Neither change has been run against a real depot yet. If this still does
+    # not boot, these are not proven and should not be trusted over a fresh
+    # WINEDEBUG=+loaddll or PROTON_LOG trace.
+    command: "ygg-proton ./DedicatedServer/EmpyrionDedicated.exe -batchmode -nographics -dedicated \"Saves\\dedicated.yaml\" -logFile -"
     workdir: /game
     env:
       HOME: /home/steam
+      # Missing until now, and a real gap: a Steamworks-linked binary talks to
+      # the Steam API as the game client would and needs to know which app it
+      # is, and that has to be the *game's* app id (383120), not the
+      # dedicated-server tool's (530870) used for the install above -- ARK's
+      # and Valheim's own seeds needed exactly this for the same reason. AMP's
+      # Empyrion template confirms it: SteamAppId=383120 in its own
+      # environment block. Not yet confirmed this was part of why the server
+      # never boots, only that it was silently absent.
+      SteamAppId: "383120"
       # The image always takes ownership of HOME; the game's own writable mounts
       # have to belong to the container's user too, or the game cannot write its
       # galaxy and fails in ways that name neither the directory nor the uid.

@@ -117,6 +117,16 @@ containers:
     # binary this seed has never invoked, failed to load during an
     # unrelated hang investigation, which ruled BattlEye out as the cause of
     # that one hang and nothing more. See the battleye variable below.
+    #
+    # CONFIRMED LIVE (2026-08-20): a real ARK ASA server built from this
+    # command, with no -NoBattlEye at all, printed
+    #   Server Initializing with BattlEye Anti-Cheat Protection...
+    #   BattlEye successfully started.
+    # and went on to a completely ordinary clean boot -- "has successfully
+    # started!", "Full Startup: 29.40 seconds", "Server has completed
+    # startup and is now advertising for join." BattlEye under Proton is no
+    # longer a documentation claim on this seed; it is a thing this project
+    # has watched work.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
@@ -235,8 +245,10 @@ variables:
   # Default is BattlEye ON (empty true_value -- no flag needed), matching
   # both Pelican's BATTLE_EYE=1 default and AMP's "Disable BattlEye"
   # defaulting unchecked, both running the same Proton stack this seed
-  # does. Not independently verified end to end against a real game client
-  # connecting to a server built from this seed.
+  # does. Confirmed live (2026-08-20): a real server booted clean with
+  # "BattlEye successfully started." What is still not verified is a real
+  # game client actually connecting and playing against it -- only that
+  # BattlEye itself starts and does not block the server from coming up.
   - name: battleye
     label: BattlEye anti-cheat
     description: Turn off only if a real server shows BattlEye interfering under Proton.

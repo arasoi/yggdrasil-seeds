@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.4.1"
+version: "5.4.2"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -102,14 +102,21 @@ containers:
     # a Games-for-Windows-Live/Xbox crossplay slot count, and nothing in this
     # seed ever passes -crossplay; -oldconsole changes stdout's own text
     # formatting, and this seed never reads stdout for anything -- readiness
-    # and the console both come from tailing ShooterGame.log above. Neither
-    # removal has been verified against a running server; if a rebuilt
-    # server behaves differently after this change, these two are the first
-    # thing to restore.
+    # and the console both come from tailing ShooterGame.log above.
+    #
+    # The trailing -Port={{.Ports.game}} was also dropped: Port is already
+    # set once, in the ?Port= connect string before -listen, and that is the
+    # same value the standalone flag repeated. Some community configs pass
+    # it a second time defensively; nothing here has confirmed that repeat
+    # is load-bearing for this build rather than copy-paste.
+    #
+    # None of these three removals has been verified against a running
+    # server; if a rebuilt server behaves differently after this change,
+    # they are the first thing to restore.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
-      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -servergamelog -NoBattlEye -Port={{.Ports.game}}'
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -servergamelog -NoBattlEye'
     workdir: /game
     env:
       HOME: /home/steam

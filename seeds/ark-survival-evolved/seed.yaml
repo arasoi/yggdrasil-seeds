@@ -6,7 +6,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.3.0"
+version: "1.3.1"
 
 branding:
   steam_app_id: 346110
@@ -2022,12 +2022,24 @@ settings:
 # already configured by hand: read the file back off the node and adopt the
 # values this seed recognises, rather than having the next rebuild quietly
 # patch over them.
+#
+# Culture is pinned the same way ark-survival-ascended's seed now does, as
+# insurance rather than a confirmed fix here: a missing [Internationalization]
+# Culture key was found live on two real ASA servers under this project's
+# SteamCMD-plus-Proton install path and is a documented cause of an
+# otherwise-healthy server never appearing in any server list. This seed's own
+# server runs natively on Linux with no Wine/Proton involved, so the same
+# failure mode — no real Windows locale for the game to read — may not apply
+# here at all, and that has NOT been checked against a real running ASE
+# server. The key costs nothing to set regardless: an English-language server
+# forcing Culture=en changes nothing observable.
 config:
   files:
     - path: config/LinuxServer/GameUserSettings.ini
       parser: ini
       manage: patch
       importable: true
+      set: { "Internationalization/Culture": "en" }
     - path: config/LinuxServer/Game.ini
       parser: ini
       manage: patch

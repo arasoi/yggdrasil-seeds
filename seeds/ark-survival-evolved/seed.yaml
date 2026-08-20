@@ -6,7 +6,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.2.0"
+version: "1.3.0"
 
 branding:
   steam_app_id: 346110
@@ -53,10 +53,19 @@ containers:
     #
     # -clusterid=/-ClusterDirOverride= are appended by the cluster block
     # above, only when this server is actually a cluster member.
+    #
+    # -NoBattlEye is deliberately NOT hardcoded here, matching the fix ASA's
+    # own seed carries and for the same reason: Pelican's ARK:SE egg, which
+    # runs this exact native Linux binary the same way this seed does, has
+    # its BATTLE_EYE variable default to "1" (enabled); AMP's ARK:SE
+    # template's "Disable BattlEye" checkbox likewise defaults unchecked.
+    # Neither reflects a Wine/Proton workaround here -- ASE has a real
+    # native Linux binary -- so there was never a documented reason for this
+    # seed to disable it unconditionally. See the battleye variable below.
     command: >-
       ./ShooterGame/Binaries/Linux/ShooterGameServer
       {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}}
-      -server -log -NoBattlEye -servergamelog
+      -server -log {{.Vars.battleye}} -servergamelog
     workdir: /game
     env:
       # A Steamworks-linked binary loads its native client library from this
@@ -142,6 +151,19 @@ variables:
   # option (ServerAdminPassword) on both games. Change it before exposing a
   # server; it is also the in-game EnableCheats password.
   - { name: admin_password, default: changeme, editable: true }
+  # Default is BattlEye ON (empty true_value -- no flag needed), matching
+  # both Pelican's BATTLE_EYE=1 default and AMP's "Disable BattlEye"
+  # defaulting unchecked for this game. Not independently verified end to
+  # end against a real game client connecting to a server built from this
+  # seed.
+  - name: battleye
+    label: BattlEye anti-cheat
+    description: Turn off only if a real server shows BattlEye interfering.
+    type: bool
+    true_value: ""
+    false_value: "-NoBattlEye"
+    default: ""
+    editable: true
 
 groups:
   - name: Server

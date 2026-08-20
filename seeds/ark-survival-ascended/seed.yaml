@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.4.2"
+version: "5.5.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -97,26 +97,30 @@ containers:
     # This is what the community's own ARK containers do; no flag makes the
     # engine print to stdout under Proton.
     #
-    # -WinLiveMaxPlayers and -oldconsole were dropped (present in earlier
-    # drafts, copied from a community server config). -WinLiveMaxPlayers sets
-    # a Games-for-Windows-Live/Xbox crossplay slot count, and nothing in this
-    # seed ever passes -crossplay; -oldconsole changes stdout's own text
-    # formatting, and this seed never reads stdout for anything -- readiness
-    # and the console both come from tailing ShooterGame.log above.
+    # -WinLiveMaxPlayers, -oldconsole and the trailing -Port repeat were
+    # briefly dropped from here as suspected dead boilerplate, then
+    # restored: Pelican's own ARK ASA egg, built on
+    # ghcr.io/parkervcp/steamcmd:proton -- the same reference image this
+    # project's own investigation (see WINEDLLOVERRIDES below) used as its
+    # guide -- keeps all three in its current, actively-maintained startup
+    # command. That is better evidence for them than this project's own
+    # untested guess that they were dead weight.
     #
-    # The trailing -Port={{.Ports.game}} was also dropped: Port is already
-    # set once, in the ?Port= connect string before -listen, and that is the
-    # same value the standalone flag repeated. Some community configs pass
-    # it a second time defensively; nothing here has confirmed that repeat
-    # is load-bearing for this build rather than copy-paste.
-    #
-    # None of these three removals has been verified against a running
-    # server; if a rebuilt server behaves differently after this change,
-    # they are the first thing to restore.
+    # -NoBattlEye is deliberately NOT hardcoded here, unlike an earlier
+    # version of this seed. Both Pelican (its BATTLE_EYE variable defaults
+    # to "1", enabled) and AMP (its "Disable BattlEye" checkbox defaults
+    # unchecked) run ARK ASA under Proton with BattlEye ON by default, and
+    # Wildcard themselves shipped BattlEye support for the Steam Deck's own
+    # Proton client at ASA's 2023 launch. The earlier claim here -- that
+    # BattlEye's launcher cannot load under Wine -- overstated what was
+    # actually found: ArkAscended_BE.exe, a different BE-wrapped launcher
+    # binary this seed has never invoked, failed to load during an
+    # unrelated hang investigation, which ruled BattlEye out as the cause of
+    # that one hang and nothing more. See the battleye variable below.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
-      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -servergamelog -NoBattlEye'
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog {{.Vars.battleye}} -Port={{.Ports.game}}'
     workdir: /game
     env:
       HOME: /home/steam
@@ -228,6 +232,19 @@ variables:
   # seed left as plain text, found live: a cluster's settings page showed
   # it unmasked next to two siblings that correctly render as dots.
   - { name: admin_password, type: password, default: changeme, editable: true }
+  # Default is BattlEye ON (empty true_value -- no flag needed), matching
+  # both Pelican's BATTLE_EYE=1 default and AMP's "Disable BattlEye"
+  # defaulting unchecked, both running the same Proton stack this seed
+  # does. Not independently verified end to end against a real game client
+  # connecting to a server built from this seed.
+  - name: battleye
+    label: BattlEye anti-cheat
+    description: Turn off only if a real server shows BattlEye interfering under Proton.
+    type: bool
+    true_value: ""
+    false_value: "-NoBattlEye"
+    default: ""
+    editable: true
 
 # Groups exist to give the settings below a shape. The server page renders a
 # section of four or more groups as a tab rail with a filter over the whole

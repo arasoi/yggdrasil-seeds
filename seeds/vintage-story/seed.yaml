@@ -6,7 +6,7 @@ description: >
   Dedicated server for Vintage Story, a sandbox survival and building game.
   Each server gets its own copy of the game files, so different worlds can run
   different versions.
-version: "2.0.2"
+version: "2.1.0"
 
 # Not on Steam, so no steam_app_id -- both images come from the developer's
 # own wiki (wiki.vintagestory.at, run by Anego Studios themselves): the
@@ -1625,6 +1625,34 @@ stop:
   command: "/stop"
   timeout: 90s
   then: SIGTERM
+
+logs:
+  # No steamid, and none is possible: Vintage Story has its own account
+  # system entirely separate from Steam (every player, however they bought
+  # the game, registers at vintagestory.at and authenticates against that
+  # site's own server, keyed by a Vintage Story-native PlayerUID) -- even a
+  # server installed via SteamCMD never sees a SteamID64 anywhere near a
+  # join. Confirmed by a repo-wide search of the decompiled server source
+  # for "steam": zero matches.
+  #
+  #   25.8.2026 14:32:10 [Server Event] Steve 192.168.1.42:54782 joins.
+  #   25.8.2026 14:40:00 [Server Event] Player Steve left.
+  #
+  # Both lines are the literal strings the stock server emits
+  # (`{player.PlayerName} {client.Socket.RemoteEndPoint()} joins.` and
+  # `Lang.Get("Player {0} left.", playerName)`), read directly from
+  # StratumServer/Stratum's decompiled-source patches against the real,
+  # official closed-source binary -- not a paraphrase, and not this seed's
+  # own install, but as close to primary as it gets short of a live server.
+  # `\S+` is safe for the join capture since the server itself constrains a
+  # player name to `^(\w|-){1,16}$` -- no spaces possible.
+  #
+  # A kick/removal fires a different line ("Player <name> got removed.
+  # Reason: <reason>") that this pattern deliberately does not also match --
+  # counting a kick as an ordinary leave is the more honest default.
+  events:
+    - { event: join,  pattern: '\[Server Event\] (?P<player>\S+) \S+:\d+ joins\.' }
+    - { event: leave, pattern: '\[Server Event\] Player (?P<player>.+) left\.' }
 
 connect:
   label: "Direct connect"

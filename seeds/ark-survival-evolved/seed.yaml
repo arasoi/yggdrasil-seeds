@@ -6,7 +6,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.3.1"
+version: "1.4.0"
 
 branding:
   steam_app_id: 346110
@@ -2076,6 +2076,36 @@ ready:
 # crash:
 #   mode: log
 #   pattern: "Fatal error"
+
+# ASE's own console prints exactly two lines for a connection, both plain
+# and unbracketed -- no id of any kind, Steam or otherwise:
+#
+#   2021.01.15_15.51.13: k5342 joined this ARK!
+#   2021.01.15_15.50.51: k5342 left this ARK!
+#
+# Confirmed from two independent real sources rather than this seed's own
+# install: k5342/ark-notify (a Discord notifier that tails ShooterGame's log,
+# README quotes the line verbatim) and CubeCoders AMP's own ark-se template,
+# whose production Console.UserJoinRegex/UserLeaveRegex key on the identical
+# wording against real customer servers. Not the same bar as a ready/crash
+# pattern -- a wrong match here just means a confusing name in a list until
+# the next restart clears it, never a stranded or killed server -- but still
+# real, multi-source, currently-running-server evidence rather than a guess.
+#
+# No steamid: nothing in ASE's passive log output carries one at all: every
+# source that gets a player's SteamID64 does it through RCON's ListPlayers,
+# an active poll this project does not do for player tracking (ADR-119).
+#
+# Anchored on ARK's own `YYYY.MM.DD_HH.MM.SS: ` timestamp rather than left
+# unanchored: an early draft of this pattern searched from the start of the
+# line with nothing to its left, which matched but swallowed the frame's own
+# `[UE-timestamp][frame#]` prefix into the captured name instead of stopping
+# at the real one. Caught by testing the pattern against the line quoted
+# above before shipping it, not by inspection.
+logs:
+  events:
+    - { event: join,  pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) joined this ARK!' }
+    - { event: leave, pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) left this ARK!' }
 
 backup:
   include: [saved, config]

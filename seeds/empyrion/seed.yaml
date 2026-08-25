@@ -5,7 +5,7 @@ icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.0.14"
+version: "1.1.0"
 
 # The base game's own Steam listing — distinct from 530870, the dedicated
 # server tool app installed below.
@@ -284,6 +284,40 @@ stop:
   # mid-write is how a save is lost.
   timeout: 180s
   then: SIGTERM
+
+logs:
+  # Unlike every other seed with a logs.events rule so far, Empyrion's own
+  # console carries the SteamID64 on the *same* line as the join/leave verb,
+  # no correlation across lines required:
+  #
+  #   29-20:51:42.980 13_51 -LOG- [PA] Player 76561197997396135/'BlazeD' login ok
+  #   29-20:53:02.528 13_53 -LOG- [CM] Player CId=2, EId=2137, 76561197997396135/=/'BlazeD' disconnected
+  #
+  # Both lines are real, quoted verbatim from two independent Steam Community
+  # threads years apart (different players, different incidents), which agree
+  # byte-for-byte on format -- not this seed's own install, but strong
+  # corroboration. `login ok` is the join signal CubeCoders AMP's production
+  # Empyrion template keys on rather than the earlier `asking for login` line,
+  # since only `login ok` confirms the connection actually succeeded. The
+  # verbose `disconnected` line is used for leave rather than the simpler
+  # `logged off` line the same real logs also show, because it is what AMP's
+  # own regex targets and was confirmed firing on both a graceful log-off and
+  # an abrupt network-drop disconnect in the same real server's log -- the
+  # simpler line's reliability on an abrupt drop was not independently
+  # confirmed.
+  #
+  # Since Alpha 4.0, Empyrion has had no free-text character naming: the name
+  # captured here is always the player's current Steam persona name (a rename
+  # takes ~15 minutes to propagate in), so `player` and a resolved Steam
+  # persona are expected to agree.
+  #
+  # steamid is captured on join only, not leave -- the schema's own rule
+  # (ADR-119): a leave is matched on name alone, so a steamid captured there
+  # would just be discarded. The real leave line above carries one too, but
+  # nothing reads it.
+  events:
+    - { event: join,  pattern: '\[PA\] Player (?P<steamid>\d+)/''(?P<player>[^'']+)'' login ok' }
+    - { event: leave, pattern: '\[CM\] Player CId=\d+, EId=-?\d+, \d+/=/''(?P<player>[^'']+)'' disconnected' }
 
 connect:
   # `copy` only. Empyrion's join flow is entering an address in the client's

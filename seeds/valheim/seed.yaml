@@ -390,6 +390,43 @@ logs:
     # which is the whole reason extraction exists.
     - { name: join_code, pattern: "join code ([0-9]+)" }
 
+  # No events block, deliberately, investigated rather than skipped by
+  # default. Confirmed live against a real running server (Old Gods) plus
+  # independent real-world corroboration for the disconnect side:
+  #
+  #   PlayFab listen socket child connected to remote player D5F24E4A4CC5105
+  #   Player joined server "..." that has join code 565485, now 1 player(s)
+  #   PlayFab socket with remote ID playfab/D5F24E4A4CC5105 received local
+  #     Platform ID Steam_76561197968188170
+  #   Got handshake from client playfab/D5F24E4A4CC5105
+  #   Got character ZDOID from Arasoi : 3268377209:1
+  #
+  # The player's name and their Steam ID are never on the same line, or even
+  # adjacent ones -- the name appears only on "Got character ZDOID from
+  # <name>", ~20s after connecting, and the Steam ID only on the earlier
+  # "Platform ID Steam_<id>" line, correlated to the name-bearing one only by
+  # a shared PlayFab remote ID that never itself appears next to a name.
+  #
+  # Disconnect is worse: nothing carries the player's name at all, at or near
+  # disconnect time, in the current PlayFab-era build. The only line is
+  # "Player connection lost server \"...\" that has join code <code>, now <N>
+  # player(s)" -- a bare count, no name, and per a real captured example it
+  # does not even reliably decrement (it can fire mid-reconnect-attempt).
+  # Confirmed against an actively-maintained (commits as recent as this
+  # investigation) Valheim server manager's own source, which has to work
+  # around the exact same gap with an external join-time-populated,
+  # leave-time-looked-up player list keyed by ZDOID -- a stateful
+  # correlation this schema's single-regex, single-capture-group
+  # `logs.events` cannot express.
+  #
+  # A join-only rule was considered and rejected: the player list would only
+  # ever grow, showing everyone who has connected since the last restart as
+  # still online indefinitely -- a confidently wrong answer, worse than no
+  # answer, and the schema's own known-bad pattern (see the Palworld seed's
+  # identical reasoning for not keying its own join rule off the wrong
+  # line). Revisit if this schema ever gains a way to correlate a join to a
+  # later leave by something other than a name on the same line.
+
 stop:
   # Headless Unity process with no interactive stdin command, the same
   # position Bedrock's seed is in: a plain SIGTERM is all there is, and

@@ -6,7 +6,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.5.1"
+version: "5.6.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -2179,6 +2179,42 @@ ready:
 # crash:
 #   mode: log
 #   pattern: "Fatal error"
+
+# Unlike ASE, ASA's own console brackets an id onto the same line:
+#
+#   SurvivorOne [UniqueNetId:12345678901234567890123456789012 Platform:Steam] joined this ARK!
+#   SurvivorOne [UniqueNetId: Platform:None] left this ARK!
+#
+# That id is deliberately not captured. It is a 32-character hex EOS
+# (Epic Online Services) Product User ID, not a SteamID64 -- ASA
+# authenticates every player through EOS under the hood, even a Steam
+# client, so a real SteamID64 never appears here regardless of platform.
+# It is also frequently blank, especially on leave (`Platform:None` above
+# is a real, currently-running server's own leave line) -- an id this
+# unreliable, with no consumer once captured, is not worth the schema
+# surface. `.+?` non-greedy up to the literal ` [UniqueNetId:` is what
+# lets the bracket (present on every real line, empty or not) anchor the
+# match regardless of what it contains.
+#
+# Sourced from CubeCoders AMP's production ark-sa template (a widely-run
+# commercial hosting panel's own Console.UserJoinRegex/UserLeaveRegex,
+# matched against real customer servers), PatchRaptor (a real ASA-only
+# player-tracking tool whose regex explicitly requires 32 hex characters),
+# and MusclePr/asaui, whose parser captured the real blank-id leave line
+# quoted above from a genuinely running ASA server -- not this seed's own
+# install. Low stakes either way: a wrong match here is a confusing name
+# in a list until the next restart, never a stranded or killed server.
+#
+# Anchored on ARK's own `YYYY.MM.DD_HH.MM.SS: ` timestamp rather than left
+# unanchored, for the same reason ASE's own sibling pattern is: an
+# unanchored search matches but swallows the frame's own
+# `[UE-timestamp][frame#]` prefix into the captured name. Confirmed by
+# testing the pattern against both real lines quoted above, not by
+# inspection.
+logs:
+  events:
+    - { event: join,  pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] joined this ARK!' }
+    - { event: leave, pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] left this ARK!' }
 
 backup:
   include: [saved, config]

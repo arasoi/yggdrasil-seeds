@@ -5,7 +5,7 @@ icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.1.0"
+version: "1.2.0"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
 # server tool app installed below.
@@ -243,7 +243,14 @@ logs:
     # has no matching disconnect line, so pairing on it would leave a player
     # list that only ever grows -- and it would count one person twice, since
     # both lines fire for a single player joining.
-    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\.' }
+    #
+    # steamid is captured on join only, not leave -- the schema's own rule
+    # (ADR-119): a leave is matched on name alone, so a steamid captured
+    # there would just be discarded. `steam_` is followed by a plain
+    # SteamID64, independently confirmed against a real, differently-sourced
+    # server log (thijsvanloef/palworld-server-docker#538): "[LOG] Tanaka
+    # Lyanne joined the server. (User id: steam_76561198379551257)".
+    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\. \(User id: steam_(?P<steamid>\d+)' }
     - { event: leave, pattern: '\[LOG\] (?P<player>.+?) left the server\.' }
 
 connect:

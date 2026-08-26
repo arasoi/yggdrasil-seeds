@@ -1,0 +1,339 @@
+id: 7-days-to-die
+schema: 3
+name: 7 Days to Die
+icon: "🧟"
+description: >
+  Open-world zombie survival: scavenge, build a base, and defend it through
+  recurring horde nights. This seed runs the dedicated server, not the game.
+version: "1.0.0"
+
+# The dedicated-server tool's own app id (294420), separate from the base
+# game's, ships a real native Linux binary -- confirmed against LinuxGSM
+# (github.com/GameServerManagers/LinuxGSM), which has run it that way for
+# years with no Wine/Proton involved anywhere in its codebase. Not
+# independently re-verified against a live pull here: this control plane's
+# host is arm64, and the 32-bit x86 SteamCMD/Steam client segfaults under
+# both Docker's and Podman's amd64 emulation on it ("Loading Steam API..."
+# then SIGSEGV, reproduced identically on both runtimes) before it can even
+# print appinfo, let alone install and boot the real thing. Everything below
+# is sourced from LinuxGSM's own actively-maintained sdtd module and its
+# companion reference config (github.com/GameServerManagers/Game-Server-
+# Configs), not from running it -- treat the readiness and stop sections
+# below as the honest limit of what that gets you.
+architectures: [amd64]
+
+install:
+  # No cluster/character-transfer concept here, and no reason for two
+  # 7 Days to Die servers to share one copy of the game files -- the same
+  # call Valheim's seed makes for the same reason.
+  shared: false
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container, so the seed names which one (ADR-057).
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 294420
+
+server:
+  # A single writable root outside the read-only install, the same shape
+  # Valheim's seed uses. SaveGameFolder in the templated config below points
+  # here rather than at Unity's default ~/.local/share/7DaysToDie, which
+  # would otherwise depend on exactly which uid the container runs as.
+  writable_paths:
+    - { from: "", to: /data }
+
+containers:
+  - role: game
+    primary: true
+    # base-linux, not base-steamcmd: the install step above already
+    # materialised the depot, so this container only execs the binary.
+    image: { base: linux }
+    # Exact flags LinuxGSM uses in production (lgsm/config-default/config-lgsm/
+    # sdtdserver/_default.cfg's startparameters). No -logfile: this project's
+    # agent captures the container's own stdout for the console (ADR-032),
+    # and Unity's headless build already writes there under -batchmode
+    # -nographics with nothing else asked of it -- the same reasoning
+    # Valheim's own seed records for omitting -logFile.
+    command: >-
+      ./7DaysToDieServer.x86_64
+      -quit -batchmode -nographics -dedicated
+      -configfile=/data/serverconfig.xml
+    workdir: /game
+    ports:
+      # Every source checked (LinuxGSM's own port docs, two independent
+      # hosting guides, and a GameServerManagers Docker image built on top of
+      # LinuxGSM) agrees this is TCP *and* UDP on the same number, not one
+      # port each -- offset_from/offset:0 is this project's mechanism for a
+      # same-number dual-protocol pair (ADR-083, ADR-109), already used for
+      # exactly this shape by the Vintage Story seed.
+      - { name: game, protocol: udp, default: 26900, kind: game }
+      - { name: game-tcp, protocol: tcp, offset_from: game, offset: 0 }
+      # Two further UDP ports immediately above the base, confirmed by the
+      # same sources. Declared right after the base port and before the
+      # independently-allocated telnet port below, so a base candidate is
+      # never granted a number one of these needs (ports allocate in
+      # declaration order -- the same reasoning ARK's own seed records for
+      # its own offset sibling).
+      - { name: query1, protocol: udp, offset_from: game, offset: 1 }
+      - { name: query2, protocol: udp, offset_from: game, offset: 2 }
+      # Independent: telnet is the game's remote-console interface and has
+      # no fixed relationship to the game port.
+      - { name: telnet, protocol: tcp, default: 8081, kind: rcon }
+
+# GameWorld is free text rather than a closed dropdown (unlike ARK's `map`):
+# "Navezgane" is the only world bundled with the install, but the game also
+# accepts any name and will either load an existing world under that name or
+# generate a new one via WorldGenSeed/WorldGenSize. Only the Navezgane path
+# is covered by anything checked for this seed -- it ships inside the
+# read-only install, so it needs no separate write target. Whether a freshly
+# generated custom world writes entirely under SaveGameFolder (safe) or
+# tries to write generated map data somewhere else (which, under this
+# project's read-only-install model, would fail) was not established from
+# the sources available here. Confirm before relying on a non-Navezgane
+# world on a real server.
+variables:
+  # ---- Server -------------------------------------------------------------
+  - { name: server_name, group: Server, label: Server name, default: "A Yggdrasil server", editable: true }
+  - name: server_password
+    group: Server
+    label: Join password
+    description: Blank leaves the server open.
+    type: password
+    default: ""
+    editable: true
+  - { name: server_description, group: Server, label: Description, description: Shown in the server browser., default: "A 7 Days to Die server", editable: true }
+  - { name: max_players, group: Server, label: Max players, type: number, min: 1, max: 64, step: 1, default: "8", editable: true }
+  - name: server_visibility
+    group: Server
+    label: Visibility
+    type: select
+    default: "2"
+    editable: true
+    options:
+      - { value: "2", label: Public }
+      - { value: "1", label: Friends only, description: "Only reachable if the first player connects directly by IP -- a dedicated server is never \"friends\" with anyone." }
+      - { value: "0", label: Unlisted }
+
+  # ---- World ---------------------------------------------------------------
+  - { name: game_world, group: World, label: World name, description: "\"Navezgane\" (bundled, the default) or a name to generate/load via the two fields below.", default: Navezgane, editable: true }
+  - { name: world_gen_seed, group: World, label: World generation seed, description: Only read when generating a new world under the name above., default: "asdf", editable: true }
+  - name: world_gen_size
+    group: World
+    label: World generation size
+    description: Width and height in blocks of a newly generated world. Large sizes take a long time to generate.
+    type: number
+    min: 2048
+    max: 16384
+    step: 1
+    default: "4096"
+    editable: true
+  - { name: game_name, group: World, label: Game name, description: Also seeds decoration placement (trees etc) in a generated world., default: "My Game", editable: true }
+  - name: game_difficulty
+    group: World
+    label: Difficulty
+    type: number
+    min: 0
+    max: 5
+    step: 1
+    default: "2"
+    editable: true
+  - { name: day_night_length, group: World, label: Day length (real minutes), type: number, min: 1, step: 1, default: "60", editable: true }
+  - { name: day_light_length, group: World, label: Daylight hours per in-game day, type: number, min: 1, max: 24, step: 1, default: "18", editable: true }
+
+  # ---- Zombies --------------------------------------------------------------
+  # The same four-value scale (walk/jog/run/sprint/nightmare) repeated for
+  # four different situations the game tracks independently.
+  - name: zombie_move
+    group: Zombies
+    label: Zombie speed (day)
+    type: select
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Walk }
+      - { value: "1", label: Jog }
+      - { value: "2", label: Run }
+      - { value: "3", label: Sprint }
+      - { value: "4", label: Nightmare }
+  - name: zombie_move_night
+    group: Zombies
+    label: Zombie speed (night)
+    type: select
+    default: "3"
+    editable: true
+    options:
+      - { value: "0", label: Walk }
+      - { value: "1", label: Jog }
+      - { value: "2", label: Run }
+      - { value: "3", label: Sprint }
+      - { value: "4", label: Nightmare }
+  - name: zombie_feral_move
+    group: Zombies
+    label: Feral zombie speed
+    type: select
+    default: "3"
+    editable: true
+    options:
+      - { value: "0", label: Walk }
+      - { value: "1", label: Jog }
+      - { value: "2", label: Run }
+      - { value: "3", label: Sprint }
+      - { value: "4", label: Nightmare }
+  - name: zombie_bm_move
+    group: Zombies
+    label: Blood moon zombie speed
+    type: select
+    default: "3"
+    editable: true
+    options:
+      - { value: "0", label: Walk }
+      - { value: "1", label: Jog }
+      - { value: "2", label: Run }
+      - { value: "3", label: Sprint }
+      - { value: "4", label: Nightmare }
+  - name: enemy_spawn_mode
+    group: Zombies
+    label: Enemy spawning
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: enemy_difficulty
+    group: Zombies
+    label: Enemy difficulty
+    type: select
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Normal }
+      - { value: "1", label: Feral }
+  - { name: blood_moon_enemy_count, group: Zombies, label: "Blood moon zombies (per player)", type: number, min: 0, step: 1, default: "8", editable: true }
+  - { name: max_spawned_zombies, group: Zombies, label: Max spawned zombies, description: "Above ~80 can cost real framerate on the node.", type: number, min: 0, step: 1, default: "60", editable: true }
+  - { name: max_spawned_animals, group: Zombies, label: Max spawned animals, default: "50", type: number, min: 0, step: 1, editable: true }
+
+  # ---- Loot and death ---------------------------------------------------------
+  - { name: loot_abundance, group: "Loot and death", label: "Loot abundance (%)", type: number, min: 0, step: 1, default: "100", editable: true }
+  - { name: loot_respawn_days, group: "Loot and death", label: Loot respawn (days), type: number, min: 0, step: 1, default: "30", editable: true }
+  - { name: air_drop_frequency, group: "Loot and death", label: Air drop frequency (in-game hours), description: 0 disables air drops., type: number, min: 0, step: 1, default: "72", editable: true }
+  - name: drop_on_death
+    group: "Loot and death"
+    label: Drop on death
+    type: select
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Everything }
+      - { value: "1", label: Toolbelt only }
+      - { value: "2", label: Backpack only }
+      - { value: "3", label: Nothing }
+  - name: drop_on_quit
+    group: "Loot and death"
+    label: Drop on quit
+    type: select
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Nothing }
+      - { value: "1", label: Everything }
+      - { value: "2", label: Toolbelt only }
+      - { value: "3", label: Backpack only }
+  - name: player_killing_mode
+    group: "Loot and death"
+    label: Player killing
+    type: select
+    default: "3"
+    editable: true
+    options:
+      - { value: "0", label: No killing }
+      - { value: "1", label: Allies only }
+      - { value: "2", label: Strangers only }
+      - { value: "3", label: Everyone }
+
+  # ---- Land claims ------------------------------------------------------------
+  - { name: land_claim_expiry_time, group: "Land claims", label: "Claim expiry, offline (days)", type: number, min: 0, step: 1, default: "3", editable: true }
+
+  # ---- Remote access ------------------------------------------------------
+  - name: telnet_enabled
+    group: Remote access
+    label: Telnet console
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  # A blank password is not "no security" here -- the game itself falls back
+  # to binding telnet on loopback only when none is set (confirmed in the
+  # reference config's own comment), the same "a password is what actually
+  # opens the port" behaviour ARK's own RCON already has in this project.
+  - name: telnet_password
+    group: Remote access
+    label: Telnet password
+    description: Blank keeps telnet loopback-only even though its port is published.
+    type: password
+    default: ""
+    editable: true
+  # Matches the reference config's own default. Not verified end to end in
+  # this environment (see the architectures comment above) -- if a real
+  # server fails to start or a client can't authenticate, this is the first
+  # thing to try disabling, the same way ARK's own seed treats BattlEye.
+  - name: eac_enabled
+    group: Remote access
+    label: EasyAntiCheat
+    description: Turn off only if a real server shows EAC interfering.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity, access, and player limits.
+  - name: World
+    description: Which world loads, and its basic time and difficulty rules.
+  - name: Zombies
+    collapsed: true
+  - name: "Loot and death"
+    collapsed: true
+  - name: "Land claims"
+    collapsed: true
+  - name: Remote access
+    description: Telnet and anti-cheat.
+    collapsed: true
+
+# mode: immediate, not a guess at mode: port -- the game's primary port is
+# UDP, and mode: port dials TCP, so it could never succeed here regardless of
+# how confident a guess was (Palworld's own seed history records exactly
+# this mistake and its symptom: every start sits in `starting` for the full
+# timeout, then reports running anyway, indistinguishable from a real
+# failure). mode: log needs a pattern copied from real output, and nothing
+# here has been booted (see the architectures comment above) -- so
+# immediate is the honest choice, not a placeholder to come back to lightly.
+ready:
+  mode: immediate
+
+# No console-command stop. This project's StopSpec writes a command to the
+# primary container's stdin, but 7 Days to Die's own graceful shutdown is
+# issued over its *telnet* interface (`shutdown`, sent after the login
+# banner) -- confirmed by reading LinuxGSM's actual implementation
+# (fn_stop_graceful_sdtd in lgsm/modules/command_stop.sh), which is a bespoke
+# telnet client for exactly this game rather than the plain
+# `fn_stop_graceful_cmd "shutdown" 30` (a tmux send-keys into stdin) LinuxGSM
+# uses for most other games. That a game needed its own telnet-based stop
+# function, when typing the same word into its stdin was already the default
+# for everything else LinuxGSM supports, is real evidence that this
+# console's stdin does not accept it. This project has no mechanism to send
+# a command over telnet instead, so this falls back to a plain signal --
+# unverified for save-on-exit behaviour, and the first thing to investigate
+# if a stopped server is ever found to have lost world state.
+stop:
+  timeout: 30s
+  then: SIGTERM
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include_root: true

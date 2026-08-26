@@ -48,7 +48,6 @@ already built and left off this table.
 
 | Game | AppID |
 |---|---|
-| 7 Days to Die | 294420 |
 | Action Half-Life | 90 |
 | Action: Source | 985050 |
 | American Truck Simulator | 2239530 |

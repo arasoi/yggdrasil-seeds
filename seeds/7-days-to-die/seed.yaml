@@ -5,7 +5,7 @@ icon: "🧟"
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.1"
+version: "1.0.2"
 
 # The dedicated-server tool's own app id (294420), separate from the base
 # game's, ships a real native Linux binary -- confirmed against LinuxGSM

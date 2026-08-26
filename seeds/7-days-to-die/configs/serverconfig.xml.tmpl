@@ -13,7 +13,7 @@
   <property name="ServerDescription" value="{{.Vars.server_description}}"/>
   <property name="ServerWebsiteURL" value=""/>
   <!-- A dedicated server with correctly forwarded ports doesn't need Steam's
-       own P2P relay layer -- the reference config this is built from
+       own P2P relay layer; the reference config this is built from
        disables it for exactly that reason. -->
   <property name="ServerDisabledNetworkProtocols" value="SteamNetworking"/>
 
@@ -84,7 +84,7 @@
 
   <!-- Redirects saves (and, per the game's own AdminFileName documentation,
        serveradmin.xml alongside them) into this server's writable mount
-       rather than Unity's default ~/.local/share/7DaysToDie -- see the seed
+       rather than Unity's default ~/.local/share/7DaysToDie; see the seed
        comment above the writable_paths block for why this one is hardcoded
        rather than exposed as a variable. -->
   <property name="SaveGameFolder" value="/data/Saves"/>

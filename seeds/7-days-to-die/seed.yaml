@@ -5,7 +5,7 @@ icon: "🧟"
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.0"
+version: "1.0.1"
 
 # The dedicated-server tool's own app id (294420), separate from the base
 # game's, ships a real native Linux binary -- confirmed against LinuxGSM
@@ -79,6 +79,26 @@ containers:
       # Independent: telnet is the game's remote-console interface and has
       # no fixed relationship to the game port.
       - { name: telnet, protocol: tcp, default: 8081, kind: rcon }
+
+# serverconfig.xml's flat <property name="X" value="Y"/> list has no format
+# support in internal/configfile (ini.go, structured.go's JSON/YAML,
+# properties.go -- no xml.go), so this is `manage: always`, a whole-file
+# template, the same choice Palworld's seed makes for its own single-tuple
+# ini and for the identical reason: every value below is a `variable`, never
+# a `setting`, because a setting's `to: {file, key}` destination addresses
+# one key and there is nothing here that can.
+#
+# Found live: this block was missing entirely on first publish -- the
+# template file existed in configs/ and the command referenced its path, but
+# nothing told the control plane to ever render it, so every server built
+# from that version crashed on boot with "Specified configfile not found".
+# ygg-seed validate has nothing to say about an orphaned template: SourcePath
+# resolution only runs against a file a config.files entry actually names.
+config:
+  files:
+    - path: serverconfig.xml
+      source_path: configs/serverconfig.xml.tmpl
+      manage: always
 
 # GameWorld is free text rather than a closed dropdown (unlike ARK's `map`):
 # "Navezgane" is the only world bundled with the install, but the game also

@@ -21,16 +21,19 @@
   <property name="WorldGenSeed" value="{{.Vars.world_gen_seed}}"/>
   <property name="WorldGenSize" value="{{.Vars.world_gen_size}}"/>
   <property name="GameName" value="{{.Vars.game_name}}"/>
-  <property name="GameDifficulty" value="{{.Vars.game_difficulty}}"/>
   <property name="GameMode" value="GameModeSurvival"/>
 
-  <property name="ZombieMove" value="{{.Vars.zombie_move}}"/>
-  <property name="ZombieMoveNight" value="{{.Vars.zombie_move_night}}"/>
-  <property name="ZombieFeralMove" value="{{.Vars.zombie_feral_move}}"/>
-  <property name="ZombieBMMove" value="{{.Vars.zombie_bm_move}}"/>
+  <!-- V3.0 ("Dead Hot Summer", stable 2026-06-29) removed thirty separate
+       difficulty/zombie-speed/blood-moon/loot/airdrop properties, among
+       them GameDifficulty, DayNightLength, DayLightLength, every ZombieMove
+       variant, EnemySpawnMode/Difficulty, BloodMoonEnemyCount, LootAbundance/
+       RespawnDays, AirDropFrequency/Marker, and DropOnDeath/Quit, and
+       folded all of it into this one generated code (confirmed live: each
+       one now aborts boot with "Unknown config option" rather than being
+       ignored, not merely deprecated). See the seed comment above
+       sandbox_code for where to generate one. -->
+  <property name="SandboxCode" value="{{.Vars.sandbox_code}}"/>
   <property name="BuildCreate" value="false"/>
-  <property name="DayNightLength" value="{{.Vars.day_night_length}}"/>
-  <property name="DayLightLength" value="{{.Vars.day_light_length}}"/>
   <property name="PlayerKillingMode" value="{{.Vars.player_killing_mode}}"/>
   <property name="PersistentPlayerProfiles" value="false"/>
 
@@ -40,12 +43,12 @@
   <!-- The web control panel (ControlPanelEnabled/Port/Password) is not a
        recognized configfile property against the current dedicated server
        build; it aborts startup with "Unknown config option" the instant it
-       is present, present or not, true or false. Confirmed live against a
-       real fresh SteamCMD depot, and matches other operators hitting the
-       same abort on current builds (GameServerManagers/LinuxGSM#4291). The
-       feature is gone from this build, not merely renamed, so there is no
-       replacement property to put here; Telnet remains the one remote
-       admin interface this seed exposes, below. -->
+       is present. Confirmed live against a real fresh SteamCMD depot, and
+       matches other operators hitting the same abort on current builds
+       (GameServerManagers/LinuxGSM#4291). The feature is gone from this
+       build, not merely renamed, so there is no replacement property to put
+       here; Telnet remains the one remote admin interface this seed
+       exposes, below. -->
 
   <property name="TelnetEnabled" value="{{.Vars.telnet_enabled}}"/>
   <property name="TelnetPort" value="{{.Ports.telnet}}"/>
@@ -58,17 +61,10 @@
 
   <property name="AdminFileName" value="serveradmin.xml"/>
 
-  <property name="DropOnDeath" value="{{.Vars.drop_on_death}}"/>
-  <property name="DropOnQuit" value="{{.Vars.drop_on_quit}}"/>
-
-  <property name="BloodMoonEnemyCount" value="{{.Vars.blood_moon_enemy_count}}"/>
-  <property name="EnemySpawnMode" value="{{.Vars.enemy_spawn_mode}}"/>
-  <property name="EnemyDifficulty" value="{{.Vars.enemy_difficulty}}"/>
-
-  <property name="BlockDurabilityModifier" value="100"/>
-
-  <property name="LootAbundance" value="{{.Vars.loot_abundance}}"/>
-  <property name="LootRespawnDays" value="{{.Vars.loot_respawn_days}}"/>
+  <!-- BlockDurabilityModifier is gone the same way as the properties above
+       (confirmed live, "Unknown config option"), with no named successor
+       in the V3.0 release notes, unlike its BlockDamage* siblings which
+       SandboxCode does document replacing. -->
 
   <property name="LandClaimSize" value="41"/>
   <property name="LandClaimDeadZone" value="30"/>
@@ -78,8 +74,6 @@
   <property name="LandClaimOfflineDurabilityModifier" value="4"/>
 
   <property name="PartySharedKillRange" value="100"/>
-  <property name="AirDropFrequency" value="{{.Vars.air_drop_frequency}}"/>
-  <property name="AirDropMarker" value="false"/>
   <property name="MaxSpawnedZombies" value="{{.Vars.max_spawned_zombies}}"/>
   <property name="MaxSpawnedAnimals" value="{{.Vars.max_spawned_animals}}"/>
 

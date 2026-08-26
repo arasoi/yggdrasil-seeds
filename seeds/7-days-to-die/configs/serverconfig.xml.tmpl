@@ -82,12 +82,19 @@
   <property name="MaxUncoveredMapChunksPerPlayer" value="131072"/>
   <property name="BedrollDeadZoneSize" value="15"/>
 
-  <!-- Redirects saves (and, per the game's own AdminFileName documentation,
-       serveradmin.xml alongside them) into this server's writable mount
-       rather than Unity's default ~/.local/share/7DaysToDie; see the seed
-       comment above the writable_paths block for why this one is hardcoded
-       rather than exposed as a variable. -->
-  <property name="SaveGameFolder" value="/data/Saves"/>
+  <!-- SaveGameFolder itself is gone (confirmed live, "Unknown config
+       option", the same as every property fixed above), though this one
+       isn't in TFP's own V3.0 removal list and so isn't a SandboxCode
+       casualty; it may simply have been folded into UserDataFolder, which
+       every reference config already documented as overriding "all
+       generated data, including RWG generated worlds" (a superset of just
+       the save path). UserDataFolder redirects everything (and, per the
+       game's own AdminFileName documentation, serveradmin.xml too) into
+       this server's writable mount rather than Unity's default
+       ~/.local/share/7DaysToDie; see the seed comment above the
+       writable_paths block for why this one is hardcoded rather than
+       exposed as a variable. -->
+  <property name="UserDataFolder" value="/data"/>
 
   <property name="ServerLoginConfirmationText" value=""/>
 </ServerSettings>

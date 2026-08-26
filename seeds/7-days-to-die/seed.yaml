@@ -5,21 +5,38 @@ icon: "🧟"
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.4"
+version: "1.0.5"
 
 # The dedicated-server tool's own app id (294420), separate from the base
-# game's, ships a real native Linux binary -- confirmed against LinuxGSM
+# game's, ships a real native Linux binary: confirmed both against LinuxGSM
 # (github.com/GameServerManagers/LinuxGSM), which has run it that way for
-# years with no Wine/Proton involved anywhere in its codebase. Not
-# independently re-verified against a live pull here: this control plane's
-# host is arm64, and the 32-bit x86 SteamCMD/Steam client segfaults under
-# both Docker's and Podman's amd64 emulation on it ("Loading Steam API..."
-# then SIGSEGV, reproduced identically on both runtimes) before it can even
-# print appinfo, let alone install and boot the real thing. Everything below
-# is sourced from LinuxGSM's own actively-maintained sdtd module and its
-# companion reference config (github.com/GameServerManagers/Game-Server-
-# Configs), not from running it -- treat the readiness and stop sections
-# below as the honest limit of what that gets you.
+# years with no Wine/Proton involved anywhere in its codebase, and now live
+# on a real amd64 node -- this control plane's own host is arm64, where the
+# 32-bit x86 SteamCMD/Steam client segfaults under both Docker's and
+# Podman's amd64 emulation ("Loading Steam API..." then SIGSEGV, reproduced
+# identically on both runtimes) before it can even print appinfo.
+#
+# A real install and boot found three generations of config drift that
+# nothing short of running it would have caught: the web control panel
+# (ControlPanelEnabled/Port/Password) is gone from the build entirely, not
+# merely renamed; V3.0 ("Dead Hot Summer") folded thirty separate difficulty/
+# zombie/loot/airdrop properties into one generated SandboxCode string; and
+# SaveGameFolder itself no longer exists, superseded by UserDataFolder. The
+# reference configs this seed started from (LinuxGSM's companion
+# Game-Server-Configs repo, and the 7 Days to Die wiki) were current when
+# read but describe a version this build has since moved well past -- the
+# properties still declared below are the ones that survived a real boot,
+# not merely the ones a reference document happened to list. `sandbox_code`
+# has one further limit worth stating plainly: this seed cannot compose,
+# validate, or preview one, since it is an opaque string the game's own
+# Sandbox Options menu generates.
+#
+# What is now confirmed live, end to end: install, boot past config parsing,
+# world load (Navezgane), EOS session registration, and a genuinely running
+# container with real resource stats. Not yet confirmed: a real client
+# actually connecting and playing, and graceful shutdown's effect on saved
+# state -- see the stop section below for why that one stays a real
+# question rather than a formality.
 architectures: [amd64]
 
 install:

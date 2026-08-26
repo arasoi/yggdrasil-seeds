@@ -37,9 +37,15 @@
   <property name="PlayerSafeZoneLevel" value="5"/>
   <property name="PlayerSafeZoneHours" value="5"/>
 
-  <property name="ControlPanelEnabled" value="false"/>
-  <property name="ControlPanelPort" value="8080"/>
-  <property name="ControlPanelPassword" value="CHANGEME"/>
+  <!-- The web control panel (ControlPanelEnabled/Port/Password) is not a
+       recognized configfile property against the current dedicated server
+       build; it aborts startup with "Unknown config option" the instant it
+       is present, present or not, true or false. Confirmed live against a
+       real fresh SteamCMD depot, and matches other operators hitting the
+       same abort on current builds (GameServerManagers/LinuxGSM#4291). The
+       feature is gone from this build, not merely renamed, so there is no
+       replacement property to put here; Telnet remains the one remote
+       admin interface this seed exposes, below. -->
 
   <property name="TelnetEnabled" value="{{.Vars.telnet_enabled}}"/>
   <property name="TelnetPort" value="{{.Ports.telnet}}"/>

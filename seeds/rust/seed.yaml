@@ -5,9 +5,40 @@ icon: "🛢️"
 description: >
   Open-world survival on a shared procedural map: scavenge, build a base,
   and defend it from raiders. This seed runs the dedicated server, not the
-  game.
-version: "1.0.0"
+  game. KNOWN BROKEN as of this version -- see the comment below before
+  installing.
+version: "1.0.1"
 
+# BLOCKED, not a seed-authoring bug: a real boot on a real amd64 node
+# (RustDedicated build date 2026-08-18, Unity 6000.3.15x1-8, changeset
+# 161125, protocol 2632.287.1 -- a very recent build) crashes every time,
+# deterministically, in the engine's own Bootstrap.Init_Tier0(), before this
+# seed's command-line flags are even parsed:
+#
+#   ArgumentException: String cannot be of zero length. Parameter name: oldValue
+#     at System.String.Replace (...)
+#     at Bootstrap.Init_Tier0 ()
+#
+# Exhaustively investigated live and ruled out one at a time: missing native
+# libraries (ldd clean on RustDedicated and every Plugins/x86_64/*.so),
+# an incomplete/corrupted SteamCMD depot (appmanifest_258550.acf and
+# steam_appid.txt both present and correct), every LD_LIBRARY_PATH variant
+# including Facepunch's own bundled runds.sh recipe, -logfile handling (both
+# bare and the exact `-logfile /dev/stdout` fix used by the real,
+# actively-maintained github.com/Didstopia/rust-server Docker image),
+# SteamAppId/SteamGameId env vars, and outbound network/DNS (confirmed fully
+# working from the pod). A yggdrasil runtime-level fix was also tried and
+# rejected: allocating a TTY for the game container (matching what the
+# SteamCMD install step already gets) doesn't fix the crash -- it just turns
+# a clean, correctly-flagged crash-loop into a silent, falsely-"running"
+# hang. That was arasoi/yggdrasil PR #16, reverted as PR #17.
+#
+# What's left unexplored: pinning an older Rust build via SteamCMD's -beta
+# mechanism (this may be specific to the very recent build above), or simply
+# waiting for Facepunch's next patch and retesting. Until one of those closes
+# this, do not promote this seed past develop, and do not spend more time
+# re-deriving the above from scratch -- start from here.
+#
 # The dedicated-server tool's own app id (258550, "Rust Dedicated Server")
 # is separate from the base game's (252490) -- confirmed against LinuxGSM
 # (github.com/GameServerManagers/LinuxGSM), which lists it with

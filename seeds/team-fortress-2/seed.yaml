@@ -1,0 +1,228 @@
+id: team-fortress-2
+schema: 3
+name: Team Fortress 2
+icon: "🎩"
+description: >
+  Class-based multiplayer shooter. Nine classes, objective-based game
+  modes, and two decades of community maps and mods.
+version: "1.0.0"
+
+# The dedicated-server tool's own app id (232250, "Team Fortress 2 Dedicated
+# Server") is separate from the base game's (440) -- the same
+# tool-app-vs-base-game split every Source/GoldSrc dedicated server has, and
+# confirmed here against LinuxGSM's own actively-maintained tf2server module
+# (lgsm/config-default/config-lgsm/tf2server/_default.cfg and
+# lgsm/modules/command_stop.sh), which lists appid=232250, engine=source, and
+# glibc=2.15 -- there is no Wine/Proton anywhere in LinuxGSM's Source-engine
+# handling, so this is a confirmed native-Linux depot. Everything below is
+# cross-checked against Valve's own developer wiki
+# (developer.valvesoftware.com/wiki/Command_Line_Options, both the general
+# engine section and the dedicated-server section) with no disagreement on
+# names or meaning. Not independently re-verified with a live
+# `+app_info_print` here: this control plane's host is arm64, and the 32-bit
+# x86 SteamCMD client segfaults under both Docker's and Podman's amd64
+# emulation on it before it can even print appinfo -- the same environment
+# limitation every other seed built this way documents.
+architectures: [amd64]
+
+install:
+  # Unlike Rust/Valheim/7 Days to Die, TF2's own game files are static
+  # assets (maps, models, sounds) with no per-server player-state baked into
+  # them -- the only things that differ between two TF2 servers are a config
+  # file and some logs, both small. Sharing one ~20GB install across however
+  # many TF2 servers an operator runs is the same call ARK's seed makes for
+  # the identical reason (ADR-018/ADR-096).
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 232250
+
+server:
+  # LinuxGSM's own directory layout (systemdir="${serverfiles}/tf",
+  # servercfgdir="${systemdir}/cfg", gamelogdir="${systemdir}/logs") is what
+  # fixes these two paths -- cfg holds the one file this seed writes
+  # (server.cfg) and logs is where the engine's own per-map logs land.
+  # Nothing else under tf/ is ever written at runtime for a vanilla server.
+  writable_paths:
+    - { from: cfg, to: /game/tf/cfg }
+    - { from: logs, to: /game/tf/logs }
+
+containers:
+  - role: game
+    primary: true
+    # base-linux, not base-steamcmd: the install step above already
+    # materialised the depot, so this container only execs the binary.
+    image: { base: linux }
+    # srcds_run is Valve's own launcher script, shipped inside every Source
+    # dedicated server depot -- confirmed from the real script source
+    # (github.com/nillerusr/source-engine, a leaked-source mirror; its own
+    # header comment reads "a wrapper script for the main Source engine
+    # dedicated server binary. Performs auto-restarting of the server on
+    # crash."), and it already does two things by itself that this project
+    # would otherwise have to reproduce by hand: it sets its own
+    # LD_LIBRARY_PATH (".:bin:$LD_LIBRARY_PATH") and it auto-detects which
+    # architecture's binary to run, rather than this seed hardcoding one.
+    #
+    # -norestart is this seed's one deviation from LinuxGSM's own
+    # startparameters, and it is not optional: srcds_run's built-in
+    # auto-restart-on-crash loop is exactly the split-restart-authority
+    # problem ADR-013 exists to rule out project-wide -- Docker's restart
+    # policy is always `no` and the agent is supposed to be the only thing
+    # that ever decides to relaunch a crashed container. Confirmed from the
+    # same script source: -norestart sets its internal RESTART variable to
+    # empty, which is what disables the loop; everything else about the
+    # wrapper (library path, arch detection, signal handling) is unaffected.
+    #
+    # -strictportbind refuses to start rather than silently binding a
+    # different port if the requested one is unavailable -- LinuxGSM's own
+    # startparameters carry it, and it matches this project's own preference
+    # for a clear failure over silent drift.
+    #
+    # -nohltv disables SourceTV and the port it would otherwise open
+    # (developer.valvesoftware.com: "-nohltv: Disables SourceTV and closes
+    # its port (usually 27020)"). SourceTV is a real, valued feature for
+    # competitive demo recording, but it is out of scope for a v1 seed at
+    # this project's homelab scale; a future amendment can add it as its own
+    # port once there is a real request for it.
+    #
+    # +servercfgfile is passed explicitly even though "server.cfg" is
+    # already Source's own default name for it -- LinuxGSM's own
+    # startparameters never omit this flag either, and there is no cost to
+    # being explicit about which file gets executed at map start.
+    command: >-
+      ./srcds_run -game tf -norestart -strictportbind -nohltv
+      -ip 0.0.0.0 -port {{.Ports.game}}
+      -clientport {{.Ports.clientport}}
+      -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers
+      +map {{.Vars.map}}
+      +hostname "{{.Vars.server_name}}"
+      +servercfgfile server.cfg
+      +rcon_password "{{.Vars.rcon_password}}"
+      +sv_setsteamaccount "{{.Vars.gslt}}"
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
+    workdir: /game
+    ports:
+      # Source's own query protocol (A2S_INFO, used by the in-game server
+      # browser and every third-party query tool) answers on the *same* UDP
+      # port as gameplay traffic -- confirmed by LinuxGSM's own tf2server
+      # config declaring no separate query port at all, only `port`. There
+      # is nothing analogous to Rust's or ARK's independent query port here.
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      # Source's RCON protocol is TCP, on the identical port number as the
+      # UDP game port -- not a separate port, the same number on both
+      # protocols, exactly the shape ADR-083/ADR-109's offset_from/offset:0
+      # mechanism exists for (the 7 Days to Die and Vintage Story seeds are
+      # the existing precedent for this exact pattern). Getting this port
+      # open on TCP is what makes `rcon_password` above actually reachable
+      # from outside the container.
+      - { name: rcon, protocol: tcp, offset_from: game, offset: 0 }
+      # -clientport, confirmed by both LinuxGSM's own startparameters and
+      # Valve's wiki ("-clientport: Sets the client port"): the source port
+      # the dedicated server itself binds when it acts as a client toward
+      # Steam's own backend (matchmaking, GC, Steam Datagram Relay). Not
+      # something a player connects to directly, but still a real port the
+      # process opens and the two sources disagree on its default (27002 on
+      # the wiki, 27005 in LinuxGSM) -- independently allocated either way,
+      # so the disagreement doesn't matter.
+      - { name: clientport, protocol: udp, default: 27005, kind: other }
+
+variables:
+  - { name: server_name, group: Server, label: Server name, description: Shown in the in-game server browser., default: "A Yggdrasil server", editable: true }
+  - name: map
+    group: Server
+    label: Map
+    description: The map loaded on startup. Players can vote or an admin can change maps afterward.
+    type: select
+    default: cp_badlands
+    editable: true
+    options:
+      - { value: cp_badlands, label: "Badlands (Control Points)" }
+      - { value: cp_dustbowl, label: "Dustbowl (Attack/Defend)" }
+      - { value: cp_gravelpit, label: "Gravel Pit (Attack/Defend)" }
+      - { value: ctf_2fort, label: "2Fort (Capture the Flag)" }
+      - { value: koth_harvest_final, label: "Harvest (King of the Hill)" }
+      - { value: pl_badwater, label: "Badwater Basin (Payload)" }
+      - { value: pl_upward, label: "Upward (Payload)" }
+      - { value: plr_pipeline, label: "Pipeline (Payload Race)" }
+  - name: max_players
+    group: Server
+    label: Max players
+    description: >-
+      Vanilla TF2 caps this at 32 without a plugin actually able to use the
+      extra slots -- LinuxGSM's own config notes that going higher needs
+      -unrestricted_maxplayers, which this seed always passes, so a higher
+      number is accepted but will not usefully seat more players without
+      server-side mods.
+    type: number
+    min: 2
+    max: 100
+    step: 1
+    default: "24"
+    editable: true
+  - name: sv_password
+    group: Server
+    label: Server password
+    description: Leave blank for a public server. Set to require players to enter a password to join.
+    type: password
+    default: ""
+    editable: true
+
+  - name: rcon_password
+    group: Remote access
+    type: password
+    generate: password
+    label: RCON password
+    description: Required to use RCON tools against this server. Generated per server rather than left blank.
+    default: ""
+    editable: true
+  - name: gslt
+    group: Remote access
+    label: Game Server Login Token
+    description: >-
+      Optional. Identifies this server to Steam so it can appear in the
+      in-game server browser and be favorited by players. Generate one at
+      steamcommunity.com/dev/managegameservers for this server's own app id
+      (232250). Left blank, the server still runs and accepts direct
+      connections by IP.
+    default: ""
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity, map, and player limits.
+  - name: Remote access
+    description: RCON and Steam server-browser listing.
+    collapsed: true
+
+# mode: immediate, not a guess at mode: port. The RCON TCP listener declared
+# above binds on the same port number as the UDP game port and would be a
+# principled target for mode: port -- but whether it opens only once the
+# engine has genuinely finished initializing, or earlier during startup
+# (which would report ready long before the server can actually serve
+# players, the same failure direction Palworld's own seed history already
+# recorded a UDP mistake for, just inverted), has not been checked against a
+# real boot. immediate is the honest choice until that timing is confirmed
+# live.
+ready:
+  mode: immediate
+
+# Source engine's own dedicated-server console is genuinely interactive over
+# stdin -- unlike Rust's (see that seed's own comment on this exact point),
+# this is well-documented, decades-old behaviour, and LinuxGSM's own
+# tf2server config confirms it directly: stopmode="3", which
+# lgsm/modules/command_stop.sh implements as fn_stop_graceful_cmd "quit" 30
+# -- sending the literal command "quit" over stdin and waiting up to 30
+# seconds. That is exactly this project's StopSpec.ConsoleCommand mechanism.
+stop:
+  command: "quit"
+  timeout: 30s
+  then: SIGTERM
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [cfg]

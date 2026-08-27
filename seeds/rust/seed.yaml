@@ -1,0 +1,285 @@
+id: rust
+schema: 3
+name: Rust
+icon: "🛢️"
+description: >
+  Open-world survival on a shared procedural map: scavenge, build a base,
+  and defend it from raiders. This seed runs the dedicated server, not the
+  game.
+version: "1.0.0"
+
+# The dedicated-server tool's own app id (258550, "Rust Dedicated Server")
+# is separate from the base game's (252490) -- confirmed against LinuxGSM
+# (github.com/GameServerManagers/LinuxGSM), which lists it with
+# os=ubuntu-24.04 and has no Wine/Proton invocation anywhere in its
+# codebase, so every entry it carries is a confirmed native-Linux depot.
+# Not independently re-verified with a live `+app_info_print` here: this
+# control plane's host is arm64, and the 32-bit x86 SteamCMD/Steam client
+# segfaults under both Docker's and Podman's amd64 emulation on it
+# ("Loading Steam API..." then SIGSEGV) before it can even print appinfo --
+# the same environment limitation the 7-days-to-die seed already documents.
+# Everything below is sourced from LinuxGSM's own actively-maintained
+# rustserver module (lgsm/config-default/config-lgsm/rustserver/_default.cfg,
+# command_start.sh, command_stop.sh, check_config.sh, fix_rust.sh) and
+# Facepunch's own wiki (wiki.facepunch.com/rust/creating-a-server), not from
+# running it -- treat the readiness and stop sections below as the honest
+# limit of what that gets you.
+architectures: [amd64]
+
+install:
+  # No cluster/character-transfer concept here, and no reason for two Rust
+  # worlds to share one copy of the game files -- the same call Valheim's
+  # and 7 Days to Die's seeds make for the same reason.
+  shared: false
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container, so the seed names which one (ADR-057).
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 258550
+
+server:
+  # Unlike Valheim's -savedir (a clean absolute-path redirect) or 7 Days to
+  # Die's -configfile (points anywhere), Rust's +server.identity sets only a
+  # *folder name*, not a path: the game always writes to server/<identity>/
+  # relative to its own working directory, which here is the read-only
+  # install mount. There is no flag to redirect that elsewhere, so this is
+  # the same nested-mountpoint shape ARK's own -AltSaveDirectoryName needs
+  # (ADR-064: the runtime creates the empty directories a nested writable
+  # path needs, since runc cannot mkdir a mountpoint inside a read-only
+  # mount on its own). "data" is hardcoded rather than exposed as a
+  # variable -- an operator has no reason to rename Rust's own internal save
+  # folder, the same call 7 Days to Die's seed makes for its SaveGameFolder.
+  writable_paths:
+    - { from: "", to: /game/server/data }
+
+containers:
+  - role: game
+    primary: true
+    # base-linux, not base-steamcmd: the install step above already
+    # materialised the depot, so this container only execs the binary.
+    image: { base: linux }
+    # LD_LIBRARY_PATH is a genuine, documented requirement, not something
+    # specific to this project: LinuxGSM's own fix_rust.sh sets exactly this,
+    # with the comment "Fixes: [Raknet] Server Shutting Down (Shutting
+    # Down)." -- the same class of gotcha Valheim's own seed already
+    # documents (linux64/ on the path) for the identical reason, a Unity
+    # binary that does not find its own bundled native libraries otherwise.
+    #
+    # Every flag below is LinuxGSM's own real, shipped startparameters
+    # (lgsm/config-default/config-lgsm/rustserver/_default.cfg), cross-checked
+    # against Facepunch's own wiki with no disagreement on names or meaning.
+    # -batchmode is the only flag this project owns rather than passing
+    # through unchanged; LinuxGSM's own -logfile is dropped the same way
+    # Valheim's -logFile and 7 Days to Die's -logfile both are -- the agent
+    # captures the container's own stdout for the console (ADR-032), and
+    # redirecting it away would empty that and break log-value extraction.
+    command: >-
+      sh -c 'export LD_LIBRARY_PATH=.:RustDedicated_Data/Plugins/x86_64:$LD_LIBRARY_PATH;
+      exec ./RustDedicated -batchmode
+      +app.listenip 0.0.0.0 +app.port {{.Ports.app}}
+      +server.ip 0.0.0.0 +server.port {{.Ports.game}}
+      +server.queryport {{.Ports.query}}
+      +server.tickrate {{.Vars.tickrate}}
+      +server.hostname "{{.Vars.server_name}}"
+      +server.identity "data"
+      +server.gamemode {{.Vars.game_mode}}
+      +server.level "{{.Vars.map_type}}"
+      +server.seed {{.Vars.world_seed}}
+      +server.salt {{.Vars.world_salt}}
+      +server.maxplayers {{.Vars.max_players}}
+      +server.worldsize {{.Vars.world_size}}
+      +server.saveinterval {{.Vars.save_interval}}
+      {{if .Vars.server_tags}}+server.tags "{{.Vars.server_tags}}"{{end}}
+      {{if .Vars.level_url}}+server.levelurl "{{.Vars.level_url}}"{{end}}
+      +rcon.web {{.Vars.rcon_web}}
+      +rcon.ip 0.0.0.0 +rcon.port {{.Ports.rcon}}
+      +rcon.password "{{.Vars.rcon_password}}"'
+    workdir: /game
+    ports:
+      # All four are independently allocated, not offset-derived: unlike
+      # Valheim's query port (hardcoded to game_port+1 with no flag to set it
+      # separately) or 7 Days to Die's dual-protocol pair, Rust exposes
+      # +server.port, +server.queryport, +rcon.port and +app.port as four
+      # separately settable flags -- the game's own "defaults to highest+1 if
+      # omitted" behavior is a fallback for an unset flag, not a hardcoded
+      # relationship the binary enforces regardless of input (ADR-061/
+      # ADR-048's own distinction between the two shapes). Defaults below
+      # match LinuxGSM's own, for the authoring form's preview only -- a real
+      # allocation always comes from the node's own range (ADR-061).
+      - { name: game, protocol: udp, default: 28015, kind: game }
+      - { name: query, protocol: udp, default: 28017, kind: query }
+      - { name: rcon, protocol: tcp, default: 28016, kind: rcon }
+      # Rust+, the mobile companion app -- a real, documented, WebSocket-based
+      # feature (wiki.facepunch.com/rust/rust-companion-server), not
+      # something specific to this project. kind: web for the same reason
+      # Palworld's own REST API port uses it: a web/API interface rather than
+      # a player-facing game, query or rcon port.
+      - { name: app, protocol: tcp, default: 28082, kind: web }
+
+# No config: block. server.cfg is a real, documented file (confirmed present
+# in GameServerManagers/Game-Server-Configs' own rust/server.cfg, and it is
+# where settings with no command-line equivalent live -- description,
+# header image, PVE toggle, spawn rates), but whether it is actually read at
+# cold boot or requires an explicit `server.readcfg` console command once
+# running is genuinely unclear from the sources available here, and nothing
+# here was run live to settle it (see the architectures comment above).
+# Every value below is instead one of Rust's own well-documented,
+# cross-source-confirmed command-line flags. A future amendment can add
+# server.cfg support once that ambiguity is resolved against a real boot.
+variables:
+  # ---- Server ---------------------------------------------------------------
+  - { name: server_name, group: Server, label: Server name, description: Shown in the in-game server browser., default: "A Yggdrasil server", editable: true }
+  - { name: max_players, group: Server, label: Max players, type: number, min: 1, max: 500, step: 1, default: "50", editable: true }
+  - name: server_tags
+    group: Server
+    label: Server browser tags
+    description: Comma-separated. Optional -- left out of the command line entirely when blank.
+    default: ""
+    editable: true
+
+  # ---- World -----------------------------------------------------------------
+  - name: map_type
+    group: World
+    label: Map type
+    type: select
+    default: "Procedural Map"
+    editable: true
+    options:
+      - { value: "Procedural Map", label: "Procedural (generated from the seed below)" }
+      - { value: "Barren", label: Barren }
+      - { value: "HapisIsland", label: "Hapis Island" }
+      - { value: "SavasIsland_koth", label: "Savas Island (King of the Hill)" }
+  - { name: world_seed, group: World, label: World seed, description: Only meaningful for a procedural map -- the same seed and world size always generate the identical map., default: "1", editable: true }
+  - { name: world_salt, group: World, label: World salt, description: A second procedural-generation input, alongside the seed above. Facepunch's own default., default: "1234", editable: true }
+  - name: world_size
+    group: World
+    label: World size
+    description: Only meaningful for a procedural map. Facepunch's own documented range.
+    type: number
+    min: 1000
+    max: 6000
+    step: 250
+    default: "3000"
+    editable: true
+  - name: level_url
+    group: World
+    label: Custom map URL
+    description: Downloads and loads a map from this URL instead of generating one. Leave blank to use the map type above.
+    default: ""
+    editable: true
+
+  # ---- Gameplay ----------------------------------------------------------
+  - name: game_mode
+    group: Gameplay
+    label: Game mode
+    type: select
+    default: vanilla
+    editable: true
+    options:
+      - { value: vanilla, label: Vanilla }
+      - { value: softcore, label: "Softcore (reduced death penalty)" }
+  - name: tickrate
+    group: Gameplay
+    label: Tickrate
+    description: Facepunch's own documented range. Higher costs more CPU per player.
+    type: number
+    min: 15
+    max: 100
+    step: 1
+    default: "30"
+    editable: true
+  - name: save_interval
+    group: Gameplay
+    label: Save interval (seconds)
+    default: "300"
+    type: number
+    min: 60
+    max: 3600
+    step: 60
+    editable: true
+
+  # ---- Remote access ------------------------------------------------------
+  - name: rcon_password
+    group: Remote access
+    type: password
+    generate: password
+    label: RCON password
+    description: >-
+      Generated per server rather than left blank -- LinuxGSM's own
+      check_config.sh treats an empty RCON password as a hard failure for
+      Rust specifically, a stronger check than its generic "default password
+      detected" warning used for other games.
+    default: ""
+    editable: true
+  - name: rcon_web
+    group: Remote access
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    label: Web RCON
+    description: Enables rcon.web, the browser-based RCON client, alongside ordinary RCON tools.
+    default: "true"
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity and player limits.
+  - name: World
+    description: Which map loads, and how it is generated.
+  - name: Gameplay
+    collapsed: true
+  - name: Remote access
+    description: RCON.
+    collapsed: true
+
+# mode: immediate, not a guess at mode: log. Facepunch's own wiki names a
+# real line -- "Server startup complete" -- as what to watch for, but this
+# was never checked against a real boot (see the architectures comment
+# above), and multiple sources describe first-boot procedural map
+# generation taking 10-20 minutes, far past what a wrong guess would merely
+# delay. immediate is the honest choice until that line is confirmed live;
+# see Palworld's own seed history for exactly this mistake and its symptom
+# (mode: port on a UDP port sits in `starting` for the full timeout, then
+# reports running anyway, indistinguishable from a real failure) -- the
+# same risk applies to an unverified mode: log pattern that never matches.
+#
+# ready:
+#   mode: log
+#   pattern: "Server startup complete"
+#   timeout: 1200s
+ready:
+  mode: immediate
+
+# No console-command stop. Facepunch's own wiki states plainly that "The
+# linux console is not interactive like the windows version. You will need
+# an RCON client to send commands" -- confirmed live and independently by a
+# real, still-open LinuxGSM issue (GameServerManagers/LinuxGSM#4720), where
+# an operator's attempt to send `quit` over stdin logged "Graceful: sending
+# 'quit': FAIL". This project's StopSpec has no RCON mechanism, only a
+# console command or a signal, so a console command is not an option here at
+# all -- unlike 7 Days to Die, where a telnet-based stop merely wasn't
+# reachable from this project, Rust's own stdin genuinely does not work.
+#
+# SIGINT (not a bare SIGTERM) is what LinuxGSM itself ships in production
+# for Rust (stopmode="2", implemented as CTRL+C via a real terminal), which
+# is real evidence for what the Unity/Mono runtime's own shutdown hook is
+# actually wired to -- Console.CancelKeyPress fires on SIGINT specifically,
+# a well-known pattern for this class of process. The same GitHub issue
+# describes this mechanism as imperfect -- a hard cut that can lose
+# in-memory team association because the server does not get to run its own
+# full save routine -- with a clean RCON-based `quit` as the only better
+# option, which is not reachable from here either. 60s is generous relative
+# to LinuxGSM's own default stop wait, on the theory that more time before
+# the signal actually lands can only help whatever autosave is already in
+# flight.
+stop:
+  timeout: 60s
+  then: SIGINT
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include_root: true

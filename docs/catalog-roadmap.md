@@ -52,8 +52,8 @@ already built there is nothing left to track for them.
 
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
-(7 Days to Die), `258550` (Rust) and `232250` (Team Fortress 2) are already
-built and left off this table.
+(7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2) and `4020`
+(Garry's Mod) are already built and left off this table.
 
 | Game | AppID |
 |---|---|
@@ -95,7 +95,6 @@ built and left off this table.
 | Empires Mod | 460040 |
 | Euro Truck Simulator 2 | 1948160 |
 | Fistful of Frags | 295230 |
-| Garry's Mod | 4020 |
 | Half-Life 2: Deathmatch | 232370 |
 | Half-Life Deathmatch: Source | 255470 |
 | Half-Life: Deathmatch | 90 |

@@ -1,0 +1,267 @@
+id: garrys-mod
+schema: 3
+name: Garry's Mod
+description: >
+  A Source-engine sandbox for building, physics experiments, and community
+  game modes. This seed installs the base Sandbox game only, with no
+  Workshop content -- see the map/gamemode fields below for what that means.
+version: "1.0.0"
+
+# The base game's own Steam listing (4000) is a fully-covered store page --
+# header, hero, and portrait art all confirmed present -- unlike the
+# dedicated-server tool app (4020) installed below, which has none of its
+# own. This is the same tool-app-vs-base-game split team-fortress-2's seed
+# already documents for a different game; 4000 is also the id Valve's own
+# Steam Game Server Accounts page says to enter into the GSLT generator for
+# this game, regardless of which app id SteamCMD actually installs.
+branding:
+  steam_app_id: 4000
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+# 4020 ("Garry's Mod Dedicated Server") is confirmed against three
+# independent sources in agreement: Valve's own Steam Application IDs page
+# and Dedicated Servers List (both name 4020, not 4000, as the SteamCMD
+# target -- "app_update 4020" is Facepunch's own documented install
+# command), and LinuxGSM's actively-maintained gmodserver module
+# (lgsm/config-default/config-lgsm/gmodserver/_default.cfg), which lists
+# appid="4020", engine="source", glibc="2.15".
+#
+# Unlike team-fortress-2, the default Linux depot here is genuinely
+# **32-bit**, not 64-bit -- confirmed by Facepunch's own Linux Dedicated
+# Server Hosting page ("If you're running a 64-bit version of Linux, you
+# need 32 bit binaries, since SteamCMD is only available as 32 bit") and by
+# two independent real community Docker builds (pterodactyl/yolks'
+# games/source image, ceifa/garrysmod-docker) both running the plain,
+# un-overridden srcds_run, which auto-detects and launches the 32-bit
+# srcds_linux binary correctly for this game. A 64-bit build exists only as
+# an opt-in SteamCMD beta branch ("-beta x86-64"), not the depot this seed
+# installs. Not independently re-verified with a live `+app_info_print`
+# here, for the same arm64-host/amd64-emulation limitation every other seed
+# built this way documents.
+architectures: [amd64]
+
+install:
+  # Shared for the same reason team-fortress-2's is: the base game's files
+  # are static assets with no per-server state baked into them. This seed
+  # deliberately does not manage Workshop content (see the map/gamemode
+  # fields below), so nothing server-specific ever needs to land inside the
+  # install directory itself -- if Workshop support is added later, that
+  # content downloads at runtime into the game's own writable state, not
+  # here, and would need its own writable_paths entry at that point.
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 4020
+
+server:
+  # LinuxGSM's own directory layout (systemdir="${serverfiles}/garrysmod",
+  # servercfgdir="${systemdir}/cfg", gamelogdir="${systemdir}/logs") --
+  # structurally identical to team-fortress-2's tf/cfg, tf/logs split, since
+  # both are ordinary Source engine directory conventions.
+  writable_paths:
+    - { from: cfg, to: /game/garrysmod/cfg }
+    - { from: logs, to: /game/garrysmod/logs }
+
+containers:
+  - role: game
+    primary: true
+    # base-steamcmd, not base-linux: the depot's own bin/steamclient.so is
+    # confirmed 32-bit only (this game's whole depot is), so the fix below
+    # needs SteamCMD's own genuine 32-bit copy the same way
+    # team-fortress-2's game container needs SteamCMD's 64-bit one -- same
+    # mechanism, different architecture.
+    image: { base: steamcmd }
+    # Plain srcds_run, deliberately not bypassed the way team-fortress-2's
+    # is: that bypass existed only because TF2's auto-detected 32-bit
+    # binary didn't exist in its (64-bit-only) depot and its wrapper's own
+    # LD_LIBRARY_PATH omitted bin/linux64. Neither problem applies here --
+    # this depot's real binary is 32-bit, which is exactly what srcds_run
+    # auto-detects and launches by default, and every real reference found
+    # (LinuxGSM, the official Pterodactyl egg, ceifa/garrysmod-docker) all
+    # run the unmodified wrapper. Reach for the same bypass again only if a
+    # real boot proves it's needed here too.
+    #
+    # The steamclient.so fix mirrors team-fortress-2's exactly, pointed at
+    # sdk32/linux32 instead of sdk64/linux64: the engine's native Steamworks
+    # bridge looks for it at the hardcoded $HOME/.steam/sdk32/steamclient.so
+    # path, and both the official Pterodactyl install script and
+    # ceifa/garrysmod-docker independently confirm this exact fix (copying
+    # a steamclient.so into that path) is required or the server falls back
+    # to "This server will operate in LAN mode only."
+    #
+    # -strictportbind and -norestart match team-fortress-2's reasoning
+    # exactly: refuse rather than silently rebind a taken port, and leave
+    # restart authority with the agent alone (ADR-013) rather than
+    # srcds_run's own internal crash loop -- confirmed present in
+    # ceifa/garrysmod-docker's real command line (LinuxGSM omits
+    # -norestart only because its own external supervisor plays that role
+    # instead, which does not apply to a container the agent supervises).
+    #
+    # -console matches the official Pterodactyl egg's own command line.
+    #
+    # -nohltv: SourceTV is skipped for the same reason team-fortress-2
+    # skips it -- out of scope for a v1 seed at this project's homelab
+    # scale, and Facepunch's own wiki separately notes GMod's SourceTV has
+    # a history of Linux-specific stability issues. No +tv_port is
+    # allocated, since nothing is listening on it.
+    #
+    # -disableluarefresh is not exposed as a variable: it disables Lua
+    # hot-reload, a development-time convenience with no legitimate use on
+    # a homelab dedicated server, and both real-world references (the
+    # official egg's LUA_REFRESH toggle, ceifa's PRODUCTION toggle) default
+    # it on for exactly this reason -- leaving hot-reload enabled is a
+    # documented perf/stability footgun on a live server, not a feature an
+    # operator would trade away by having no control over it.
+    #
+    # +servercfgfile server.cfg matches team-fortress-2's own reasoning:
+    # explicit even though it is the engine's own default name, and
+    # harmless whether or not the file exists -- every setting below is
+    # passed as a launch-time cvar instead of relying on a config file's
+    # contents, the same choice team-fortress-2 makes and for the same
+    # reason (a file SteamCMD does not create cannot be depended on).
+    #
+    # map and gamemode are free text, not a fixed dropdown: only
+    # gm_construct and gm_flatgrass ship with the base game at all (every
+    # other well-known GMod map or gamemode -- DarkRP, TTT, custom sandbox
+    # maps -- is Workshop content this seed does not install), so
+    # restricting gamemode to a dropdown while leaving map free would be an
+    # arbitrary inconsistency. An operator naming Workshop content here
+    # will get a real, clear engine error until Workshop support exists as
+    # its own future amendment.
+    command: >-
+      sh -c 'mkdir -p ~/.steam/sdk32;
+      ln -sf /opt/steamcmd/linux32/steamclient.so ~/.steam/sdk32/steamclient.so;
+      exec ./srcds_run -game garrysmod -console -strictportbind -norestart
+      -nohltv -disableluarefresh
+      -ip 0.0.0.0 -port {{.Ports.game}}
+      -clientport {{.Ports.clientport}}
+      -maxplayers {{.Vars.max_players}} -tickrate {{.Vars.tickrate}}
+      +gamemode {{.Vars.gamemode}}
+      +map {{.Vars.map}}
+      +hostname "{{.Vars.server_name}}"
+      +servercfgfile server.cfg
+      +rcon_password "{{.Vars.rcon_password}}"
+      +sv_setsteamaccount "{{.Vars.gslt}}"
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
+    workdir: /game
+    ports:
+      # Same shape as team-fortress-2's: Source's query protocol answers on
+      # the same UDP port as gameplay traffic, and RCON is TCP on the
+      # identical port number -- confirmed here too by Valve's own Source
+      # RCON Protocol page ("By default, SRCDS listens for RCON connections
+      # on TCP port 27015... If the server's port number is changed... the
+      # RCON port will change as well"), with no -usercon flag needed: that
+      # flag is confirmed CS:GO/TF2-specific by Valve's own Command Line
+      # Options page and does not apply to this game.
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: rcon, protocol: tcp, offset_from: game, offset: 0 }
+      # -clientport, confirmed by LinuxGSM's own startparameters
+      # (clientport="27005"), the same source port role team-fortress-2's
+      # own clientport documents.
+      - { name: clientport, protocol: udp, default: 27005, kind: other }
+
+variables:
+  - { name: server_name, group: Server, label: Server name, description: Shown in the in-game server browser., default: "A Yggdrasil server", editable: true }
+  - name: gamemode
+    group: Server
+    label: Game mode
+    description: >-
+      The gamemode folder to load. Sandbox is the only one that ships with
+      the base game -- anything else (DarkRP, TTT, and most custom sandbox
+      variants) is Workshop content this seed does not install, and naming
+      one here without it will fail to load.
+    default: sandbox
+    editable: true
+  - name: map
+    group: Server
+    label: Map
+    description: >-
+      The map loaded on startup. gm_construct and gm_flatgrass are the only
+      two that ship with the base game; any other map name needs Workshop
+      content this seed does not install. Players can change maps
+      afterward with an admin tool or RCON.
+    default: gm_construct
+    editable: true
+  - name: max_players
+    group: Server
+    label: Max players
+    description: Source engine's own default is 16; raise it as far as your gamemode and hardware support.
+    type: number
+    min: 1
+    max: 128
+    step: 1
+    default: "16"
+    editable: true
+  - name: tickrate
+    group: Server
+    label: Tick rate
+    description: How many times per second the server simulates the game world. LinuxGSM's own default is 66.
+    type: number
+    min: 16
+    max: 100
+    step: 1
+    default: "66"
+    editable: true
+  - name: sv_password
+    group: Server
+    label: Server password
+    description: Leave blank for a public server. Set to require players to enter a password to join.
+    type: password
+    default: ""
+    editable: true
+
+  - name: rcon_password
+    group: Remote access
+    type: password
+    generate: password
+    label: RCON password
+    description: Required to use RCON tools against this server. Generated per server rather than left blank.
+    default: ""
+    editable: true
+  - name: gslt
+    group: Remote access
+    label: Game Server Login Token
+    description: >-
+      Optional. Identifies this server to Steam so it can appear in the
+      in-game server browser and be favorited by players. Generate one at
+      steamcommunity.com/dev/managegameservers using 4000 (the base game's
+      own app id) as the "App ID of the base game" field. Left blank, the
+      server still runs and accepts direct connections by IP.
+    default: ""
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity, mode, map, and player limits.
+  - name: Remote access
+    description: RCON and Steam server-browser listing.
+    collapsed: true
+
+# mode: immediate, for the same reason team-fortress-2's is: a real boot
+# has not yet confirmed how early the RCON TCP listener actually opens
+# relative to the engine finishing initialization, so a mode: port guess
+# risks reporting ready before the server can genuinely serve players.
+ready:
+  mode: immediate
+
+# Source engine's own dedicated-server console is genuinely interactive
+# over stdin -- the same mechanism team-fortress-2's own seed documents,
+# confirmed for this game too by LinuxGSM's gmodserver module declaring
+# stopmode="3" (send the literal command "quit" and wait), the identical
+# graceful-shutdown convention every other Source engine seed in this
+# catalog uses.
+stop:
+  command: "quit"
+  timeout: 30s
+  then: SIGTERM
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [cfg]

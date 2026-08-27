@@ -51,8 +51,8 @@ already built there is nothing left to track for them.
 ### Tier 1 — native Linux, LinuxGSM-verified
 
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
-(ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim) and `294420`
-(7 Days to Die) are already built and left off this table.
+(ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
+(7 Days to Die) and `258550` (Rust) are already built and left off this table.
 
 | Game | AppID |
 |---|---|
@@ -133,7 +133,6 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 | Red Orchestra: Ostfront 41-45 | 223250 |
 | Ricochet | 90 |
 | Rising World | 339010 |
-| Rust | 258550 |
 | Satisfactory | 1690800 |
 | SCP: Secret Laboratory | 996560 |
 | SCP: Secret Laboratory ServerMod | 786920 |

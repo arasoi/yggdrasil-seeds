@@ -52,7 +52,8 @@ already built there is nothing left to track for them.
 
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
-(7 Days to Die) and `258550` (Rust) are already built and left off this table.
+(7 Days to Die), `258550` (Rust) and `232250` (Team Fortress 2) are already
+built and left off this table.
 
 | Game | AppID |
 |---|---|
@@ -146,8 +147,6 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 | StickyBots | 974130 |
 | Survive the Nights | 1502300 |
 | Sven Co-op | 276060 |
-| Team Fortress 2 | 232250 |
-| Team Fortress 2 Classified | 232250 |
 | Team Fortress Classic | 90 |
 | Teeworlds | 380840 |
 | Terraria | 105600 |

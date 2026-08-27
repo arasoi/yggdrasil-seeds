@@ -52,8 +52,9 @@ already built there is nothing left to track for them.
 
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
-(7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2) and `4020`
-(Garry's Mod) are already built and left off this table.
+(7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
+(Garry's Mod) and `222860` (Left 4 Dead 2) are already built and left off
+this table.
 
 | Game | AppID |
 |---|---|
@@ -111,7 +112,6 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 | Killing Floor | 215360 |
 | Killing Floor 2 | 232130 |
 | Left 4 Dead | 222840 |
-| Left 4 Dead 2 | 222860 |
 | Military Conflict: Vietnam | 1136190 |
 | MORDHAU | 629800 |
 | Natural Selection | 90 |

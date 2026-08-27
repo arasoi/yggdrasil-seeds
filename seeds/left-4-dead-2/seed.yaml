@@ -1,0 +1,267 @@
+id: left-4-dead-2
+schema: 3
+name: Left 4 Dead 2
+description: >
+  Four survivors, an endless horde, and five campaigns to fight through.
+  This seed installs the base game's five official campaigns in
+  cooperative mode -- see the game mode/map fields below for what else is
+  and isn't in scope.
+version: "1.0.0"
+
+# The base game's own Steam listing (550) is fully covered -- header,
+# capsule and hero art all confirmed present -- unlike the dedicated-server
+# tool app (222860) installed below, whose own store page is real but
+# deliberately unlisted by the publisher and missing its header/capsule
+# art entirely (confirmed via Steam's own appdetails API). Same
+# tool-app-vs-base-game split team-fortress-2 and garrys-mod already
+# document; 550 is also the id Valve's own GSLT generator wants for this
+# game, not 222860.
+branding:
+  steam_app_id: 550
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+# 222860 ("Left 4 Dead 2 Dedicated Server") is confirmed as a real,
+# separate app from the base game by Valve's own Steam Application IDs
+# page and Dedicated Servers List -- the identical tool-app split
+# team-fortress-2 and garrys-mod already have, not the "same id as the
+# base game" LinuxGSM's own gmodserver-style config for this game seemed
+# to imply (LinuxGSM's l4d2server module simply never references 550 at
+# all, which is not the same as confirming there is no such id).
+#
+# The depot is confirmed 32-bit from three independent angles: LinuxGSM's
+# own config declares no 64-bit branch (unlike garrys-mod, which at least
+# has one as an opt-in), the real community Dockerfile this seed's
+# steamclient.so fix is modelled on installs only 32-bit compat libraries,
+# and a real, reproducible community report of a 64-bit Metamod/SourceMod
+# build failing against this game's own srcds process with "wrong ELF
+# class: ELFCLASS64" -- direct proof the running binary is itself 32-bit.
+# Not independently re-verified with a live `+app_info_print` here, for
+# the same arm64-host/amd64-emulation limitation every other seed built
+# this way documents.
+architectures: [amd64]
+
+install:
+  # Shared for the same reason team-fortress-2's and garrys-mod's are: the
+  # base game's files are static assets with no per-server state baked
+  # into them. This seed does not manage custom campaigns or Workshop
+  # addons (out of scope for v1, the same reasoning garrys-mod gives for
+  # skipping Workshop content), so nothing server-specific ever needs to
+  # land inside the install directory itself.
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 222860
+
+server:
+  # LinuxGSM's own directory layout (systemdir="${serverfiles}/left4dead2",
+  # servercfgdir="${systemdir}/cfg", gamelogdir="${systemdir}/logs") --
+  # structurally identical to team-fortress-2's tf/cfg, tf/logs split and
+  # garrys-mod's garrysmod/cfg, garrysmod/logs split, since all three are
+  # the same ordinary Source engine directory convention.
+  writable_paths:
+    - { from: cfg, to: /game/left4dead2/cfg }
+    - { from: logs, to: /game/left4dead2/logs }
+
+containers:
+  - role: game
+    primary: true
+    # base-steamcmd, not base-linux: this depot's own steamclient.so is
+    # confirmed 32-bit only (this whole depot is), so the fix below needs
+    # SteamCMD's own genuine 32-bit copy -- the identical mechanism
+    # garrys-mod's game container needs, for the identical reason.
+    image: { base: steamcmd }
+    # Plain srcds_run, deliberately not bypassed -- the same call
+    # garrys-mod's own seed makes and for the same reason: this depot's
+    # real binary is 32-bit, which is exactly what srcds_run's own
+    # auto-detection launches by default, and every real reference found
+    # (LinuxGSM, a real docker-compose deployment, several community
+    # setup guides) runs the unmodified wrapper successfully. One real
+    # reference (a Pterodactyl-ecosystem egg) omits -game left4dead2
+    # entirely and relies on default game-folder detection working by
+    # luck -- every other real source keeps it explicit, which is safer
+    # and is what this seed does too.
+    #
+    # The steamclient.so fix mirrors garrys-mod's exactly (sdk32/linux32,
+    # not sdk64/linux64): the engine's native Steamworks bridge looks for
+    # it at the hardcoded $HOME/.steam/sdk32/steamclient.so path, and
+    # real setup notes independently confirm copying SteamCMD's own
+    # linux32 copy there is the fix, or Steam auth hangs or fails outright.
+    #
+    # -strictportbind and -norestart match team-fortress-2's and
+    # garrys-mod's own reasoning exactly: refuse rather than silently
+    # rebind a taken port, and leave restart authority with the agent
+    # alone (ADR-013) rather than srcds_run's own internal crash loop --
+    # confirmed present in multiple real L4D2 command lines.
+    #
+    # -tickrate is not exposed as a variable, unlike garrys-mod's: Valve's
+    # own Command Line Options page states it plainly -- tickrate is not
+    # alterable for Left 4 Dead or Left 4 Dead 2 without a plugin running
+    # the server insecure (VAC disabled), which is out of scope here. It
+    # would be a control that visibly does nothing, which is worse than
+    # not having it.
+    #
+    # -usercon is not passed, matching team-fortress-2's and garrys-mod's
+    # own confirmed finding for this exact flag: Valve's own documentation
+    # scopes it explicitly to Counter-Strike: Global Offensive and Team
+    # Fortress 2 servers. RCON here is the ordinary rcon_password/UDP
+    # RCON path every other Source game before -usercon uses.
+    #
+    # +servercfgfile server.cfg matches team-fortress-2's and garrys-mod's
+    # own reasoning: explicit even though it is the engine's own default
+    # name, and harmless whether or not the file exists -- every setting
+    # below is passed as a launch-time cvar instead of relying on a
+    # config file's contents, the same choice both of those seeds make
+    # and for the same reason (a file SteamCMD does not create cannot be
+    # depended on).
+    #
+    # map offers the five official base-game campaigns by their first
+    # map's internal name -- loading any one of them auto-advances
+    # through the rest of that campaign on its own. Every other named
+    # Left 4 Dead 2 campaign or map (the ported Left 4 Dead campaigns,
+    # any community or Workshop content) needs the addons/Workshop
+    # support this seed does not install, the same scope boundary
+    # garrys-mod draws around its own two base-game maps.
+    #
+    # gamemode offers the five documented base modes from
+    # sv_gametypes' own default list (mp_gamemode's accepted values) --
+    # mutations and the team-based versus/scavenge variants are real,
+    # valued features out of scope for a v1 seed at this project's
+    # homelab scale, the same call team-fortress-2 makes about SourceTV
+    # and garrys-mod makes about Workshop content.
+    command: >-
+      sh -c 'mkdir -p ~/.steam/sdk32;
+      ln -sf /opt/steamcmd/linux32/steamclient.so ~/.steam/sdk32/steamclient.so;
+      exec ./srcds_run -game left4dead2 -console -strictportbind -norestart
+      -ip 0.0.0.0 -port {{.Ports.game}}
+      +clientport {{.Ports.clientport}}
+      -maxplayers {{.Vars.max_players}}
+      +map {{.Vars.map}}
+      +mp_gamemode {{.Vars.gamemode}}
+      +hostname "{{.Vars.server_name}}"
+      +servercfgfile server.cfg
+      +rcon_password "{{.Vars.rcon_password}}"
+      +sv_setsteamaccount "{{.Vars.gslt}}"
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
+    workdir: /game
+    ports:
+      # Same shape as team-fortress-2's and garrys-mod's: Source's query
+      # protocol answers on the same UDP port as gameplay traffic, and
+      # RCON is TCP on the identical port number -- confirmed here too,
+      # since -usercon does not apply and RCON falls back to the classic
+      # Source RCON path (TCP on the game's own port).
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: rcon, protocol: tcp, offset_from: game, offset: 0 }
+      # +clientport, confirmed by LinuxGSM's own startparameters
+      # (clientport="27005") -- the identical default team-fortress-2's
+      # and garrys-mod's own clientport documents.
+      - { name: clientport, protocol: udp, default: 27005, kind: other }
+
+variables:
+  - { name: server_name, group: Server, label: Server name, description: Shown in the in-game server browser., default: "A Yggdrasil server", editable: true }
+  - name: gamemode
+    group: Server
+    label: Game mode
+    description: >-
+      The mode played. Mutations and the team-based versus/scavenge
+      variants are Workshop or custom-mode content this seed does not
+      install.
+    type: select
+    default: coop
+    editable: true
+    options:
+      - { value: coop, label: "Campaign (Co-op)" }
+      - { value: realism, label: "Realism" }
+      - { value: versus, label: "Versus" }
+      - { value: survival, label: "Survival" }
+      - { value: scavenge, label: "Scavenge" }
+  - name: map
+    group: Server
+    label: Campaign
+    description: >-
+      The campaign loaded on startup, by its first map -- the game
+      advances through the rest of that campaign on its own. Only the
+      five base-game campaigns are guaranteed present; any other campaign
+      needs Workshop content this seed does not install.
+    type: select
+    default: c1m1_hotel
+    editable: true
+    options:
+      - { value: c1m1_hotel, label: "Dead Center" }
+      - { value: c2m1_highway, label: "Dark Carnival" }
+      - { value: c3m1_plankcountry, label: "Swamp Fever" }
+      - { value: c4m1_milltown_a, label: "Hard Rain" }
+      - { value: c5m1_waterfront, label: "The Parish" }
+  - name: max_players
+    group: Server
+    label: Max players
+    description: Eight is the engine's own hard ceiling for this game, reached in Versus; a Campaign server only ever seats four.
+    type: number
+    min: 1
+    max: 8
+    step: 1
+    default: "8"
+    editable: true
+  - name: sv_password
+    group: Server
+    label: Server password
+    description: Leave blank for a public server. Set to require players to enter a password to join.
+    type: password
+    default: ""
+    editable: true
+
+  - name: rcon_password
+    group: Remote access
+    type: password
+    generate: password
+    label: RCON password
+    description: Required to use RCON tools against this server. Generated per server rather than left blank.
+    default: ""
+    editable: true
+  - name: gslt
+    group: Remote access
+    label: Game Server Login Token
+    description: >-
+      Optional. Identifies this server to Steam so it can appear in the
+      in-game server browser and be favorited by players. Generate one at
+      steamcommunity.com/dev/managegameservers using 550 (the base game's
+      own app id) as the "App ID of the base game" field. Left blank, the
+      server still runs and accepts direct connections by IP.
+    default: ""
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity, mode, campaign, and player limits.
+  - name: Remote access
+    description: RCON and Steam server-browser listing.
+    collapsed: true
+
+# mode: immediate, for the same reason team-fortress-2's and garrys-mod's
+# are: a real boot has not yet confirmed how early the RCON TCP listener
+# actually opens relative to the engine finishing initialization, so a
+# mode: port guess risks reporting ready before the server can genuinely
+# serve players.
+ready:
+  mode: immediate
+
+# Source engine's own dedicated-server console is genuinely interactive
+# over stdin -- the same mechanism team-fortress-2's and garrys-mod's own
+# seeds document, confirmed for this game too by LinuxGSM's l4d2server
+# module declaring stopmode="3" (send the literal command "quit" and
+# wait), the identical graceful-shutdown convention every other Source
+# engine seed in this catalog uses.
+stop:
+  command: "quit"
+  timeout: 30s
+  then: SIGTERM
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [cfg]

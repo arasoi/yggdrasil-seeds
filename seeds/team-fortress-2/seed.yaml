@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.3"
+version: "1.0.4"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -62,46 +62,44 @@ server:
 containers:
   - role: game
     primary: true
-    # base-linux, not base-steamcmd: the install step above already
-    # materialised the depot, so this container only execs the binary.
-    image: { base: linux }
-    # srcds_run is Valve's own launcher script, shipped inside every Source
-    # dedicated server depot -- confirmed from the real script source
-    # (github.com/nillerusr/source-engine, a leaked-source mirror; its own
-    # header comment reads "a wrapper script for the main Source engine
-    # dedicated server binary. Performs auto-restarting of the server on
-    # crash."), and it sets its own LD_LIBRARY_PATH
-    # (".:bin:$LD_LIBRARY_PATH") by itself, which this seed does not need to
-    # reproduce.
+    # base-steamcmd, not base-linux -- the install step above already
+    # materialised the depot, so this container doesn't need SteamCMD
+    # itself, but it needs one specific thing SteamCMD's own install ships:
+    # a genuinely 64-bit steamclient.so, staged below. base-linux alone
+    # cannot provide that.
+    image: { base: steamcmd }
+    # Valve's own srcds_run launcher script (shipped inside every Source
+    # dedicated server depot -- github.com/nillerusr/source-engine, a
+    # leaked-source mirror, is where all of the reasoning below was
+    # confirmed against the real script) turned out to be more trouble than
+    # it was worth, live: its CPU auto-detection defaults to a 32-bit
+    # srcds_linux the current depot does not ship at all ("exec:
+    # ./srcds_linux: not found"), overriding that with -binary needs a
+    # leading ./ the flag does not add for you ("exec: srcds_linux64: not
+    # found" otherwise), and even once it launches the right binary, the
+    # wrapper's own LD_LIBRARY_PATH (".:bin:$LD_LIBRARY_PATH") never adds
+    # bin/linux64 -- so a 64-bit srcds_linux64 loads a 32-bit
+    # libtier0_srv.so through the wrapper's own path and dies on the ELF
+    # class mismatch. Three real, sequential, live-confirmed failures from
+    # one wrapper script whose only actual job here is a restart loop
+    # ADR-013 already forbids letting it own. This seed now execs
+    # ./srcds_linux64 directly and builds LD_LIBRARY_PATH by hand instead.
     #
-    # -binary ./srcds_linux64 overrides its own CPU auto-detection, which is
-    # NOT optional here despite looking like it should be: confirmed live on
-    # a real amd64 node, that auto-detection defaults to the legacy 32-bit
-    # `srcds_linux` (the same script source's own $HL default, unchanged
-    # since the Source engine's original Linux port), which the current TF2
-    # depot does not ship at all -- 64-bit-only for years now. The real,
-    # live-confirmed failure: "./srcds_run: 362: exec: ./srcds_linux: not
-    # found".
-    #
-    # The leading ./ is not decoration -- confirmed live, again, the hard
-    # way: passing a bare `-binary srcds_linux64` (no path) changed the
-    # failure rather than fixing it, to "exec: srcds_linux64: not found".
-    # The script's own default ($HL="./srcds_i486") always carries a leading
-    # ./; -binary's argument does not get one added for it, and without it
-    # the shell's own `exec` resolves the name against $PATH rather than the
-    # current directory -- and `.` is deliberately not on $PATH by default
-    # on any sane Linux system. The file exists the whole time; only the
-    # lookup was wrong, twice, in two different ways.
-    #
-    # -norestart is this seed's one deviation from LinuxGSM's own
-    # startparameters, and it is not optional: srcds_run's built-in
-    # auto-restart-on-crash loop is exactly the split-restart-authority
-    # problem ADR-013 exists to rule out project-wide -- Docker's restart
-    # policy is always `no` and the agent is supposed to be the only thing
-    # that ever decides to relaunch a crashed container. Confirmed from the
-    # same script source: -norestart sets its internal RESTART variable to
-    # empty, which is what disables the loop; everything else about the
-    # wrapper (library path, arch detection, signal handling) is unaffected.
+    # Two more real failures came after the binary itself was launching
+    # correctly. First, the engine's native Steamworks bridge looks for
+    # steamclient.so at the hardcoded path $HOME/.steam/sdk64/steamclient.so
+    # (confirmed the same way ADR-047's ARK/Proton work confirmed it for
+    # lsteamclient.so: reading the real search path out of the compiled
+    # binary) -- the TF2 depot's own bin/steamclient.so is 32-bit only, so
+    # this symlinks SteamCMD's own genuine 64-bit copy
+    # (/opt/steamcmd/linux64/steamclient.so, confirmed a real 64-bit ELF by
+    # extracting it from the base-steamcmd image and inspecting it
+    # directly) into place, the same source ygg-proton already uses for
+    # ARK. Second, bin/linux64/replay_srv.so failed to load with a missing
+    # libcurl-gnutls.so.4 -- fixed in the shared image itself
+    # (images/base-steamcmd/Dockerfile, ADR-047's 2026-08-27 amendment),
+    # since this is a Source-engine-wide dependency and not specific to
+    # this one seed.
     #
     # -strictportbind refuses to start rather than silently binding a
     # different port if the requested one is unavailable -- LinuxGSM's own
@@ -119,9 +117,16 @@ containers:
     # already Source's own default name for it -- LinuxGSM's own
     # startparameters never omit this flag either, and there is no cost to
     # being explicit about which file gets executed at map start.
+    #
+    # Confirmed live end to end on a real amd64 node: with this command,
+    # the depot binds its game port ("Network: IP 0.0.0.0, mode MP,
+    # dedicated Yes, ports <port> SV / <port> CL") and settles into a
+    # stable running state.
     command: >-
-      ./srcds_run -game tf -norestart -strictportbind -nohltv
-      -binary ./srcds_linux64
+      sh -c 'mkdir -p ~/.steam/sdk64;
+      ln -sf /opt/steamcmd/linux64/steamclient.so ~/.steam/sdk64/steamclient.so;
+      export LD_LIBRARY_PATH=./bin/linux64:./bin:.:/opt/steamcmd/linux64:$LD_LIBRARY_PATH;
+      exec ./srcds_linux64 -game tf -strictportbind -nohltv
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers
@@ -130,7 +135,7 @@ containers:
       +servercfgfile server.cfg
       +rcon_password "{{.Vars.rcon_password}}"
       +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
     workdir: /game
     ports:
       # Source's own query protocol (A2S_INFO, used by the in-game server

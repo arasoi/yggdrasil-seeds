@@ -1,18 +1,22 @@
 id: minecraft-bedrock
 schema: 3
 name: Minecraft Bedrock
-icon: "🧱"
 description: >
   Dedicated server for Minecraft Bedrock Edition — the version played on
   consoles, phones and Windows. The server downloads itself when it first
   starts, so there is no separate install step.
-version: "4.0.2"
+version: "4.0.3"
 
-# Minecraft is not sold on Steam, so there is no steam_app_id here -- both
-# images are Mojang's own official franchise assets (minecraft.net's press
-# logo, and the Minecraft Wiki's mirror of Mojang's 2024 key art), not
-# fan-made substitutes.
+# Minecraft is not sold on Steam, so there is no steam_app_id here -- all
+# three images are Mojang's own official franchise assets (minecraft.net's
+# press logo and its own app icon, and the Minecraft Wiki's mirror of
+# Mojang's 2024 key art), not fan-made substitutes. icon reuses the same
+# file as logo -- minecraft.net's own press logo is already the square
+# Creeper-face mark, not a wide wordmark, so it doubles as an icon rather
+# than needing a second image sourced. The top-level icon: emoji is gone,
+# since a seed may declare one or the other, never both.
 branding:
+  icon: icon.jpg
   logo: logo.jpg
   banner: banner.jpg
 

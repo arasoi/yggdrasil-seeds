@@ -1,16 +1,18 @@
 id: palworld
 schema: 3
 name: Palworld
-icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.2.0"
+version: "1.2.1"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
-# server tool app installed below.
+# server tool app installed below. icon is the store's own portrait capsule
+# (library_600x900.jpg); the top-level icon: emoji is gone, since a seed may
+# declare one or the other, never both.
 branding:
   steam_app_id: 1623730
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 

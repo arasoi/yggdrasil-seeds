@@ -1,11 +1,24 @@
 id: 7-days-to-die
 schema: 3
 name: 7 Days to Die
-icon: "🧟"
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.5"
+version: "1.0.6"
+
+# All three images come straight from this same app id's own Steam CDN
+# assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
+# -- unlike Rust's or Team Fortress 2's dedicated-server tool apps, this one
+# genuinely has its own dedicated artwork, confirmed live (the logo reads
+# "7 DAYS TO DIE DEDICATED SERVER", not a copy of the base game's plain
+# logo), so there was no need to fall back to the base game's own listing
+# (251570) for art the way those two seeds do. The top-level icon: emoji is
+# gone, since a seed may declare one or the other, never both.
+branding:
+  steam_app_id: 294420
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
 
 # The dedicated-server tool's own app id (294420), separate from the base
 # game's, ships a real native Linux binary: confirmed both against LinuxGSM

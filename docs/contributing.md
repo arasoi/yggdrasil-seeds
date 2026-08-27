@@ -71,6 +71,19 @@ never started a server is a hypothesis. See [testing.md](testing.md).
 - [ ] Any `crash.pattern` was watched firing more than once — or was left out
 - [ ] `stop` shuts the game down cleanly, and the world survived a restart
 
+**Branding** — required for every seed, not optional polish. See
+[authoring.md](authoring.md#branding) for where to find these.
+
+- [ ] `branding.icon` is set — never the top-level `icon:` emoji, which is a
+      placeholder for a seed that has not been finished, not an
+      alternative worth keeping once real art exists
+- [ ] `branding.logo` and `branding.banner` are both set
+- [ ] All three are real, on-topic art for this game or its dedicated-server
+      tool — not a screenshot, not a generic placeholder
+- [ ] Every image is one you may redistribute (an official CDN, press kit, or
+      wiki mirror run by the developer — never a fan reupload of unclear
+      origin)
+
 **Compatibility** — for a change to an existing seed
 
 - [ ] No variable or setting was renamed without `renamed_from`
@@ -83,7 +96,6 @@ never started a server is a hypothesis. See [testing.md](testing.md).
 
 - [ ] Comments explain the non-obvious decisions and say what was *not* verified
 - [ ] No credential, personal file host, or link shortener in any URL
-- [ ] Branding files, if any, are ones you may redistribute
 - [ ] No ADR numbers referenced from inside a seed
 
 ### What to put in the PR description

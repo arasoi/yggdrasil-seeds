@@ -1,17 +1,21 @@
 id: vintage-story
 schema: 3
 name: Vintage Story
-icon: "🪨"
 description: >
   Dedicated server for Vintage Story, a sandbox survival and building game.
   Each server gets its own copy of the game files, so different worlds can run
   different versions.
-version: "2.1.0"
+version: "2.1.1"
 
-# Not on Steam, so no steam_app_id -- both images come from the developer's
-# own wiki (wiki.vintagestory.at, run by Anego Studios themselves): the
-# game's own square logo, and their release-announcement key art as banner.
+# Not on Steam, so no steam_app_id -- every image comes from Anego Studios'
+# own official properties: logo and banner from their wiki (wiki.vintagestory.at)
+# as already documented, and icon from vintagestory.at's own site icon set
+# (android-chrome-512x512.png) -- the same tree-on-gears mark as the logo but
+# without the "Vintage Story" wordmark baked in, which would be illegible at
+# icon size. The top-level icon: emoji is gone, since a seed may declare one
+# or the other, never both.
 branding:
+  icon: icon.png
   logo: logo.png
   banner: banner.png
 

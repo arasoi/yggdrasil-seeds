@@ -1,18 +1,20 @@
 id: ark-survival-ascended
 schema: 3
 name: ARK Survival Ascended
-icon: "🦖"
 description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.6.0"
+version: "5.6.1"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
-# store page and so no artwork of its own (ADR-051).
+# store page and so no artwork of its own (ADR-051). icon is the store's own
+# portrait capsule (library_600x900.jpg); the top-level icon: emoji is gone,
+# since a seed may declare one or the other, never both.
 branding:
   steam_app_id: 2399830
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 

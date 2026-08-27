@@ -1,11 +1,21 @@
 id: team-fortress-2
 schema: 3
 name: Team Fortress 2
-icon: "🎩"
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.0"
+version: "1.0.1"
+
+# The base game's own Steam listing (440) -- 232250, the dedicated-server
+# tool app id installed below, has no store page and so no artwork of its
+# own. icon is the store's own portrait capsule (library_600x900.jpg). The
+# top-level icon: emoji is gone, since a seed may declare one or the other,
+# never both.
+branding:
+  steam_app_id: 440
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
 
 # The dedicated-server tool's own app id (232250, "Team Fortress 2 Dedicated
 # Server") is separate from the base game's (440) -- the same

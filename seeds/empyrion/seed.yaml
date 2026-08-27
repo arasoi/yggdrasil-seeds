@@ -1,16 +1,18 @@
 id: empyrion
 schema: 3
 name: Empyrion - Galactic Survival
-icon: "🚀"
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.1.0"
+version: "1.1.1"
 
 # The base game's own Steam listing — distinct from 530870, the dedicated
-# server tool app installed below.
+# server tool app installed below. icon is the store's own portrait capsule
+# (library_600x900.jpg); the top-level icon: emoji is gone, since a seed may
+# declare one or the other, never both.
 branding:
   steam_app_id: 383120
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 

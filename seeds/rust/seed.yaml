@@ -1,13 +1,23 @@
 id: rust
 schema: 3
 name: Rust
-icon: "🛢️"
 description: >
   Open-world survival on a shared procedural map: scavenge, build a base,
   and defend it from raiders. This seed runs the dedicated server, not the
   game. KNOWN BROKEN as of this version -- see the comment below before
   installing.
-version: "1.0.1"
+version: "1.0.2"
+
+# The base game's own Steam listing (252490) -- 258550, the dedicated-server
+# tool app id installed below, has no store page and so no artwork of its
+# own. icon is the store's own portrait capsule (library_600x900.jpg). The
+# top-level icon: emoji is gone, since a seed may declare one or the other,
+# never both.
+branding:
+  steam_app_id: 252490
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
 
 # BLOCKED, not a seed-authoring bug: a real boot on a real amd64 node
 # (RustDedicated build date 2026-08-18, Unity 6000.3.15x1-8, changeset

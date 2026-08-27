@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.1"
+version: "1.0.2"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -70,10 +70,20 @@ containers:
     # (github.com/nillerusr/source-engine, a leaked-source mirror; its own
     # header comment reads "a wrapper script for the main Source engine
     # dedicated server binary. Performs auto-restarting of the server on
-    # crash."), and it already does two things by itself that this project
-    # would otherwise have to reproduce by hand: it sets its own
-    # LD_LIBRARY_PATH (".:bin:$LD_LIBRARY_PATH") and it auto-detects which
-    # architecture's binary to run, rather than this seed hardcoding one.
+    # crash."), and it sets its own LD_LIBRARY_PATH
+    # (".:bin:$LD_LIBRARY_PATH") by itself, which this seed does not need to
+    # reproduce.
+    #
+    # -binary srcds_linux64 overrides its own CPU auto-detection, which is
+    # NOT optional here despite looking like it should be: confirmed live on
+    # a real amd64 node, that auto-detection defaults to the legacy 32-bit
+    # `srcds_linux` (the same script source's own $HL default, unchanged
+    # since the Source engine's original Linux port), which the current TF2
+    # depot does not ship at all -- 64-bit-only for years now. The real,
+    # live-confirmed failure: "./srcds_run: 362: exec: ./srcds_linux: not
+    # found", the server never starts, and yggdrasil correctly reports it as
+    # crashed rather than the false "running" a less careful failure mode
+    # would produce.
     #
     # -norestart is this seed's one deviation from LinuxGSM's own
     # startparameters, and it is not optional: srcds_run's built-in
@@ -103,6 +113,7 @@ containers:
     # being explicit about which file gets executed at map start.
     command: >-
       ./srcds_run -game tf -norestart -strictportbind -nohltv
+      -binary srcds_linux64
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers

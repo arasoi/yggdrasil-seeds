@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.2"
+version: "1.0.3"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -74,16 +74,24 @@ containers:
     # (".:bin:$LD_LIBRARY_PATH") by itself, which this seed does not need to
     # reproduce.
     #
-    # -binary srcds_linux64 overrides its own CPU auto-detection, which is
+    # -binary ./srcds_linux64 overrides its own CPU auto-detection, which is
     # NOT optional here despite looking like it should be: confirmed live on
     # a real amd64 node, that auto-detection defaults to the legacy 32-bit
     # `srcds_linux` (the same script source's own $HL default, unchanged
     # since the Source engine's original Linux port), which the current TF2
     # depot does not ship at all -- 64-bit-only for years now. The real,
     # live-confirmed failure: "./srcds_run: 362: exec: ./srcds_linux: not
-    # found", the server never starts, and yggdrasil correctly reports it as
-    # crashed rather than the false "running" a less careful failure mode
-    # would produce.
+    # found".
+    #
+    # The leading ./ is not decoration -- confirmed live, again, the hard
+    # way: passing a bare `-binary srcds_linux64` (no path) changed the
+    # failure rather than fixing it, to "exec: srcds_linux64: not found".
+    # The script's own default ($HL="./srcds_i486") always carries a leading
+    # ./; -binary's argument does not get one added for it, and without it
+    # the shell's own `exec` resolves the name against $PATH rather than the
+    # current directory -- and `.` is deliberately not on $PATH by default
+    # on any sane Linux system. The file exists the whole time; only the
+    # lookup was wrong, twice, in two different ways.
     #
     # -norestart is this seed's one deviation from LinuxGSM's own
     # startparameters, and it is not optional: srcds_run's built-in
@@ -113,7 +121,7 @@ containers:
     # being explicit about which file gets executed at map start.
     command: >-
       ./srcds_run -game tf -norestart -strictportbind -nohltv
-      -binary srcds_linux64
+      -binary ./srcds_linux64
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers

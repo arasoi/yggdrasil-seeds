@@ -1,15 +1,18 @@
 id: ark-survival-evolved
 schema: 3
 name: ARK Survival Evolved
-icon: "🦴"
 description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.4.0"
+version: "1.4.1"
 
+# icon is the store's own portrait capsule (library_600x900.jpg) for the same
+# base-game app id above; the top-level icon: emoji is gone, since a seed may
+# declare one or the other, never both.
 branding:
   steam_app_id: 346110
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 

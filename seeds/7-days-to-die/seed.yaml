@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.7"
+version: "1.1.0"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -30,19 +30,23 @@ branding:
 # identically on both runtimes) before it can even print appinfo.
 #
 # A real install and boot found three generations of config drift that
-# nothing short of running it would have caught: the web control panel
-# (ControlPanelEnabled/Port/Password) is gone from the build entirely, not
-# merely renamed; V3.0 ("Dead Hot Summer") folded thirty separate difficulty/
-# zombie/loot/airdrop properties into one generated SandboxCode string; and
-# SaveGameFolder itself no longer exists, superseded by UserDataFolder. The
-# reference configs this seed started from (LinuxGSM's companion
-# Game-Server-Configs repo, and the 7 Days to Die wiki) were current when
-# read but describe a version this build has since moved well past -- the
-# properties still declared below are the ones that survived a real boot,
-# not merely the ones a reference document happened to list. `sandbox_code`
-# has one further limit worth stating plainly: this seed cannot compose,
-# validate, or preview one, since it is an opaque string the game's own
-# Sandbox Options menu generates.
+# nothing short of running it would have caught: the old web control panel
+# properties (ControlPanelEnabled/Port/Password) abort boot with "Unknown
+# config option" against this build -- this seed originally read that as the
+# whole feature being gone, but a later pass against the Valve Developer
+# Wiki's own reference table found it had only been renamed, to
+# WebDashboardEnabled/Port/Url plus EnableMapRendering (see web_dashboard_
+# enabled below, not re-verified live); V3.0 ("Dead Hot Summer") folded
+# thirty separate difficulty/zombie/loot/airdrop properties into one
+# generated SandboxCode string; and SaveGameFolder itself no longer exists,
+# superseded by UserDataFolder. The reference configs this seed started from
+# (LinuxGSM's companion Game-Server-Configs repo, and the 7 Days to Die
+# wiki) were current when read but describe a version this build has since
+# moved well past -- the properties still declared below are the ones that
+# survived a real boot, not merely the ones a reference document happened to
+# list. `sandbox_code` has one further limit worth stating plainly: this
+# seed cannot compose, validate, or preview one, since it is an opaque
+# string the game's own Sandbox Options menu generates.
 #
 # What is now confirmed live, end to end: install, boot past config parsing,
 # world load (Navezgane), EOS session registration, and a genuinely running
@@ -90,47 +94,43 @@ containers:
       -configfile=/data/serverconfig.xml
     workdir: /game
     ports:
-      # Every source checked (LinuxGSM's own port docs, two independent
-      # hosting guides, and a GameServerManagers Docker image built on top of
-      # LinuxGSM) agrees this is TCP *and* UDP on the same number, not one
-      # port each -- offset_from/offset:0 is this project's mechanism for a
-      # same-number dual-protocol pair (ADR-083, ADR-109), already used for
-      # exactly this shape by the Vintage Story seed.
+      # The Valve Developer Wiki's own "7 Days to Die Dedicated Server" page
+      # (developer.valvesoftware.com) is the authoritative source this seed
+      # is now built from, and its Firewall Ports section is explicit: TCP
+      # 26900 (the server port) plus 8080-8081 for remote admin, and UDP
+      # 26900-26903. That confirms, rather than merely infers, two things
+      # this seed previously had to reconstruct from secondary sources: the
+      # base port really is dual-protocol (TCP and UDP on the same number --
+      # offset_from/offset:0 is this project's mechanism for a same-number
+      # dual-protocol pair, ADR-083/ADR-109, already used for exactly this
+      # shape by the Vintage Story seed), and the UDP range really does run
+      # through offset 3, not offset 2 -- the exact gap a real operator hit:
+      # the server ran and was directly connectable by IP, but never
+      # appeared in the in-game server browser. The Wiki's port list is
+      # unconditional: it does not grow if server_allow_crossplay below is
+      # ever turned on, so no extra ports are declared for that case.
+      #
+      # The same page separately warns to avoid 27000-27099 for whichever
+      # number a server ends up bound to, due to heavy unrelated Steam
+      # traffic on that range. This seed has no way to steer the number
+      # ADR-061's allocator actually picks away from that range -- worth
+      # keeping in mind when sizing a node's own configured port range.
       - { name: game, protocol: udp, default: 26900, kind: game }
       - { name: game-tcp, protocol: tcp, offset_from: game, offset: 0 }
-      # Three further UDP ports immediately above the base -- not two, which
-      # is what this seed shipped with and which is exactly the gap a real
-      # operator hit: the server ran and was directly connectable by IP, but
-      # never appeared in the in-game server browser. The specific symptom
-      # ("Eos Registration Failed" in the server's own log) and its fix are
-      # both well documented against the current, EOS-backed build: the 7
-      # Days to Die wiki's own server-browser troubleshooting guide, a
-      # hosting provider's public knowledgebase, and CubeCoders' own AMP
-      # support threads answering this exact symptom all converge on
-      # 26900-26903 UDP as the non-crossplay minimum (26900-26905 if
-      # ServerAllowCrossplay is ever turned on -- not exposed as a variable
-      # here, since nothing else in this seed manages crossplay). ich777's
-      # steamcmd:7dtd image, one of the most widely deployed 7DTD containers,
-      # maps offset 3 explicitly too. Declared right after the base port and
-      # before the independently-allocated telnet port below, so a base
+      # Declared right after the base port and before the
+      # independently-allocated telnet/web-dashboard ports below, so a base
       # candidate is never granted a number one of these needs (ports
       # allocate in declaration order -- the same reasoning ARK's own seed
       # records for its own offset sibling).
-      #
-      # Not added: a further, fixed (non-offset) UDP port near 27015 that a
-      # couple of sources (a LinuxGSM-adjacent port wiki, ich777's own image)
-      # still map, describing it as used for Steam master-server
-      # registration. Every source actually describing today's EOS-backed
-      # browser stops at 26905 and never mentions it, so it reads as a
-      # holdover from before this game's server list moved off Steam rather
-      # than something the current build still needs -- worth trying only if
-      # 26900-26903 alone turns out not to be enough.
       - { name: query1, protocol: udp, offset_from: game, offset: 1 }
       - { name: query2, protocol: udp, offset_from: game, offset: 2 }
       - { name: query3, protocol: udp, offset_from: game, offset: 3 }
       # Independent: telnet is the game's remote-console interface and has
-      # no fixed relationship to the game port.
+      # no fixed relationship to the game port. Same for the web dashboard --
+      # off by default (web_dashboard_enabled below), but still always
+      # allocated, the same choice this seed already makes for telnet.
       - { name: telnet, protocol: tcp, default: 8081, kind: rcon }
+      - { name: webdash, protocol: tcp, default: 8080, kind: web }
 
 # serverconfig.xml's flat <property name="X" value="Y"/> list has no format
 # support in internal/configfile (ini.go, structured.go's JSON/YAML,
@@ -174,9 +174,48 @@ variables:
     default: ""
     editable: true
   - { name: server_description, group: Server, label: Description, description: Shown in the server browser., default: "A 7 Days to Die server", editable: true }
-  - { name: max_players, group: Server, label: Max players, type: number, min: 1, max: 64, step: 1, default: "8", editable: true }
-  - name: server_visibility
+  # Officially "Only 8-players are supported. Past 20 will cause issues with
+  # data being saved properly." (Valve Developer Wiki) -- left editable past
+  # that, since it's the game's own soft guidance rather than an enforced
+  # cap, but the description says so rather than letting an operator find
+  # out the hard way.
+  - { name: max_players, group: Server, label: Max players, description: "Officially supported up to 8; past 20 risks save-file corruption.", type: number, min: 1, max: 64, step: 1, default: "8", editable: true }
+  - { name: server_website_url, group: Server, label: Website URL, description: Shown in the server browser as a clickable link., default: "", editable: true }
+  - { name: server_login_confirmation_text, group: Server, label: Login confirmation text, description: A message players must confirm before joining. Blank shows nothing., default: "", editable: true }
+  # Added following a review against the Valve Developer Wiki's own
+  # serverconfig.xml reference: this seed shipped with neither Region nor
+  # Language declared, so every server silently ran under the game's
+  # internal defaults (NorthAmericaEast / English) with no way for an
+  # operator to say otherwise -- and a player's server browser can filter on
+  # both. Values are the exact literal set the Wiki documents; Language is
+  # free text there ("the English name of the language, e.g. not 'Deutsch'
+  # but 'German'"), not a closed list.
+  - name: region
     group: Server
+    label: Region
+    description: Shown in the server browser and used for its region filter.
+    type: select
+    default: NorthAmericaEast
+    editable: true
+    options:
+      - { value: NorthAmericaEast, label: North America East }
+      - { value: NorthAmericaWest, label: North America West }
+      - { value: CentralAmerica, label: Central America }
+      - { value: SouthAmerica, label: South America }
+      - { value: Europe, label: Europe }
+      - { value: Russia, label: Russia }
+      - { value: Asia, label: Asia }
+      - { value: MiddleEast, label: Middle East }
+      - { value: Africa, label: Africa }
+      - { value: Oceania, label: Oceania }
+  - { name: language, group: Server, label: Language, description: "Primary language players should search for -- the English name of it (e.g. \"German\", not \"Deutsch\").", default: English, editable: true }
+
+  # ---- Networking -----------------------------------------------------------
+  # Split out from Server: these are the Valve Developer Wiki's own
+  # "Networking" and "Other technical settings" tables, moved here from
+  # Server (server_visibility) or newly added, rather than left implicit.
+  - name: server_visibility
+    group: Networking
     label: Visibility
     type: select
     default: "2"
@@ -185,6 +224,37 @@ variables:
       - { value: "2", label: Public }
       - { value: "1", label: Friends only, description: "Only reachable if the first player connects directly by IP -- a dedicated server is never \"friends\" with anyone." }
       - { value: "0", label: Unlisted }
+  - name: server_max_world_transfer_speed_kibs
+    group: Networking
+    label: World transfer speed cap (KiB/s)
+    description: Caps how fast the world downloads to a client on first connect. The game ignores anything past ~1300.
+    type: number
+    min: 1
+    max: 1300
+    step: 1
+    default: "512"
+    editable: true
+  # Capped at 8 players and needs EAC on -- both real, external constraints
+  # (Valve Developer Wiki: "crossplay servers ... have a default or lower
+  # player slot count"), not something this seed enforces for you.
+  - name: server_allow_crossplay
+    group: Networking
+    label: Allow crossplay
+    description: Lets console players join. Requires EasyAntiCheat on and effectively caps Max players at 8.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: ignore_eos_sanctions
+    group: Networking
+    label: Ignore EOS sanctions
+    description: Allows sanctioned Epic Online Services accounts to join. Mainly relevant with crossplay on.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
 
   # ---- World ---------------------------------------------------------------
   - { name: game_world, group: World, label: World name, description: "\"Navezgane\" (bundled, the default) or a name to generate/load via the two fields below.", default: Navezgane, editable: true }
@@ -279,10 +349,46 @@ variables:
     false_value: "false"
     default: "true"
     editable: true
+  # This seed's own top-of-file comment previously concluded the web admin
+  # panel was "gone from the build entirely, not merely renamed" -- true of
+  # the old ControlPanelEnabled/Port/Password properties (confirmed live:
+  # they abort boot with "Unknown config option"), but not of the feature
+  # itself. The Valve Developer Wiki's own serverconfig.xml reference table,
+  # and Xylona's independently maintained 7 Days to Die game definition (a
+  # real, current game panel), both instead list WebDashboardEnabled,
+  # WebDashboardPort, WebDashboardUrl and EnableMapRendering as the current
+  # names: a rename, not a removal. Not re-verified against a real boot in
+  # this environment (see the architectures comment above), so the template
+  # only emits these properties when this is turned on, and defaults off --
+  # if the new names are themselves wrong, only an operator who turns this
+  # on pays for it, and the fix is the same toggle that broke it.
+  - name: web_dashboard_enabled
+    group: Remote access
+    label: Web dashboard
+    description: >-
+      A browser-based admin panel. If the server refuses to boot with
+      "Unknown config option: WebDashboardEnabled" after turning this on,
+      the property has been renamed or removed again -- turn it back off.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: enable_map_rendering
+    group: Remote access
+    label: Render map for dashboard
+    description: Only useful with the web dashboard enabled above.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
 
 groups:
   - name: Server
     description: Identity, access, and player limits.
+  - name: Networking
+    description: Ports, transfer limits, and crossplay.
   - name: World
     description: Which world loads, and its sandbox ruleset.
   - name: Zombies

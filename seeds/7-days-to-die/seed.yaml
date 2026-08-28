@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.1.1"
+version: "1.2.0"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -477,6 +477,22 @@ migrations:
 # immediate is the honest choice, not a placeholder to come back to lightly.
 ready:
   mode: immediate
+
+# Confirmed live, watching a real connect/disconnect cycle end to end: the
+# game broadcasts a plain, single-line GMSG for both events --
+# "GMSG: Player 'Arasoi' joined the game" and "GMSG: Player 'Arasoi' left
+# the game" -- the same shape this project's other seeds already match on
+# (join/leave, ADR-067). No Steam ID is captured (ADR-119's optional
+# field): this line never carries one, and the lines that do
+# ([Auth] PlatformAuth authorization successful: ..., PltfmId='Steam_...')
+# fire just as readily for a connection this build goes on to reject, so
+# matching one of those as "joined" would count rejected joins as real
+# ones -- confirmed the hard way this same session, watching exactly that
+# happen for a client stuck failing ServerState authorization.
+logs:
+  events:
+    - { event: join, pattern: "GMSG: Player '(?P<player>[^']+)' joined the game" }
+    - { event: leave, pattern: "GMSG: Player '(?P<player>[^']+)' left the game" }
 
 # No console-command stop. This project's StopSpec writes a command to the
 # primary container's stdin, but 7 Days to Die's own graceful shutdown is

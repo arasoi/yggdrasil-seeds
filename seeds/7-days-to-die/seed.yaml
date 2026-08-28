@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.0.6"
+version: "1.0.7"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -98,14 +98,36 @@ containers:
       # exactly this shape by the Vintage Story seed.
       - { name: game, protocol: udp, default: 26900, kind: game }
       - { name: game-tcp, protocol: tcp, offset_from: game, offset: 0 }
-      # Two further UDP ports immediately above the base, confirmed by the
-      # same sources. Declared right after the base port and before the
-      # independently-allocated telnet port below, so a base candidate is
-      # never granted a number one of these needs (ports allocate in
-      # declaration order -- the same reasoning ARK's own seed records for
-      # its own offset sibling).
+      # Three further UDP ports immediately above the base -- not two, which
+      # is what this seed shipped with and which is exactly the gap a real
+      # operator hit: the server ran and was directly connectable by IP, but
+      # never appeared in the in-game server browser. The specific symptom
+      # ("Eos Registration Failed" in the server's own log) and its fix are
+      # both well documented against the current, EOS-backed build: the 7
+      # Days to Die wiki's own server-browser troubleshooting guide, a
+      # hosting provider's public knowledgebase, and CubeCoders' own AMP
+      # support threads answering this exact symptom all converge on
+      # 26900-26903 UDP as the non-crossplay minimum (26900-26905 if
+      # ServerAllowCrossplay is ever turned on -- not exposed as a variable
+      # here, since nothing else in this seed manages crossplay). ich777's
+      # steamcmd:7dtd image, one of the most widely deployed 7DTD containers,
+      # maps offset 3 explicitly too. Declared right after the base port and
+      # before the independently-allocated telnet port below, so a base
+      # candidate is never granted a number one of these needs (ports
+      # allocate in declaration order -- the same reasoning ARK's own seed
+      # records for its own offset sibling).
+      #
+      # Not added: a further, fixed (non-offset) UDP port near 27015 that a
+      # couple of sources (a LinuxGSM-adjacent port wiki, ich777's own image)
+      # still map, describing it as used for Steam master-server
+      # registration. Every source actually describing today's EOS-backed
+      # browser stops at 26905 and never mentions it, so it reads as a
+      # holdover from before this game's server list moved off Steam rather
+      # than something the current build still needs -- worth trying only if
+      # 26900-26903 alone turns out not to be enough.
       - { name: query1, protocol: udp, offset_from: game, offset: 1 }
       - { name: query2, protocol: udp, offset_from: game, offset: 2 }
+      - { name: query3, protocol: udp, offset_from: game, offset: 3 }
       # Independent: telnet is the game's remote-console interface and has
       # no fixed relationship to the game port.
       - { name: telnet, protocol: tcp, default: 8081, kind: rcon }

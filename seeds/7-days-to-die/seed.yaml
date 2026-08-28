@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.2.0"
+version: "1.2.1"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -478,20 +478,32 @@ migrations:
 ready:
   mode: immediate
 
-# Confirmed live, watching a real connect/disconnect cycle end to end: the
-# game broadcasts a plain, single-line GMSG for both events --
-# "GMSG: Player 'Arasoi' joined the game" and "GMSG: Player 'Arasoi' left
-# the game" -- the same shape this project's other seeds already match on
-# (join/leave, ADR-067). No Steam ID is captured (ADR-119's optional
-# field): this line never carries one, and the lines that do
-# ([Auth] PlatformAuth authorization successful: ..., PltfmId='Steam_...')
-# fire just as readily for a connection this build goes on to reject, so
-# matching one of those as "joined" would count rejected joins as real
-# ones -- confirmed the hard way this same session, watching exactly that
-# happen for a client stuck failing ServerState authorization.
+# Confirmed live, watching a real connect/disconnect cycle end to end. The
+# game also broadcasts a plain "GMSG: Player 'Arasoi' joined/left the game"
+# for both events, the same shape this project's other seeds match on
+# (join/leave), but join uses PlayerSpawnedInWorld instead, since that line
+# is the only one that carries a Steam ID (ADR-119's optional field)
+# alongside the name in the same line -- a join event's pattern is one
+# regex against one line, so capturing both meant picking the line that has
+# both rather than the simpler GMSG one. Scoped to "reason: JoinMultiplayer"
+# specifically: PlayerSpawnedInWorld also fires on an ordinary respawn after
+# death, with a different reason value each time (confirmed by construction
+# -- the field is literally named "reason" -- not by killing a real
+# character to watch one), and matching those as new joins would inflate
+# the player list every time someone dies. The steamid group sits inside an
+# alternation so a console/EOS-only player (no PltfmId='Steam_...' prefix)
+# still matches and still gets a player name, just no steamid -- verified
+# against a constructed non-Steam PltfmId line, since this seed has no way
+# to test a real console client. None of the auth lines that fire earlier
+# in the sequence work for this ([Auth] PlatformAuth authorization
+# successful, etc. -- fire just as readily for a connection this build goes
+# on to reject, confirmed the hard way this same session watching that
+# exact failure mode before the steamclient.so fix landed) -- join has to
+# be the point where the game itself has decided the connection is real.
 logs:
   events:
-    - { event: join, pattern: "GMSG: Player '(?P<player>[^']+)' joined the game" }
+    - event: join
+      pattern: "PlayerSpawnedInWorld \\(reason: JoinMultiplayer.*PltfmId='(?:Steam_(?P<steamid>\\d+)|[^']*)'.*PlayerName='(?P<player>[^']+)'"
     - { event: leave, pattern: "GMSG: Player '(?P<player>[^']+)' left the game" }
 
 # No console-command stop. This project's StopSpec writes a command to the

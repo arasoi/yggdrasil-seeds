@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.1.0"
+version: "1.1.1"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -88,10 +88,39 @@ containers:
     # and Unity's headless build already writes there under -batchmode
     # -nographics with nothing else asked of it -- the same reasoning
     # Valheim's own seed records for omitting -logFile.
+    #
+    # Found live: a real server ran, was directly connectable, showed up in
+    # the browser (both fixed above), and still kicked every join with
+    # "Kicking player (Server is still initializing)" -- forever, not for a
+    # startup window. The actual cause is two lines above every one of
+    # those: "[S_API] SteamAPI_Init(): Sys_LoadModule failed to load:
+    # /root/.steam/sdk64/steamclient.so" then "[Steamworks.NET] Could not
+    # initialize GameServer". steamclient.so genuinely ships inside this
+    # depot, sitting next to the binary -- confirmed both by web references
+    # describing a real Linux install's file listing and by this seed's own
+    # steamcmd step, which fetches the depot whole -- but nothing put a copy
+    # where the Steamworks SDK actually looks for it. LinuxGSM and every
+    # other reference this seed has checked run SteamCMD and the game in the
+    # same persistent environment, where a `~/.steam` layout is incidentally
+    # already there from steamcmd's own first run; this project deliberately
+    # runs the steamcmd step in a separate, throwaway container (ADR-057),
+    # so the game's own container never gets that side effect. Without a
+    # live Steamworks GameServer object, this build never lets a Steam-
+    # platform client (every PC client) past the engine's own ServerState
+    # check, no matter how long the world has been up -- confirmed by eight
+    # separate join attempts across two restarts, with EAC and the join
+    # password each toggled off in turn to rule them out, all identical.
+    # `sh -c` is what this needs: containers[].command is tokenised, never
+    # run through a shell (internal/seed/container.go), so `;`/`exec` only
+    # work if the seed asks for a shell itself -- Valheim's own seed does
+    # exactly this for its own LD_LIBRARY_PATH/SteamAppId setup, and this
+    # follows the same shape.
     command: >-
-      ./7DaysToDieServer.x86_64
+      sh -c 'mkdir -p /root/.steam/sdk64;
+      ln -sf /game/steamclient.so /root/.steam/sdk64/steamclient.so;
+      exec ./7DaysToDieServer.x86_64
       -quit -batchmode -nographics -dedicated
-      -configfile=/data/serverconfig.xml
+      -configfile=/data/serverconfig.xml'
     workdir: /game
     ports:
       # The Valve Developer Wiki's own "7 Days to Die Dedicated Server" page

@@ -6,7 +6,7 @@ description: >
   This seed installs the base game's five official campaigns in
   cooperative mode -- see the game mode/map fields below for what else is
   and isn't in scope.
-version: "1.0.0"
+version: "1.0.1"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -40,6 +40,17 @@ branding:
 # Not independently re-verified with a live `+app_info_print` here, for
 # the same arm64-host/amd64-emulation limitation every other seed built
 # this way documents.
+#
+# Found live: this seed shipped with that entire paragraph of reasoning
+# and no `osarch: 32` to act on it, so every real install forced the
+# 64-bit platform ADR-089 defaults to anyway and failed with the exact
+# "Missing configuration" (occasionally "Invalid platform" on a retry)
+# ADR-089 and ADR-121 both document for a depot excluded by the wrong
+# forced bitness -- confirmed on a real node, three retry attempts, all
+# failing the same way. ADR-121 itself was written the day after this
+# seed shipped and already describes this seed as setting `osarch: 32`;
+# it was the field that never actually landed, not a later regression --
+# this is that field, finally added.
 architectures: [amd64]
 
 install:
@@ -55,6 +66,7 @@ install:
   steps:
     - op: steamcmd
       app_id: 222860
+      osarch: 32
 
 server:
   # LinuxGSM's own directory layout (systemdir="${serverfiles}/left4dead2",

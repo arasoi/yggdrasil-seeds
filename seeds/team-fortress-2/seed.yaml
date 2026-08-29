@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.5"
+version: "1.0.6"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -91,11 +91,14 @@ containers:
     # (confirmed the same way ADR-047's ARK/Proton work confirmed it for
     # lsteamclient.so: reading the real search path out of the compiled
     # binary) -- the TF2 depot's own bin/steamclient.so is 32-bit only, so
-    # this symlinks SteamCMD's own genuine 64-bit copy
+    # this needs SteamCMD's own genuine 64-bit copy
     # (/opt/steamcmd/linux64/steamclient.so, confirmed a real 64-bit ELF by
     # extracting it from the base-steamcmd image and inspecting it
-    # directly) into place, the same source ygg-proton already uses for
-    # ARK. Second, bin/linux64/replay_srv.so failed to load with a missing
+    # directly), the same source ygg-proton already uses for ARK --
+    # base-steamcmd's own entrypoint now stages this generically on every
+    # container start (docs/architecture.md, "Container image library"),
+    # so this seed no longer copies it by hand. Second,
+    # bin/linux64/replay_srv.so failed to load with a missing
     # libcurl-gnutls.so.4 -- fixed in the shared image itself
     # (images/base-steamcmd/Dockerfile, ADR-047's 2026-08-27 amendment),
     # since this is a Source-engine-wide dependency and not specific to
@@ -122,17 +125,12 @@ containers:
     # the depot binds its game port ("Network: IP 0.0.0.0, mode MP,
     # dedicated Yes, ports <port> SV / <port> CL") and settles into a
     # stable running state.
-    # LD_LIBRARY_PATH declared below rather than exported inline -- the
-    # steamclient.so staging above is still a genuine shell prefix (it
-    # predates base-steamcmd's own generic entrypoint fix for this exact
-    # problem and hasn't yet been migrated to rely on it; see that entry's
-    # own comment), so this command still needs sh -c for now, but the env
-    # var itself belongs declared, not exported, matching the project's own
-    # convention (docs/conventions.md).
+    # LD_LIBRARY_PATH declared below rather than exported inline -- with the
+    # steamclient.so staging now handled generically by base-steamcmd's own
+    # entrypoint, nothing here needs a shell at all, so this is a single
+    # tokenised binary invocation.
     command: >-
-      sh -c 'mkdir -p ~/.steam/sdk64;
-      ln -sf /opt/steamcmd/linux64/steamclient.so ~/.steam/sdk64/steamclient.so;
-      exec ./srcds_linux64 -game tf -strictportbind -nohltv
+      ./srcds_linux64 -game tf -strictportbind -nohltv
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers
@@ -141,7 +139,7 @@ containers:
       +servercfgfile server.cfg
       +rcon_password "{{.Vars.rcon_password}}"
       +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
     workdir: /game
     env:
       LD_LIBRARY_PATH: "./bin/linux64:./bin:.:/opt/steamcmd/linux64"

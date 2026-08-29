@@ -5,8 +5,9 @@ description: >
   Four survivors, an endless horde, and five campaigns to fight through.
   This seed installs the base game's five official campaigns in
   cooperative mode -- see the game mode/map fields below for what else is
-  and isn't in scope.
-version: "1.0.2"
+  and isn't in scope. Runs under Proton -- see the install block below for
+  why -- and boot has not yet been confirmed against a real server.
+version: "1.1.0"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -22,53 +23,8 @@ branding:
   logo: logo.png
   banner: banner.jpg
 
-# 222860 ("Left 4 Dead 2 Dedicated Server") is confirmed as a real,
-# separate app from the base game by Valve's own Steam Application IDs
-# page and Dedicated Servers List -- the identical tool-app split
-# team-fortress-2 and garrys-mod already have, not the "same id as the
-# base game" LinuxGSM's own gmodserver-style config for this game seemed
-# to imply (LinuxGSM's l4d2server module simply never references 550 at
-# all, which is not the same as confirming there is no such id).
-#
-# The depot is confirmed 32-bit from three independent angles: LinuxGSM's
-# own config declares no 64-bit branch (unlike garrys-mod, which at least
-# has one as an opt-in), the real community Dockerfile this seed's
-# steamclient.so fix is modelled on installs only 32-bit compat libraries,
-# and a real, reproducible community report of a 64-bit Metamod/SourceMod
-# build failing against this game's own srcds process with "wrong ELF
-# class: ELFCLASS64" -- direct proof the running binary is itself 32-bit.
-# Not independently re-verified with a live `+app_info_print` here, for
-# the same arm64-host/amd64-emulation limitation every other seed built
-# this way documents.
-#
-# Found live: this seed shipped with that entire paragraph of reasoning
-# and no `osarch: 32` to act on it, so every real install forced the
-# 64-bit platform ADR-089 defaults to anyway and failed with the exact
-# "Missing configuration" (occasionally "Invalid platform" on a retry)
-# ADR-089 and ADR-121 both document for a depot excluded by the wrong
-# forced bitness -- confirmed on a real node, three retry attempts, all
-# failing the same way. ADR-121 itself was written the day after this
-# seed shipped and already describes this seed as setting `osarch: 32`;
-# it was the field that never actually landed, not a later regression --
-# this is that field, finally added.
-#
-# Adding osarch: 32 was not the end of it, either. Retried live against a
-# real node with the bitness now correctly pinned, and the install still
-# failed -- this time with "Invalid platform" instead of "Missing
-# configuration", persisting across a full three-attempt retry sequence
-# rather than resolving. That points at something the three angles above
-# never actually established: not just which bitness 222860's Linux depot
-# needs, but whether its Linux-tagged listing is resolvable via anonymous
-# login at all. A real, currently published Pelican egg for this exact
-# game (pelican-eggs/games-steamcmd, not the archived pelican-eggs/eggs
-# repo, which never shipped one) settles it: its install script forces
-# the depot platform *type* to windows by default, not linux, and still
-# executes the result as a native Linux binary (./srcds_run, no Wine) --
-# a known quirk of some older Source-engine dedicated-server app ids
-# whose depot metadata predates consistent per-OS separation. `platform:
-# windows` below is that fix (ADR-123). Not yet confirmed against a real
-# retry here either -- see this seed's own version bump for whichever way
-# that goes.
+# GE-Proton is amd64-only (ADR-094), same as every other seed built on
+# base-steamcmd-proton.
 architectures: [amd64]
 
 install:
@@ -78,10 +34,43 @@ install:
   # addons (out of scope for v1, the same reasoning garrys-mod gives for
   # skipping Workshop content), so nothing server-specific ever needs to
   # land inside the install directory itself.
+  #
+  # install.image stays the plain steamcmd base, not steamcmd-proton --
+  # fetching the depot needs SteamCMD only, never Wine/Proton. Only the
+  # *runtime* container below needs Proton, matching ark-survival-ascended's
+  # own split.
   shared: true
   mount: { path: /game, mode: ro }
   image: { base: steamcmd }
   steps:
+    # osarch: 32 and platform: windows are both load-bearing, and both were
+    # found the hard way against a real node, not assumed:
+    #
+    # 222860's own Linux-tagged depot is confirmed 32-bit only (LinuxGSM's
+    # config declares no 64-bit branch, and a real community report has a
+    # 64-bit Metamod/SourceMod build failing against this game's own srcds
+    # with "wrong ELF class: ELFCLASS64") -- osarch: 32 alone was not
+    # enough, though: forcing platform: linux (this project's own ADR-010
+    # default) with osarch: 32 still failed live, three retries running,
+    # with ERROR! Failed to install app '222860' (Invalid platform).
+    #
+    # A live `+app_info_print 222860` (run against a real node, not
+    # inferred) settles why: a genuine Linux-tagged depot (222863) exists
+    # in this app's own manifest, declares no osarch restriction at all,
+    # and is still refused by anonymous SteamCMD login regardless of
+    # bitness -- confirmed by forcing linux at both osarch: 32 and
+    # osarch: 64 and getting the identical rejection both times. The
+    # windows-tagged depot (222862) is what anonymous login can actually
+    # reach, and forcing platform: windows is what makes the install
+    # complete at all (ADR-123 and its amendment in the main repo's
+    # docs/decisions.md carry the full live account).
+    #
+    # What that install actually contains is the real, unmodified Windows
+    # build -- srcds.exe, left4dead2.exe, no srcds_run or srcds_linux
+    # anywhere in the tree, confirmed by dumping the installed directory on
+    # a real node. That is why this seed runs under Proton below rather
+    # than execing a native Linux binary the way team-fortress-2's and
+    # garrys-mod's seeds do -- there is no native Linux binary to exec.
     - op: steamcmd
       app_id: 222860
       osarch: 32
@@ -92,81 +81,58 @@ server:
   # servercfgdir="${systemdir}/cfg", gamelogdir="${systemdir}/logs") --
   # structurally identical to team-fortress-2's tf/cfg, tf/logs split and
   # garrys-mod's garrysmod/cfg, garrysmod/logs split, since all three are
-  # the same ordinary Source engine directory convention.
+  # the same ordinary Source engine directory convention. Unaffected by
+  # the move to Proton -- these are the game's own paths under the install
+  # mount, not anything Wine/Proton touches.
   writable_paths:
     - { from: cfg, to: /game/left4dead2/cfg }
     - { from: logs, to: /game/left4dead2/logs }
+    # HOME for the container's steam user, the same role it plays in
+    # ark-survival-ascended's own seed: the Wine prefix (compatdata), the
+    # native steamclient.so ygg-proton stages into .steam/sdk32, and
+    # Proton's own scratch state all live here, so it must be per-server
+    # and writable, never part of the shared read-only install (ADR-018).
+    - { from: home, to: /home/steam }
 
 containers:
   - role: game
     primary: true
-    # base-steamcmd, not base-linux: this depot's own steamclient.so is
-    # confirmed 32-bit only (this whole depot is), so the fix below needs
-    # SteamCMD's own genuine 32-bit copy -- the identical mechanism
-    # garrys-mod's game container needs, for the identical reason.
-    image: { base: steamcmd }
-    # Plain srcds_run, deliberately not bypassed -- the same call
-    # garrys-mod's own seed makes and for the same reason: this depot's
-    # real binary is 32-bit, which is exactly what srcds_run's own
-    # auto-detection launches by default, and every real reference found
-    # (LinuxGSM, a real docker-compose deployment, several community
-    # setup guides) runs the unmodified wrapper successfully. One real
-    # reference (a Pterodactyl-ecosystem egg) omits -game left4dead2
-    # entirely and relies on default game-folder detection working by
-    # luck -- every other real source keeps it explicit, which is safer
-    # and is what this seed does too.
+    # base-steamcmd-proton, not base-steamcmd: the installed depot is a
+    # genuine Windows build (see the install step's own comment above), so
+    # running it needs Wine/Proton, not a native Linux exec. Named
+    # symbolically rather than pinned to a literal image reference, the
+    # same reasoning ark-survival-ascended's own seed gives: a fix on
+    # develop has to be able to reach a node before it is promoted.
+    image: { base: steamcmd-proton }
+    # ygg-proton (base-steamcmd-proton's own entrypoint wrapper) is what
+    # replaced this seed's old hand-rolled steamclient.so symlink dance --
+    # the exact class of container-prep the project's own convention now
+    # says belongs in the base image, never a seed's launch command. It
+    # already stages SteamCMD's real steamclient.so into $HOME/.steam/sdk32
+    # *and* sdk64 for every seed that runs under it, resolves a relative
+    # exe path to absolute (Proton hands the path to Wine as-is), and uses
+    # waitforexitandrun so the container does not exit while the game is
+    # still starting. See that script for the full account.
     #
-    # The steamclient.so fix mirrors garrys-mod's exactly (sdk32/linux32,
-    # not sdk64/linux64): the engine's native Steamworks bridge looks for
-    # it at the hardcoded $HOME/.steam/sdk32/steamclient.so path, and
-    # real setup notes independently confirm copying SteamCMD's own
-    # linux32 copy there is the fix, or Steam auth hangs or fails outright.
+    # Everything past `ygg-proton srcds.exe` is the same launch line the
+    # old native-Linux command used against srcds_run -- -game, the port
+    # and player flags, the map/mode/password cvars -- unaffected by the
+    # runtime swap, since these are ordinary Source engine arguments the
+    # binary itself parses regardless of which OS it thinks it is running
+    # on.
     #
-    # -strictportbind and -norestart match team-fortress-2's and
-    # garrys-mod's own reasoning exactly: refuse rather than silently
-    # rebind a taken port, and leave restart authority with the agent
-    # alone (ADR-013) rather than srcds_run's own internal crash loop --
-    # confirmed present in multiple real L4D2 command lines.
-    #
-    # -tickrate is not exposed as a variable, unlike garrys-mod's: Valve's
-    # own Command Line Options page states it plainly -- tickrate is not
-    # alterable for Left 4 Dead or Left 4 Dead 2 without a plugin running
-    # the server insecure (VAC disabled), which is out of scope here. It
-    # would be a control that visibly does nothing, which is worse than
-    # not having it.
-    #
-    # -usercon is not passed, matching team-fortress-2's and garrys-mod's
-    # own confirmed finding for this exact flag: Valve's own documentation
-    # scopes it explicitly to Counter-Strike: Global Offensive and Team
-    # Fortress 2 servers. RCON here is the ordinary rcon_password/UDP
-    # RCON path every other Source game before -usercon uses.
-    #
-    # +servercfgfile server.cfg matches team-fortress-2's and garrys-mod's
-    # own reasoning: explicit even though it is the engine's own default
-    # name, and harmless whether or not the file exists -- every setting
-    # below is passed as a launch-time cvar instead of relying on a
-    # config file's contents, the same choice both of those seeds make
-    # and for the same reason (a file SteamCMD does not create cannot be
-    # depended on).
-    #
-    # map offers the five official base-game campaigns by their first
-    # map's internal name -- loading any one of them auto-advances
-    # through the rest of that campaign on its own. Every other named
-    # Left 4 Dead 2 campaign or map (the ported Left 4 Dead campaigns,
-    # any community or Workshop content) needs the addons/Workshop
-    # support this seed does not install, the same scope boundary
-    # garrys-mod draws around its own two base-game maps.
-    #
-    # gamemode offers the five documented base modes from
-    # sv_gametypes' own default list (mp_gamemode's accepted values) --
-    # mutations and the team-based versus/scavenge variants are real,
-    # valued features out of scope for a v1 seed at this project's
-    # homelab scale, the same call team-fortress-2 makes about SourceTV
-    # and garrys-mod makes about Workshop content.
+    # NOT YET CONFIRMED AGAINST A REAL BOOT. This mirrors
+    # ark-survival-ascended's own known-working Proton shape as closely as
+    # this game's differences allow, but Source engine's console behaviour
+    # under Wine (whether stdout actually reaches Docker's log stream the
+    # way it does for a native srcds_run, the way ARK's own Unreal console
+    # famously did not) has not been checked against a real process. If
+    # the console stays empty after a real boot, add -condebug
+    # +con_logfile <path> and tail that file the way
+    # ark-survival-ascended's own command tails ShooterGame.log, rather
+    # than guessing which one is needed up front.
     command: >-
-      sh -c 'mkdir -p ~/.steam/sdk32;
-      ln -sf /opt/steamcmd/linux32/steamclient.so ~/.steam/sdk32/steamclient.so;
-      exec ./srcds_run -game left4dead2 -console -strictportbind -norestart
+      ygg-proton srcds.exe -game left4dead2 -console -strictportbind -norestart
       -ip 0.0.0.0 -port {{.Ports.game}}
       +clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}}
@@ -176,14 +142,32 @@ containers:
       +servercfgfile server.cfg
       +rcon_password "{{.Vars.rcon_password}}"
       +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
     workdir: /game
+    env:
+      HOME: /home/steam
+      # The image always takes ownership of HOME; this is the seed's own
+      # writable game-config mounts that also have to belong to the
+      # container's user, the same reasoning ark-survival-ascended's own
+      # YGG_PROTON_CHOWN_DIRS gives. Not yet hit live for this seed; added
+      # on inspection, matching how ark-survival-ascended's own mods entry
+      # was added.
+      YGG_PROTON_CHOWN_DIRS: "/game/left4dead2/cfg /game/left4dead2/logs"
+      # Must end in the Steam app id -- Proton's protonfixes parses it back
+      # out of this path with a regex. 222860 is the dedicated-server tool
+      # app installed above, the same app id ark-survival-ascended's own
+      # STEAM_COMPAT_DATA_PATH ends in its own tool app's id rather than
+      # the base game's.
+      STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/222860
+      STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
     ports:
       # Same shape as team-fortress-2's and garrys-mod's: Source's query
       # protocol answers on the same UDP port as gameplay traffic, and
       # RCON is TCP on the identical port number -- confirmed here too,
       # since -usercon does not apply and RCON falls back to the classic
-      # Source RCON path (TCP on the game's own port).
+      # Source RCON path (TCP on the game's own port). Unaffected by the
+      # move to Proton -- these are the engine's own ports, not anything
+      # Wine/Proton allocates.
       - { name: game, protocol: udp, default: 27015, kind: game }
       - { name: rcon, protocol: tcp, offset_from: game, offset: 0 }
       # +clientport, confirmed by LinuxGSM's own startparameters
@@ -275,7 +259,8 @@ groups:
 # are: a real boot has not yet confirmed how early the RCON TCP listener
 # actually opens relative to the engine finishing initialization, so a
 # mode: port guess risks reporting ready before the server can genuinely
-# serve players.
+# serve players. Doubly true here until a real boot under Proton is
+# confirmed at all.
 ready:
   mode: immediate
 
@@ -284,7 +269,9 @@ ready:
 # seeds document, confirmed for this game too by LinuxGSM's l4d2server
 # module declaring stopmode="3" (send the literal command "quit" and
 # wait), the identical graceful-shutdown convention every other Source
-# engine seed in this catalog uses.
+# engine seed in this catalog uses. Not yet confirmed that stdin reaches
+# srcds.exe the same way under Proton as it did for the native srcds_run
+# process this seed used to run.
 stop:
   command: "quit"
   timeout: 30s

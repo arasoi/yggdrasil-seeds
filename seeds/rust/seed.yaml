@@ -6,7 +6,7 @@ description: >
   and defend it from raiders. This seed runs the dedicated server, not the
   game. KNOWN BROKEN as of this version -- see the comment below before
   installing.
-version: "1.0.2"
+version: "1.0.3"
 
 # The base game's own Steam listing (252490) -- 258550, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -106,6 +106,14 @@ containers:
     # Down)." -- the same class of gotcha Valheim's own seed already
     # documents (linux64/ on the path) for the identical reason, a Unity
     # binary that does not find its own bundled native libraries otherwise.
+    # Declared below rather than `export`ed in the command -- nothing else
+    # here needs a shell, so this is a single tokenised binary invocation
+    # (docs/conventions.md's own rule: container-environment setup belongs
+    # declared, not shelled out from a launch command). This is a pure
+    # cosmetic move, not a fix: the seed's own KNOWN BROKEN comment above
+    # already records that every LD_LIBRARY_PATH variant, this one included,
+    # was tried and ruled out against the real Init_Tier0 crash -- moving it
+    # here changes nothing about that.
     #
     # Every flag below is LinuxGSM's own real, shipped startparameters
     # (lgsm/config-default/config-lgsm/rustserver/_default.cfg), cross-checked
@@ -116,8 +124,7 @@ containers:
     # captures the container's own stdout for the console (ADR-032), and
     # redirecting it away would empty that and break log-value extraction.
     command: >-
-      sh -c 'export LD_LIBRARY_PATH=.:RustDedicated_Data/Plugins/x86_64:$LD_LIBRARY_PATH;
-      exec ./RustDedicated -batchmode
+      ./RustDedicated -batchmode
       +app.listenip 0.0.0.0 +app.port {{.Ports.app}}
       +server.ip 0.0.0.0 +server.port {{.Ports.game}}
       +server.queryport {{.Ports.query}}
@@ -135,7 +142,9 @@ containers:
       {{if .Vars.level_url}}+server.levelurl "{{.Vars.level_url}}"{{end}}
       +rcon.web {{.Vars.rcon_web}}
       +rcon.ip 0.0.0.0 +rcon.port {{.Ports.rcon}}
-      +rcon.password "{{.Vars.rcon_password}}"'
+      +rcon.password "{{.Vars.rcon_password}}"
+    env:
+      LD_LIBRARY_PATH: ".:RustDedicated_Data/Plugins/x86_64"
     workdir: /game
     ports:
       # All four are independently allocated, not offset-derived: unlike

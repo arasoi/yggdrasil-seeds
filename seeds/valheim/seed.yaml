@@ -5,7 +5,7 @@ description: >
   Dedicated server for Valheim, a Norse survival and exploration game.
   Crossplay is on by default, so the server prints a join code players can
   use instead of an address.
-version: "2.2.4"
+version: "2.3.0"
 
 # The base game's own Steam listing (896660, the dedicated-server tool app
 # id installed below, has no store page and so no artwork of its own). icon
@@ -401,42 +401,91 @@ logs:
     # which is the whole reason extraction exists.
     - { name: join_code, pattern: "join code ([0-9]+)" }
 
-  # No events block, deliberately, investigated rather than skipped by
-  # default. Confirmed live against a real running server (Old Gods) plus
-  # independent real-world corroboration for the disconnect side:
+  # Confirmed live against two real running servers (Old Gods, twice, weeks
+  # apart) plus independent real-world corroboration for the disconnect side:
   #
   #   PlayFab listen socket child connected to remote player D5F24E4A4CC5105
-  #   Player joined server "..." that has join code 565485, now 1 player(s)
+  #   Player joined server "..." that has join code 878029, now 1 player(s)
   #   PlayFab socket with remote ID playfab/D5F24E4A4CC5105 received local
   #     Platform ID Steam_76561197968188170
   #   Got handshake from client playfab/D5F24E4A4CC5105
-  #   Got character ZDOID from Arasoi : 3268377209:1
+  #   Got character ZDOID from Arasoi : 2848633169:4
+  #   RPC_Disconnect
+  #   Destroying abandoned non persistent zdo 2848633169:1 owner 2848633169
+  #   Destroying abandoned non persistent zdo 2848633169:2 owner 2848633169
+  #   [... six more, same owner id ...]
+  #   Player connection lost server "..." that has join code 878029, now 0 player(s)
   #
   # The player's name and their Steam ID are never on the same line, or even
   # adjacent ones -- the name appears only on "Got character ZDOID from
   # <name>", ~20s after connecting, and the Steam ID only on the earlier
   # "Platform ID Steam_<id>" line, correlated to the name-bearing one only by
-  # a shared PlayFab remote ID that never itself appears next to a name.
+  # a shared PlayFab remote ID that never itself appears next to a name. So
+  # this seed's join rule captures the name from the ZDOID line, not the
+  # Steam ID -- steamid capture would need a third, unbuilt correlation this
+  # schema still has no way to express (the shared PlayFab remote ID, on
+  # neither the name-bearing line nor the Steam ID line's own capture group).
   #
-  # Disconnect is worse: nothing carries the player's name at all, at or near
-  # disconnect time, in the current PlayFab-era build. The only line is
-  # "Player connection lost server \"...\" that has join code <code>, now <N>
-  # player(s)" -- a bare count, no name, and per a real captured example it
-  # does not even reliably decrement (it can fire mid-reconnect-attempt).
+  # Disconnect is the real problem this used to be unsolved for: nothing
+  # carries the player's name at all, at or near disconnect time, in the
+  # current PlayFab-era build. The only line is "Player connection lost
+  # server \"...\" that has join code <code>, now <N> player(s)" -- a bare
+  # count, no name. What the ZDOID line's numeric prefix *does* survive to:
+  # the same number reappears as the "owner" on every "Destroying abandoned
+  # non persistent zdo <id>:<n> owner <id>" line a real disconnect prints
+  # (eight, in the capture above) immediately before the count-only line.
+  # ADR-126/ADR-127 built exactly this correlation into the schema -- a
+  # leave rule may now match by an "id" capture instead of "player" -- so
+  # this seed's join rule additionally captures that owner number, and its
+  # leave rule matches on it alone. No backreference needed even though the
+  # same number appears twice in the real line (Go's RE2 does not support
+  # them): both occurrences are identical by construction, so capturing
+  # either one is enough. The line repeats per disconnect, so several
+  # `leave` events fire against the same id -- harmless, since removing an
+  # already-removed player is the same no-op a repeated join already is.
+  #
   # Confirmed against an actively-maintained (commits as recent as this
   # investigation) Valheim server manager's own source, which has to work
   # around the exact same gap with an external join-time-populated,
-  # leave-time-looked-up player list keyed by ZDOID -- a stateful
-  # correlation this schema's single-regex, single-capture-group
-  # `logs.events` cannot express.
+  # leave-time-looked-up player list keyed by ZDOID -- independent
+  # confirmation that the owner id, not the name, is the right correlator
+  # for this game's own log shape.
   #
-  # A join-only rule was considered and rejected: the player list would only
-  # ever grow, showing everyone who has connected since the last restart as
-  # still online indefinitely -- a confidently wrong answer, worse than no
-  # answer, and the schema's own known-bad pattern (see the Palworld seed's
-  # identical reasoning for not keying its own join rule off the wrong
-  # line). Revisit if this schema ever gains a way to correlate a join to a
-  # later leave by something other than a name on the same line.
+  # The real, currently maintained Pelican eggs for Valheim
+  # (pelican-eggs/games-steamcmd's valheim_vanilla/valheim_bepinex/valheim_plus,
+  # checked per this project's own standing rule) attempt none of this at
+  # all -- no join/leave tracking, no online-player count, nothing keyed off
+  # a disconnect line. This rule has no reference implementation anywhere;
+  # it rests entirely on the two real captures above, not an established
+  # practice.
+  #
+  # Live-verified end to end against this same rule, deployed to a real
+  # running server (Old Gods): a real player joined, played long enough to
+  # spawn a character, and disconnected -- the player list picked up the
+  # join immediately and cleared on disconnect within a few seconds, with
+  # no manual correction needed.
+  #
+  # What that verification does NOT cover: whether every real disconnect
+  # produces at least one "Destroying abandoned non persistent zdo" line.
+  # The confirmed case (and both real captures the rule was built from)
+  # involves a player who had spawned a character and played for a while;
+  # an instant disconnect before a character (and whatever ephemeral ZDOs
+  # come with it) ever exists might print none, in which case that one
+  # player would be missed by leave and keep showing as online until the
+  # server restarts. That degrades to the same staleness this whole
+  # feature exists to reduce, never a wrong action, so it is a known
+  # limitation to watch for rather than a reason to hold this back -- see
+  # ADR-127 for the full account.
+  #
+  # Not pursued: correlating a captured Steam ID (ADR-119) onto these same
+  # rows. The Steam ID line ("received local Platform ID Steam_<id>") and
+  # the name-bearing ZDOID line above share no field in common -- the only
+  # thing linking them is a PlayFab remote id that appears on neither.
+  # Attaching it would need a genuine three-way chained correlation this
+  # schema has no mechanism for, not a regex change.
+  events:
+    - { event: join, pattern: 'Got character ZDOID from (?P<player>\S+) : (?P<id>[0-9]+):[0-9]+' }
+    - { event: leave, pattern: 'Destroying abandoned non persistent zdo [0-9]+:[0-9]+ owner (?P<id>[0-9]+)' }
 
 stop:
   # Headless Unity process with no interactive stdin command, the same

@@ -5,7 +5,7 @@ description: >
   Dedicated server for Valheim, a Norse survival and exploration game.
   Crossplay is on by default, so the server prints a join code players can
   use instead of an address.
-version: "2.2.3"
+version: "2.2.4"
 
 # The base game's own Steam listing (896660, the dedicated-server tool app
 # id installed below, has no store page and so no artwork of its own). icon
@@ -65,10 +65,16 @@ containers:
     # Without them the server boots and accepts direct connections but never
     # completes PlayFab: it retries `create and join network` every 30s
     # forever and no join code is ever issued.
+    #
+    # Both env vars declared below, not `export`ed in the command -- there
+    # is nothing left needing a shell once they move (no `;` chaining, no
+    # `exec`), so the command is a single tokenised binary invocation,
+    # matching the project's own convention that a launch command should
+    # not carry environment setup a seed can just declare (docs/conventions.md,
+    # "container preparation belongs in the base image or a seed's env,
+    # never a shell prefix in command").
     command: >-
-      sh -c 'export LD_LIBRARY_PATH=./linux64:$LD_LIBRARY_PATH;
-      export SteamAppId=892970;
-      exec ./valheim_server.x86_64 -nographics -batchmode
+      ./valheim_server.x86_64 -nographics -batchmode
       -port {{.Ports.game}} -name "{{.Vars.server_name}}"
       -world "{{.Vars.world_name}}" -password "{{.Vars.password}}"
       -public {{.Vars.public}} -savedir /data
@@ -82,7 +88,10 @@ containers:
       {{if .Vars.raids}}-modifier raids {{.Vars.raids}}{{end}}
       {{if .Vars.portals}}-modifier portals {{.Vars.portals}}{{end}}
       {{.Vars.no_build_cost}} {{.Vars.player_events}}
-      {{.Vars.passive_mobs}} {{.Vars.no_map}} {{.Vars.crossplay}}'
+      {{.Vars.passive_mobs}} {{.Vars.no_map}} {{.Vars.crossplay}}
+    env:
+      LD_LIBRARY_PATH: ./linux64
+      SteamAppId: "892970"
     workdir: /game
     ports:
       - { name: game, protocol: udp, default: 2456 }

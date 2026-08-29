@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.4"
+version: "1.0.5"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -122,10 +122,16 @@ containers:
     # the depot binds its game port ("Network: IP 0.0.0.0, mode MP,
     # dedicated Yes, ports <port> SV / <port> CL") and settles into a
     # stable running state.
+    # LD_LIBRARY_PATH declared below rather than exported inline -- the
+    # steamclient.so staging above is still a genuine shell prefix (it
+    # predates base-steamcmd's own generic entrypoint fix for this exact
+    # problem and hasn't yet been migrated to rely on it; see that entry's
+    # own comment), so this command still needs sh -c for now, but the env
+    # var itself belongs declared, not exported, matching the project's own
+    # convention (docs/conventions.md).
     command: >-
       sh -c 'mkdir -p ~/.steam/sdk64;
       ln -sf /opt/steamcmd/linux64/steamclient.so ~/.steam/sdk64/steamclient.so;
-      export LD_LIBRARY_PATH=./bin/linux64:./bin:.:/opt/steamcmd/linux64:$LD_LIBRARY_PATH;
       exec ./srcds_linux64 -game tf -strictportbind -nohltv
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
@@ -137,6 +143,8 @@ containers:
       +sv_setsteamaccount "{{.Vars.gslt}}"
       {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
     workdir: /game
+    env:
+      LD_LIBRARY_PATH: "./bin/linux64:./bin:.:/opt/steamcmd/linux64"
     ports:
       # Source's own query protocol (A2S_INFO, used by the in-game server
       # browser and every third-party query tool) answers on the *same* UDP

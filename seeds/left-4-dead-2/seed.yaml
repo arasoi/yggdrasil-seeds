@@ -6,7 +6,7 @@ description: >
   This seed installs the base game's five official campaigns in
   cooperative mode -- see the game mode/map fields below for what else is
   and isn't in scope.
-version: "1.0.1"
+version: "1.0.2"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -51,6 +51,24 @@ branding:
 # seed shipped and already describes this seed as setting `osarch: 32`;
 # it was the field that never actually landed, not a later regression --
 # this is that field, finally added.
+#
+# Adding osarch: 32 was not the end of it, either. Retried live against a
+# real node with the bitness now correctly pinned, and the install still
+# failed -- this time with "Invalid platform" instead of "Missing
+# configuration", persisting across a full three-attempt retry sequence
+# rather than resolving. That points at something the three angles above
+# never actually established: not just which bitness 222860's Linux depot
+# needs, but whether its Linux-tagged listing is resolvable via anonymous
+# login at all. A real, currently published Pelican egg for this exact
+# game (pelican-eggs/games-steamcmd, not the archived pelican-eggs/eggs
+# repo, which never shipped one) settles it: its install script forces
+# the depot platform *type* to windows by default, not linux, and still
+# executes the result as a native Linux binary (./srcds_run, no Wine) --
+# a known quirk of some older Source-engine dedicated-server app ids
+# whose depot metadata predates consistent per-OS separation. `platform:
+# windows` below is that fix (ADR-123). Not yet confirmed against a real
+# retry here either -- see this seed's own version bump for whichever way
+# that goes.
 architectures: [amd64]
 
 install:
@@ -67,6 +85,7 @@ install:
     - op: steamcmd
       app_id: 222860
       osarch: 32
+      platform: windows
 
 server:
   # LinuxGSM's own directory layout (systemdir="${serverfiles}/left4dead2",

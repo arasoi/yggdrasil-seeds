@@ -4,7 +4,7 @@ name: Palworld
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.2.1"
+version: "1.2.2"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
 # server tool app installed below. icon is the store's own portrait capsule
@@ -81,15 +81,16 @@ containers:
     # dlopen()s $HOME/.steam/sdk64/steamclient.so, and SteamCMD's own copy is
     # the one to stage there -- the same file, from the same place, that
     # ygg-proton stages for ARK (ADR-047's final amendment). base-linux does
-    # not carry it.
+    # not carry it. base-steamcmd's own entrypoint now stages it generically
+    # on every container start (docs/architecture.md, "Container image
+    # library"), so this seed no longer copies it by hand -- without it,
+    # PalServer logs `dlopen failed trying to load: steamclient.so` and,
+    # depending on the build, either carries on degraded or never finishes
+    # starting.
     image: { base: steamcmd }
     # One readable line would be better, and this is the shortest honest
     # version of it:
     #
-    #   * The staging step is why this is a shell command at all. Without it
-    #     PalServer logs `dlopen failed trying to load: steamclient.so` and,
-    #     depending on the build, either carries on degraded or never finishes
-    #     starting. Copying it is cheap and removes the question.
     #   * -port is the allocated port, never the seed's declared default
     #     (ADR-061). PublicPort in the config file is set from the same
     #     allocation, so what the server binds and what it advertises agree.
@@ -121,21 +122,20 @@ containers:
     # destination is already correct.
     #
     # Bypassing the script costs nothing here. The two things it does are stage
-    # steamclient.so -- which the line below already does, into
-    # $HOME/.steam/sdk64, the path PalServer actually dlopen()s -- and chmod the
-    # binary, now an install step where the directory is still writable. `Pal`
-    # is the project name the script passes as the first argument; Unreal needs
-    # it and dropping it is the one way to get this wrong quietly.
+    # steamclient.so -- now the base image's own job -- and chmod the binary,
+    # now an install step where the directory is still writable. `Pal` is the
+    # project name the script passes as the first argument; Unreal needs it
+    # and dropping it is the one way to get this wrong quietly. No shell
+    # needed any more either, now that nothing here chains a prep step ahead
+    # of the real launch.
     command: >-
-      sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
-      cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
-      exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
+      /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
       -log
       -port={{.Ports.game}}
       -queryport={{.Ports.query}}
       -players={{.Vars.server_player_max_num}}
       -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
-      {{.Vars.community_server}}'
+      {{.Vars.community_server}}
     workdir: /game
     env:
       # base-steamcmd honours HOME (its own descriptor says so), and the

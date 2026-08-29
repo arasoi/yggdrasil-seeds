@@ -5,7 +5,7 @@ description: >
   A Source-engine sandbox for building, physics experiments, and community
   game modes. This seed installs the base Sandbox game only, with no
   Workshop content -- see the map/gamemode fields below for what that means.
-version: "1.0.0"
+version: "1.0.1"
 
 # The base game's own Steam listing (4000) is a fully-covered store page --
 # header, hero, and portrait art all confirmed present -- unlike the
@@ -85,13 +85,15 @@ containers:
     # run the unmodified wrapper. Reach for the same bypass again only if a
     # real boot proves it's needed here too.
     #
-    # The steamclient.so fix mirrors team-fortress-2's exactly, pointed at
-    # sdk32/linux32 instead of sdk64/linux64: the engine's native Steamworks
-    # bridge looks for it at the hardcoded $HOME/.steam/sdk32/steamclient.so
-    # path, and both the official Pterodactyl install script and
-    # ceifa/garrysmod-docker independently confirm this exact fix (copying
-    # a steamclient.so into that path) is required or the server falls back
-    # to "This server will operate in LAN mode only."
+    # The engine's native Steamworks bridge looks for
+    # $HOME/.steam/sdk32/steamclient.so, and both the official Pterodactyl
+    # install script and ceifa/garrysmod-docker independently confirm this
+    # exact fix (copying a steamclient.so into that path) is required or
+    # the server falls back to "This server will operate in LAN mode only."
+    # base-steamcmd's own entrypoint now stages it generically on every
+    # container start (docs/architecture.md, "Container image library"),
+    # so this seed no longer needs to -- and no longer needs a shell at
+    # all, since that staging step was the only reason for one.
     #
     # -strictportbind and -norestart match team-fortress-2's reasoning
     # exactly: refuse rather than silently rebind a taken port, and leave
@@ -133,9 +135,7 @@ containers:
     # will get a real, clear engine error until Workshop support exists as
     # its own future amendment.
     command: >-
-      sh -c 'mkdir -p ~/.steam/sdk32;
-      ln -sf /opt/steamcmd/linux32/steamclient.so ~/.steam/sdk32/steamclient.so;
-      exec ./srcds_run -game garrysmod -console -strictportbind -norestart
+      ./srcds_run -game garrysmod -console -strictportbind -norestart
       -nohltv -disableluarefresh
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
@@ -146,7 +146,7 @@ containers:
       +servercfgfile server.cfg
       +rcon_password "{{.Vars.rcon_password}}"
       +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}'
+      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
     workdir: /game
     ports:
       # Same shape as team-fortress-2's: Source's query protocol answers on

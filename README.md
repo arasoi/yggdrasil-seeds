@@ -77,5 +77,6 @@ closes that gap; run it before opening a pull request.
 | [publishing.md](docs/publishing.md) | Channels, the branch model, recovery |
 | [architecture.md](docs/architecture.md) | How a seed reaches an operator |
 | [decisions.md](docs/decisions.md) | Why things are arranged this way |
-| [catalog-roadmap.md](docs/catalog-roadmap.md) | Steam dedicated servers worth a seed, not yet written |
+| [catalog-steam.md](docs/catalog-steam.md) | Steam-distributed dedicated servers worth a seed, not yet written |
+| [catalog-nonsteam.md](docs/catalog-nonsteam.md) | Direct-download/installer dedicated servers worth a seed, not yet written |
 | [seed-spec.md](docs/seed-spec.md) · [seed-fields.md](docs/seed-fields.md) | The format. Mirrored from the control-plane repository — do not edit here |

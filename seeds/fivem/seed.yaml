@@ -1,0 +1,266 @@
+id: fivem
+schema: 3
+name: FiveM
+description: >
+  FXServer, the dedicated-server runtime for FiveM (a GTA V multiplayer
+  modification framework). Runs with txAdmin enabled for resource and
+  server-config management; a bundled MariaDB gives ESX/QBCore-style
+  frameworks somewhere to store their data, with an optional Adminer tab
+  for managing it.
+version: "1.1.0"
+
+# Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
+# framework Rockstar does not publish, so using GTA V's key art here would
+# misrepresent what this seed actually runs. icon and logo both reuse
+# CitizenFX's own GitHub organisation mark (github.com/citizenfx) -- a
+# square, text-free glyph, so one image genuinely fits both slots rather than
+# needing a second sourced. banner is the citizenfx/fivem repository's own
+# GitHub social-preview image (the same mark, wide format, official). The
+# top-level icon: emoji is gone, since a seed may declare one or the other,
+# never both.
+branding:
+  icon: icon.png
+  logo: logo.png
+  banner: banner.png
+
+# FXServer's Linux build (build_proot_linux) is a closed-source binary with
+# no arm64 build known to exist -- assumed amd64-only the same way every
+# other proprietary dedicated server in this catalog is, pending a live
+# arm64 boot attempt actually confirming it fails.
+architectures: [amd64]
+
+install:
+  # The FXServer binaries and Citizen scripting framework are identical
+  # across every server built from this seed -- the same call ARK's shared
+  # install makes for its map data.
+  shared: true
+  mount: { path: /game, mode: ro }
+  steps:
+    # Pinned to a specific, verified build rather than tracking Cfx.re's own
+    # "recommended" label at install time: this is the build that was
+    # actually confirmed reachable and xz-decoded correctly while this seed
+    # was written (2026-08-31, build 35245, bundled txAdmin 8.1.1 -- Cfx.re's
+    # own https://changelogs-live.fivem.net/api/changelog/versions/linux/server
+    # named it "recommended" at the time). Getting a newer build to
+    # operators is a seed version bump pointing at a newer verified build
+    # plus the ordinary Update-install action, never a moving target this
+    # file itself tracks.
+    - op: download
+      url: "https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/35245-6efb47dff473c0e2a12fb50b08d74c0eb24a50d5/fx.tar.xz"
+      into: fx.tar.xz
+    # Cfx.re ships no other format for this artifact. The archive extracts
+    # flat -- run.sh and alpine/ land directly at the install root, no
+    # wrapping version directory -- confirmed by listing a real download
+    # rather than assumed from a hosting panel's install script.
+    - op: extract
+      from: fx.tar.xz
+      archive: tarxz
+
+server:
+  writable_paths:
+    # Everything txAdmin owns once it is running: server.cfg, the resource
+    # tree it deploys or an operator adds to, admin accounts, and its own
+    # recipe/deployer state. The artifact's own read-only citizen/
+    # system_resources (confirmed by a real boot: monitor -- txAdmin itself
+    # -- plus chat, yarn and webpack) are infrastructure, not gameplay --
+    # there is no spawnmanager, sessionmanager or gamemode bundled, so an
+    # actually playable server still needs txAdmin's own deployer or an
+    # operator's own upload for those, same as an older, headless-mode
+    # hosting-panel egg had to manually clone a baseline resource set for
+    # instead of using txAdmin's own deployer.
+    - { from: txData, to: /game/txData }
+
+containers:
+  - role: db
+    image: mariadb:11
+    env:
+      MARIADB_DATABASE: fivem
+      MARIADB_USER: fivem
+      MARIADB_PASSWORD: "{{.Vars.db_password}}"
+      # Root shares the same generated password rather than getting its own
+      # random one: this is a single-tenant database with no separate trust
+      # boundary to keep, and a root password nothing can ever read back
+      # would make the backup hook below unable to authenticate at all.
+      MARIADB_ROOT_PASSWORD: "{{.Vars.db_password}}"
+    volumes:
+      - { from: mysql-data, to: /var/lib/mysql }
+    healthcheck:
+      command: "healthcheck.sh --connect --innodb_initialized"
+      interval: 5s
+      retries: 20
+    backup:
+      pre: "mariadb-dump -u root -p{{.Vars.db_password}} fivem > /backup/fivem.sql"
+      post: "rm -f /backup/fivem.sql"
+
+  - role: dbadmin
+    name: Database Admin
+    description: Adminer, a lightweight web UI for the bundled MariaDB database.
+    optional: true
+    # The official image: a single PHP file, no bundled static assets to
+    # break under a reverse proxy the way a heavier admin tool's own
+    # absolute asset paths would (docs/decisions.md's ADR-147, the operator
+    # UI's own addon-tab mechanism this is the first real seed to use).
+    image: adminer:4
+    depends_on:
+      - { role: db, condition: healthy }
+    env:
+      # Already Adminer's own default host, since its example usage assumes
+      # a container literally named "db" -- set explicitly anyway rather
+      # than relying on an upstream default matching this seed's own
+      # container name by coincidence.
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - { name: web, protocol: tcp, default: 8080, kind: web }
+    # No auto-login: the plugin that would need one (login-env-vars) is not
+    # bundled in the official image and needs a config file dropped into
+    # the container, which this addon mechanism has no step for. The
+    # operator types the already-visible generated database password once
+    # per session -- an ordinary admin-tool flow, not a missing feature.
+    ui:
+      tab: Database
+      port: web
+
+  - role: game
+    primary: true
+    image: { base: linux }
+    workdir: /game
+    # No +exec server.cfg: this deliberately leaves txAdmin enabled (running
+    # ./run.sh with no arguments boots FXServer *through* txAdmin, which
+    # then owns server.cfg and resource management from inside txData) per
+    # the operator's own choice to keep it rather than run headless.
+    command: "./run.sh"
+    depends_on:
+      - { role: db, condition: healthy }
+    env:
+      TXHOST_INTERFACE: "0.0.0.0"
+      # Both hand the port through env rather than a command-line flag --
+      # the same reason Bedrock's SERVER_PORT does: TXHOST_FXS_PORT forces
+      # the endpoint_add_* commands txAdmin would otherwise read from a
+      # server.cfg that does not exist until the deployer creates one.
+      TXHOST_FXS_PORT: "{{.Ports.game}}"
+      TXHOST_TXA_PORT: "{{.Ports.txadmin}}"
+      # Must be writable and must not be under the default relative path
+      # (three directories above the citizen dir), which would land outside
+      # /game entirely on the container's own ephemeral filesystem and lose
+      # every setting, resource and admin account on every rebuild.
+      TXHOST_DATA_PATH: /game/txData
+      # Pre-fills txAdmin's own deployer wizard so an operator does not have
+      # to type the database connection by hand -- the deployer still runs
+      # once, but with these already correct.
+      TXHOST_DEFAULT_DBHOST: db
+      TXHOST_DEFAULT_DBPORT: "3306"
+      TXHOST_DEFAULT_DBUSER: fivem
+      TXHOST_DEFAULT_DBNAME: fivem
+      TXHOST_DEFAULT_DBPASS: "{{.Vars.db_password}}"
+      # TXHOST_DEFAULT_ACCOUNT can fully automate first-boot admin-account
+      # creation, but its documented shape was not pinned down precisely
+      # enough (plain password vs. a pre-computed hash this seed has no way
+      # to produce) to risk shipping a guess. Left unset: the operator
+      # completes txAdmin's own one-time PIN-based setup via its console and
+      # web UI on first boot, exactly as every other FiveM hosting panel
+      # already expects. Revisit once this has actually been confirmed live.
+    ports:
+      - { name: game, protocol: tcp, default: 30120, kind: game }
+      - { name: game-udp, protocol: udp, offset_from: game, offset: 0 }
+      - { name: txadmin, protocol: tcp, default: 40120, kind: web }
+
+variables:
+  - name: db_password
+    label: Database password
+    # Generated once and referenced by both containers above -- never two
+    # separately generated settings, which would give the game and the
+    # database two different passwords for the same account.
+    generate: password
+    default: ""
+    editable: true
+
+settings:
+  - name: license_key
+    group: License
+    type: password
+    label: FiveM license key
+    description: >-
+      From portal.cfx.re (Keymaster is retired) -- one free key per server,
+      no server IP required. Required to start; without it the server
+      refuses every connection.
+    required: true
+    to: { env: TXHOST_DEFAULT_CFXKEY }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    description: Enforces sv_maxClients at or below this value.
+    default: "48"
+    min: 1
+    max: 1024
+    step: 1
+    to: { env: TXHOST_MAX_SLOTS }
+
+# mode: port rather than a log pattern -- this has not been booted live yet,
+# and this project's own rule is to write a log pattern only after watching
+# real output, never guessed from documentation. txAdmin's own HTTP port
+# accepting a connection is a reasonable first cut; revisit with a real
+# readiness line once this has actually booted.
+ready:
+  mode: port
+  port: txadmin
+  timeout: 300s
+
+connect:
+  # fivem://connect/<address> is FiveM's own registered client URI scheme --
+  # the same "direct connect" link real hosting sites hand out.
+  uri: "fivem://connect/{{.Endpoint.game}}"
+  label: Connect
+  copy: "{{.Endpoint.game}}"
+
+stop:
+  # FXServer's ordinary admin console command for a clean shutdown.
+  command: "quit"
+  timeout: 30s
+  then: SIGTERM
+
+backup:
+  include: [txData]
+
+# What has actually been checked, and what has not:
+#
+# The real artifact (build 35245) was downloaded and its xz/tar structure
+# inspected directly. Two boots were attempted -- under amd64 emulation on
+# an arm64 host, the only Docker available while writing this, not through
+# yggd/ygg-agent:
+#
+#   1. Headless (+exec /dev/null, txAdmin disabled): the binary loads, scans
+#      and finds its 3-4 bundled system_resources, and correctly rejects an
+#      invalid license key ("Could not authenticate server license key.
+#      Invalid key format specified.") rather than silently accepting one.
+#   2. This seed's actual shape -- bare ./run.sh, txAdmin enabled, a real
+#      MariaDB sidecar reachable on the network, every TXHOST_* env var this
+#      seed sets -- crashes outright: SIGSEGV inside libnode22.so, the
+#      bundled Node.js runtime txAdmin itself runs on. Consistent with V8's
+#      JIT under QEMU binary translation, a known category of emulation
+#      failure, not evidence of a real defect in this seed -- but it means
+#      the txAdmin path specifically has not been watched succeed anywhere,
+#      only shown to fail in a way a real amd64 host would not.
+#
+# Confirmed independent of either boot: the MariaDB sidecar starts and its
+# declared healthcheck.sh command genuinely passes.
+#
+# Still needs a real amd64 host to settle, not a guess:
+#   - whether txAdmin actually boots at all (test 2's crash is the whole
+#     reason this is still open, not a side note)
+#   - logs.events (join/leave) for a player list and count
+#   - a crash: rule -- this project's own bar for one is higher than for
+#     readiness, since a wrong pattern stops a healthy server rather than
+#     merely delaying a starting one
+#   - TXHOST_DEFAULT_ACCOUNT's exact expected value shape, noted above
+#   - whether the citizen framework or txAdmin itself refuses to run as
+#     root (base-linux's default); YGG_DROP_PRIVS is base-steamcmd-only and
+#     does not apply here regardless
+#   - the DB pre-fill actually reaching txAdmin's deployer wizard
+#   - whether ready: {mode: port, port: txadmin} is actually the right
+#     signal, once there is real boot output from inside the real pod to
+#     read instead
+#   - the dbadmin addon itself: the generic tab-and-proxy mechanism it uses
+#     (ADR-147) was verified end to end against a stand-in seed and a real
+#     HTTP backend, but Adminer specifically has not been booted as part of
+#     this pod

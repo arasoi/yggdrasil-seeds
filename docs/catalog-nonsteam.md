@@ -44,7 +44,6 @@ game-server scope as it stands. Revisit if that scope should widen.
 | Game | Source |
 |---|---|
 | Factorio | official `.tar.xz` |
-| FiveM (FXServer) | `runtime.fivem.net` |
 | RedM (FXServer) | `runtime.fivem.net` |
 | Minecraft: Forge server | installer jar |
 | Minecraft: NeoForge server | installer jar |
@@ -122,8 +121,8 @@ before assuming a URL still resolves, the same caution
 ## Suggested order
 
 Tier 1, prioritizing whatever has the most immediate demand — Factorio and
-the FiveM/RedM pair are the most-requested self-hosted targets outside the
-Steam list entirely, and the three Minecraft mod loaders close a real,
-frequently-asked-for gap next to the existing Paper seed. Tier 2 only with
-eyes open about what it means to run one. Tier 3 whenever something on it
-specifically comes up.
+RedM (FiveM's own sibling seed already ships) are the most-requested
+self-hosted targets outside the Steam list entirely, and the three Minecraft
+mod loaders close a real, frequently-asked-for gap next to the existing Paper
+seed. Tier 2 only with eyes open about what it means to run one. Tier 3
+whenever something on it specifically comes up.

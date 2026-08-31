@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.1.1"
+version: "1.2.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -119,14 +119,21 @@ containers:
       # through the Database tab because nothing was listening on the
       # number that had been published).
       - { name: web, protocol: tcp, default: 8080, kind: web, container_port: 8080 }
-    # No auto-login: the plugin that would need one (login-env-vars) is not
-    # bundled in the official image and needs a config file dropped into
-    # the container, which this addon mechanism has no step for. The
-    # operator types the already-visible generated database password once
-    # per session -- an ordinary admin-tool flow, not a missing feature.
+    # Auto-login (yggdrasil's own docs/decisions.md ADR-152): Adminer's
+    # official image has no plugin bundled that would read credentials from
+    # its own environment, so this fills and submits its real login form
+    # from the operator's own browser instead, with the exact values the
+    # database was created with -- no separate credential to remember or
+    # paste in.
     ui:
       tab: Database
       port: web
+      login:
+        fields:
+          "auth[username]": fivem
+          "auth[password]": "{{.Vars.db_password}}"
+          "auth[db]": fivem
+          "auth[permanent]": "1"
 
   - role: game
     primary: true
@@ -233,29 +240,39 @@ backup:
 # What has actually been checked, and what has not:
 #
 # The real artifact (build 35245) was downloaded and its xz/tar structure
-# inspected directly. Two boots were attempted -- under amd64 emulation on
-# an arm64 host, the only Docker available while writing this, not through
-# yggd/ygg-agent:
+# inspected directly, then booted for real: this seed's actual shape (bare
+# ./run.sh, txAdmin enabled, a real MariaDB sidecar) run through a real
+# yggd/ygg-agent on a real amd64 node.
 #
-#   1. Headless (+exec /dev/null, txAdmin disabled): the binary loads, scans
-#      and finds its 3-4 bundled system_resources, and correctly rejects an
-#      invalid license key ("Could not authenticate server license key.
-#      Invalid key format specified.") rather than silently accepting one.
-#   2. This seed's actual shape -- bare ./run.sh, txAdmin enabled, a real
-#      MariaDB sidecar reachable on the network, every TXHOST_* env var this
-#      seed sets -- crashes outright: SIGSEGV inside libnode22.so, the
-#      bundled Node.js runtime txAdmin itself runs on. Consistent with V8's
-#      JIT under QEMU binary translation, a known category of emulation
-#      failure, not evidence of a real defect in this seed -- but it means
-#      the txAdmin path specifically has not been watched succeed anywhere,
-#      only shown to fail in a way a real amd64 host would not.
+# The first real boot crashed with what looked like a native runtime fault --
+# "Got a SIGSEGV... fatal error in the mono runtime or one of the native
+# libraries" -- the same generic banner an earlier attempt under amd64
+# emulation on an arm64 host had also hit (there, inside libnode22.so, which
+# read at the time as a V8-JIT-under-emulation failure). Reading the actual
+# start of the crash dump on the real boot found the true cause, and it has
+# nothing to do with Mono, Node, or emulation: a `ZodValidationError` from
+# txAdmin's own `@monitor/core` module (`getHostVars`), rejecting the
+# configured FiveM license key for not matching the current
+# `cfxk_XXXXXXXXXXXXXXXXXXXXX_YYYYY` format. FXServer's crash handler prints
+# that same generic banner for *any* uncaught exception that brings the
+# process down, native or not -- so the message names the wrong suspect by
+# design, not just in this one case. With a real, correctly-formatted key
+# from portal.cfx.re, the server boots clean.
 #
-# Confirmed independent of either boot: the MariaDB sidecar starts and its
-# declared healthcheck.sh command genuinely passes.
+# Confirmed on the real boot: no relocation errors (the symlink-preservation
+# fix this artifact needed, docs/decisions.md's ADR-148, holds), the MariaDB
+# sidecar starts and its declared healthcheck.sh command genuinely passes,
+# and the dbadmin addon (Adminer) is reachable end to end through the
+# Database tab -- confirmed rendering its real login screen after two more
+# yggd-side fixes this same addon needed (ADR-150's container_port, for
+# Adminer's own fixed internal 8080; ADR-151, stripping the
+# `X-Frame-Options: deny` Adminer sends by default, which blocked the tab's
+# own iframe from rendering it at all). This seed's `ui.login` block
+# (ADR-152) now auto-submits that login form from the operator's own
+# generated database credentials -- added right after dbadmin's own
+# reachability was confirmed, not yet re-verified live itself.
 #
-# Still needs a real amd64 host to settle, not a guess:
-#   - whether txAdmin actually boots at all (test 2's crash is the whole
-#     reason this is still open, not a side note)
+# Still open, not yet checked against the real boot:
 #   - logs.events (join/leave) for a player list and count
 #   - a crash: rule -- this project's own bar for one is higher than for
 #     readiness, since a wrong pattern stops a healthy server rather than
@@ -266,14 +283,6 @@ backup:
 #     does not apply here regardless
 #   - the DB pre-fill actually reaching txAdmin's deployer wizard
 #   - whether ready: {mode: port, port: txadmin} is actually the right
-#     signal, once there is real boot output from inside the real pod to
-#     read instead
-#   - the dbadmin addon: now booted on a real amd64 node. The container ran
-#     fine but every connection through the Database tab was refused —
-#     traced to yggd itself (docs/decisions.md's ADR-150): Adminer's own
-#     standalone server always binds 8080 internally with no way to tell it
-#     otherwise, so publishing the allocated host port to itself (the
-#     ordinary rule) left nothing listening on the number that got
-#     published. This seed's ports block now declares container_port: 8080
-#     to fix that; reachability through the Database tab still needs a
-#     final re-check once a control plane carrying the fix is live
+#     signal, now that there is real boot output from inside a real pod to
+#     check it against
+#   - the dbadmin addon's new auto-login (ui.login) itself, live

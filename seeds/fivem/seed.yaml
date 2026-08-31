@@ -5,8 +5,9 @@ description: >
   FXServer, the dedicated-server runtime for FiveM (a GTA V multiplayer
   modification framework). Runs with txAdmin enabled for resource and
   server-config management; a bundled MariaDB gives ESX/QBCore-style
-  frameworks somewhere to store their data.
-version: "1.0.0"
+  frameworks somewhere to store their data, with an optional Adminer tab
+  for managing it.
+version: "1.1.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -90,6 +91,34 @@ containers:
     backup:
       pre: "mariadb-dump -u root -p{{.Vars.db_password}} fivem > /backup/fivem.sql"
       post: "rm -f /backup/fivem.sql"
+
+  - role: dbadmin
+    name: Database Admin
+    description: Adminer, a lightweight web UI for the bundled MariaDB database.
+    optional: true
+    # The official image: a single PHP file, no bundled static assets to
+    # break under a reverse proxy the way a heavier admin tool's own
+    # absolute asset paths would (docs/decisions.md's ADR-147, the operator
+    # UI's own addon-tab mechanism this is the first real seed to use).
+    image: adminer:4
+    depends_on:
+      - { role: db, condition: healthy }
+    env:
+      # Already Adminer's own default host, since its example usage assumes
+      # a container literally named "db" -- set explicitly anyway rather
+      # than relying on an upstream default matching this seed's own
+      # container name by coincidence.
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - { name: web, protocol: tcp, default: 8080, kind: web }
+    # No auto-login: the plugin that would need one (login-env-vars) is not
+    # bundled in the official image and needs a config file dropped into
+    # the container, which this addon mechanism has no step for. The
+    # operator types the already-visible generated database password once
+    # per session -- an ordinary admin-tool flow, not a missing feature.
+    ui:
+      tab: Database
+      port: web
 
   - role: game
     primary: true
@@ -231,3 +260,7 @@ backup:
 #   - whether ready: {mode: port, port: txadmin} is actually the right
 #     signal, once there is real boot output from inside the real pod to
 #     read instead
+#   - the dbadmin addon itself: the generic tab-and-proxy mechanism it uses
+#     (ADR-147) was verified end to end against a stand-in seed and a real
+#     HTTP backend, but Adminer specifically has not been booted as part of
+#     this pod

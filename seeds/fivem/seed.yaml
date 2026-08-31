@@ -195,20 +195,30 @@ backup:
 
 # What has actually been checked, and what has not:
 #
-# The real artifact (build 35245) was downloaded, its xz/tar structure
-# inspected directly, and run.sh was booted -- under amd64 emulation on an
-# arm64 host, the only Docker available while writing this, not through
-# yggd/ygg-agent -- confirmed the binary loads, scans and finds its 3-4
-# bundled system_resources, and correctly rejects an invalid license key
-# ("Could not authenticate server license key. Invalid key format
-# specified."), rather than silently accepting one. It also produced two
-# "Stack overflow in unmanaged" lines before that, consistent with V8's JIT
-# under binary translation rather than a real fault -- expected under
-# emulation, not something to read as a real host's own behaviour.
+# The real artifact (build 35245) was downloaded and its xz/tar structure
+# inspected directly. Two boots were attempted -- under amd64 emulation on
+# an arm64 host, the only Docker available while writing this, not through
+# yggd/ygg-agent:
 #
-# Not yet checked, and each needs a real amd64 host through the actual pod
-# (mount, writable overlay, both containers, a real license key) rather than
-# a bare binary in a bare container:
+#   1. Headless (+exec /dev/null, txAdmin disabled): the binary loads, scans
+#      and finds its 3-4 bundled system_resources, and correctly rejects an
+#      invalid license key ("Could not authenticate server license key.
+#      Invalid key format specified.") rather than silently accepting one.
+#   2. This seed's actual shape -- bare ./run.sh, txAdmin enabled, a real
+#      MariaDB sidecar reachable on the network, every TXHOST_* env var this
+#      seed sets -- crashes outright: SIGSEGV inside libnode22.so, the
+#      bundled Node.js runtime txAdmin itself runs on. Consistent with V8's
+#      JIT under QEMU binary translation, a known category of emulation
+#      failure, not evidence of a real defect in this seed -- but it means
+#      the txAdmin path specifically has not been watched succeed anywhere,
+#      only shown to fail in a way a real amd64 host would not.
+#
+# Confirmed independent of either boot: the MariaDB sidecar starts and its
+# declared healthcheck.sh command genuinely passes.
+#
+# Still needs a real amd64 host to settle, not a guess:
+#   - whether txAdmin actually boots at all (test 2's crash is the whole
+#     reason this is still open, not a side note)
 #   - logs.events (join/leave) for a player list and count
 #   - a crash: rule -- this project's own bar for one is higher than for
 #     readiness, since a wrong pattern stops a healthy server rather than
@@ -217,7 +227,7 @@ backup:
 #   - whether the citizen framework or txAdmin itself refuses to run as
 #     root (base-linux's default); YGG_DROP_PRIVS is base-steamcmd-only and
 #     does not apply here regardless
-#   - the mariadb sidecar and the DB pre-fill actually working end to end
+#   - the DB pre-fill actually reaching txAdmin's deployer wizard
 #   - whether ready: {mode: port, port: txadmin} is actually the right
 #     signal, once there is real boot output from inside the real pod to
 #     read instead

@@ -1,23 +1,20 @@
-# Catalog roadmap
+# Steam catalog roadmap
 
-> A candidate list for expanding the catalog, tiered by how confident we are
-> in each one. Read on demand when picking the next seed to write.
+> A candidate list of Steam-distributed dedicated servers worth a seed, tiered
+> by how confident we are that each one runs on Linux without a Proton/Wine
+> wrapper. Read on demand when picking the next seed to write.
 
 This file tracks **candidates**, not status. What is actually built is always
 `seeds/` on this branch — run `ls seeds/` rather than trusting a checkbox here
 to go stale. When a game below gets a seed, delete its row; this file should
 only ever list what is left.
 
-It has two halves: Steam-distributed dedicated servers (SteamCMD), and
-everything else (direct download, an installer, an open-source release).
-The two need different sourcing, so each has its own tiers below.
+See [catalog-nonsteam.md](catalog-nonsteam.md) for the direct-download/installer
+half of the catalog roadmap — a different sourcing method and a different
+install shape (`download`/`extract` rather than `op: steamcmd`), so it gets its
+own file.
 
-## Steam-distributed
-
-Tiered by how confident we are that each one runs on Linux without a
-Proton/Wine wrapper.
-
-### Sourcing
+## Sourcing
 
 - **Tier 1** comes from [LinuxGSM](https://github.com/GameServerManagers/LinuxGSM)'s
   own `lgsm/data/serverlist.csv` cross-referenced against each game's
@@ -41,14 +38,14 @@ Both APIs and LinuxGSM's list are snapshots from 2026-08-26 and will drift the
 same way the seed catalog itself does (see architecture.md's own note on
 that) — re-check rather than trusting an old row for a game with no seed yet.
 
-### Already covered, not Steam
+## Already covered, not Steam
 
 Minecraft Java (Paper), Minecraft Bedrock, and Vintage Story are already
 shipped and intentionally excluded below — none of the three installs via
-SteamCMD. They belong in spirit under "Non-Steam" below, but since they are
-already built there is nothing left to track for them.
+SteamCMD. They belong in spirit under [catalog-nonsteam.md](catalog-nonsteam.md),
+but since they are already built there is nothing left to track for them.
 
-### Tier 1 — native Linux, LinuxGSM-verified
+## Tier 1 — native Linux, LinuxGSM-verified
 
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
@@ -167,7 +164,7 @@ way `244310` ("Source SDK Base 2013 Dedicated Server") backs several Source
 mods. A seed for one of these needs that extra install step; it is not a
 second copy of an existing game.
 
-### Tier 2 — confirmed AppID, Linux unverified
+## Tier 2 — confirmed AppID, Linux unverified
 
 Not in LinuxGSM's list, so treat native-Linux support as unknown until
 checked. Several are known Tripwire/Offworld titles from the same lineage as
@@ -192,7 +189,7 @@ to be native-Linux too.
 | Last Oasis | 920720 | Verify depot |
 | Ground Branch | 476400 | Verify depot |
 
-### Tier 3 — believed to exist, AppID unresolved
+## Tier 3 — believed to exist, AppID unresolved
 
 No confirmed dedicated-server AppID from either source above. Some of these
 (the Unity-based survival games especially) may run their server through the
@@ -221,7 +218,7 @@ before anything else is written.
 official dedicated server at all (Obsidian's multiplayer model differs from
 the others in this tier) — confirm existence before treating it as a target.
 
-### Suggested order
+## Suggested order
 
 Tier 1 first: the Linux support question is already answered, so the only
 work per seed is the ordinary install/config/ready-pattern authoring loop
@@ -234,125 +231,3 @@ Tier 2 next, prioritizing the Tripwire/Offworld titles most likely to be
 native Linux despite being unverified. Tier 3 last, and only once its AppID
 question is actually resolved — a Tier 3 row is a research task, not a seed
 task, until then.
-
-## Non-Steam
-
-Dedicated servers distributed by direct download, an installer, or an
-open-source release — never SteamCMD. A different install shape from the
-Steam half above: `install.steps` here means `download`/`extract` (or, for a
-few, a `write`/`patch` step around a vendor installer jar) rather than
-`op: steamcmd`.
-
-### Sourcing
-
-- **Tier 1** combines two lists: the entries in LinuxGSM's own server list
-  that carry **no** `appid=` at all (a direct-download install it has still
-  run on Linux for years — the same actively-tested standard Tier 1 above
-  uses, just without SteamCMD in the loop) and
-  [awesome-selfhosted's games list](https://awesome-selfhosted.net/tags/games.html),
-  a curated, license-tagged, self-hosting-first directory.
-- **Tier 2** is MMO server emulators — a private-server core for a game whose
-  publisher never authorized a self-hosted server (World of Warcraft,
-  EverQuest, Ultima Online, Tibia, RuneScape). Real, and popular in the
-  self-hosting community, but a different kind of risk than anything above:
-  the software itself is legitimate open source, but running it necessarily
-  means standing up an unauthorized server for someone else's live game.
-  Decide risk tolerance per project before starting one of these — this list
-  is not the place that gets settled.
-- **Tier 3** is smaller or niche titles with genuine but much smaller
-  self-hosting communities — real candidates, just lower priority than
-  anything above.
-
-A handful of self-hostable browser party games (a quiz platform, a pictionary
-clone, a chess server) turned up in the same awesome-selfhosted list and are
-deliberately left off every tier here — outside this project's dedicated
-game-server scope as it stands. Revisit if that scope should widen.
-
-### Tier 1 — established, direct-download
-
-| Game | Source |
-|---|---|
-| Factorio | official `.tar.xz` |
-| FiveM (FXServer) | `runtime.fivem.net` |
-| RedM (FXServer) | `runtime.fivem.net` |
-| Minecraft: Forge server | installer jar |
-| Minecraft: NeoForge server | installer jar |
-| Minecraft: Fabric server | installer jar |
-| Velocity (Minecraft proxy) | PaperMC downloads |
-| Waterfall (Minecraft proxy) | PaperMC downloads |
-| BungeeCord (Minecraft proxy) | Jenkins CI jar — verify it's still the recommended proxy before investing here; Velocity has largely superseded it |
-| Luanti (Minetest) | official builds |
-| OpenTTD | official builds |
-| The Battle for Wesnoth | official builds |
-| 0 A.D. | official builds |
-| Veloren | official builds |
-| Mindustry | GitHub releases (server jar) |
-| Multi Theft Auto (MTA:SA) | official builds |
-| San Andreas Multiplayer (SA-MP) | official builds |
-| TeamSpeak 3 | official builds — voice, not a game, but a common fleet neighbor |
-| Unreal Tournament 99 | direct download — verify current host |
-| Unreal Tournament 2004 | direct download — verify current host |
-| Unreal Tournament 3 | direct download — verify current host |
-| Return to Castle Wolfenstein | direct download — verify current host |
-| Wolfenstein: Enemy Territory | direct download — verify current host |
-| ET: Legacy | official builds |
-| Quake 2 | direct download — verify current host |
-| Quake 3: Arena / ioquake3 | official builds |
-| OpenArena | official builds |
-| Quake World | direct download — verify current host |
-| Zandronum | official builds |
-| OpenRA | official builds |
-| Warzone 2100 | official builds |
-| Cube 2: Sauerbraten | official builds |
-| Red Eclipse 2 | official builds |
-| DDraceNetwork | official builds |
-| piqueserver (OpenSpades) | PyPI / GitHub |
-| Call of Duty | direct download — verify current host |
-| Call of Duty 2 | direct download — verify current host |
-| Call of Duty 4 | direct download — verify current host |
-| Call of Duty: United Offensive | direct download — verify current host |
-| Call of Duty: World at War | direct download — verify current host |
-| Medal of Honor: Allied Assault | direct download — verify current host |
-| Soldier Of Fortune 2: Gold Edition | direct download — verify current host |
-| Battlefield 1942 | direct download — verify current host |
-| Battlefield: Vietnam | direct download — verify current host |
-
-The Minecraft ecosystem here is deliberately split three ways from what is
-already built: Paper (plugins) already ships; Forge/NeoForge/Fabric (mods)
-are a real gap with their own install mechanism per loader; the proxy layer
-(Velocity/BungeeCord/Waterfall) is a different seed shape again — no game
-world of its own, just routing between backend Minecraft servers, closer to
-Empyrion's addon-container thinking than to a standalone game.
-
-Several rows above (marked "verify current host") are old enough that their
-official download location may no longer be the first-party site — check
-before assuming a URL still resolves, the same caution
-[seed-spec.md](seed-spec.md) already asks of a `download` install step.
-
-### Tier 2 — legally grey (MMO emulators)
-
-| Game |
-|---|
-| TrinityCore / AzerothCore (World of Warcraft) |
-| EQEmu (EverQuest) |
-| ServUO (Ultima Online) |
-| Open Tibia (OTServ / Canary / TFS) |
-| RSPS frameworks (RuneScape private servers) |
-
-### Tier 3 — smaller or niche, real but lower priority
-
-| Game | Source |
-|---|---|
-| Zero-K | official builds |
-| Hypersomnia | GitHub releases |
-| Suroi | self-hosted Node.js |
-| Foundry VTT | official Node.js release — a virtual tabletop, not a traditional game server; verify it fits this project's model before starting |
-
-### Suggested order
-
-Tier 1, prioritizing whatever has the most immediate demand — Factorio and
-the FiveM/RedM pair are the most-requested self-hosted targets outside the
-Steam list entirely, and the three Minecraft mod loaders close a real,
-frequently-asked-for gap next to the existing Paper seed. Tier 2 only with
-eyes open about what it means to run one. Tier 3 whenever something on it
-specifically comes up.

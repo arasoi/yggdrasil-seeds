@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.1.0"
+version: "1.1.1"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -110,7 +110,15 @@ containers:
       # container name by coincidence.
       ADMINER_DEFAULT_SERVER: db
     ports:
-      - { name: web, protocol: tcp, default: 8080, kind: web }
+      # container_port is required here: Adminer's official standalone
+      # server always binds 8080 internally with no command flag or env var
+      # to change it, so the allocated host port cannot simply be published
+      # to itself the way an ordinary game port is (yggdrasil's own
+      # docs/decisions.md ADR-150 -- found live, the first real seed to need
+      # it, when this exact addon booted fine but refused every connection
+      # through the Database tab because nothing was listening on the
+      # number that had been published).
+      - { name: web, protocol: tcp, default: 8080, kind: web, container_port: 8080 }
     # No auto-login: the plugin that would need one (login-env-vars) is not
     # bundled in the official image and needs a config file dropped into
     # the container, which this addon mechanism has no step for. The
@@ -260,7 +268,12 @@ backup:
 #   - whether ready: {mode: port, port: txadmin} is actually the right
 #     signal, once there is real boot output from inside the real pod to
 #     read instead
-#   - the dbadmin addon itself: the generic tab-and-proxy mechanism it uses
-#     (ADR-147) was verified end to end against a stand-in seed and a real
-#     HTTP backend, but Adminer specifically has not been booted as part of
-#     this pod
+#   - the dbadmin addon: now booted on a real amd64 node. The container ran
+#     fine but every connection through the Database tab was refused —
+#     traced to yggd itself (docs/decisions.md's ADR-150): Adminer's own
+#     standalone server always binds 8080 internally with no way to tell it
+#     otherwise, so publishing the allocated host port to itself (the
+#     ordinary rule) left nothing listening on the number that got
+#     published. This seed's ports block now declares container_port: 8080
+#     to fix that; reachability through the Database tab still needs a
+#     final re-check once a control plane carrying the fix is live

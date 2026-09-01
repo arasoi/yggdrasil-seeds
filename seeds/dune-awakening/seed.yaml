@@ -1,0 +1,561 @@
+id: dune-awakening
+schema: 3
+name: Dune Awakening
+description: >
+  Funcom's official self-hosted "battlegroup" server for Dune: Awakening --
+  a survival MMO. Unlike every other multi-container seed in this catalog,
+  every service here (the map server, the client gateway, the map-lifecycle
+  director, chat routing, PostgreSQL and two RabbitMQ brokers) ships as
+  Funcom's own pre-built container image inside the SteamCMD-downloaded
+  self-host package, rather than as raw game files this seed installs into
+  one container. See the block comment above `containers:` below before
+  touching this seed -- the exact mechanism for getting those images onto a
+  node is the one thing about this seed that is still genuinely unresolved.
+version: "0.1.0"
+
+# Confirmed live (2026-08, community reporting): the actual server binaries
+# are native Linux, run directly in Docker with no Windows/Hyper-V/VM layer
+# and no Proton -- both CubeCoders AMP's 2026-08 release and an independent
+# community Docker-Compose project (snapetech/DuneAwakeningSelfHost, "DASH")
+# run it this way. Funcom's own official guide is still Windows+Hyper-V+VM
+# based, but that is a packaging choice on Funcom's part, not evidence the
+# binaries need it. AVX2 is a stated hardware requirement; arm64 is not
+# claimed anywhere and RabbitMQ/steamcmd's own toolchain make it unlikely.
+architectures: [amd64]
+
+# The dedicated-server tool's own Steam app id (confirmed via the official
+# self-hosting help center and independently via a community Docker project's
+# own scripts). 3104830 is the PTC (test) build's app id, kept here as a
+# comment rather than a second field this format has no place for:
+#   PTC app id: 3104830
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 4754530
+      name: "Dune Awakening self-hosted server package"
+    # dune-admin is a companion operator dashboard (github.com/Icehunter/dune-admin),
+    # not part of Funcom's own distribution. It has no published container
+    # image, but ships as a static, dependency-free Go binary via GitHub
+    # Releases, so it is fetched and extracted the same way FiveM's own
+    # FXServer artifact is -- alongside the game files, since this format has
+    # no second install mechanism for a companion tool. Pinned to a specific
+    # verified release rather than "latest", matching every other pinned
+    # download in this catalog.
+    - op: download
+      url: "https://github.com/Icehunter/dune-admin/releases/download/v0.48.2/dune-admin_linux_amd64.tar.gz"
+      into: dune-admin.tar.gz
+      name: "Director panel (dune-admin)"
+    - op: extract
+      from: dune-admin.tar.gz
+      archive: targz
+      strip_components: 0
+
+server:
+  writable_paths:
+    # The primary map server's own save data. Path confirmed from a real
+    # community Docker Compose project's own bind mount
+    # (.../DuneSandbox/Saved) -- not yet confirmed against this seed's own
+    # SteamCMD-downloaded layout, since that has not been inspected directly.
+    - { from: saved, to: /home/dune/server/DuneSandbox/Saved }
+
+# ---------------------------------------------------------------------------
+# THE ONE UNRESOLVED QUESTION THIS SEED IS BLOCKED ON
+#
+# A real community Docker Compose deployment (snapetech/DuneAwakeningSelfHost)
+# shows every core service below referencing an image under Funcom's own
+# private registry, e.g.:
+#
+#   registry.funcom.com/funcom/self-hosting/seabass-server:${DUNE_IMAGE_TAG}
+#   registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13
+#   registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:${DUNE_IMAGE_TAG}
+#   registry.funcom.com/funcom/self-hosting/seabass-server-gateway:${DUNE_IMAGE_TAG}
+#   registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:${DUNE_IMAGE_TAG}
+#   registry.funcom.com/funcom/self-hosting/seabass-server-text-router:${DUNE_IMAGE_TAG}
+#   registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:${DUNE_IMAGE_TAG}
+#
+# but nowhere in that project's own docs, scripts or .env.example is there a
+# `docker login` to that registry, and its own README states the image tag
+# is "loaded from the Steam package" via its own load-images.sh step run
+# before anything else. The strong inference -- not yet confirmed by
+# actually inspecting a real download -- is that the SteamCMD package
+# contains `docker save` tarballs for each of these, meant to be `docker
+# load`-ed locally rather than pulled from the registry at all, and that
+# most of the tags float with the build (only igw-postgres's looks pinned).
+#
+# This project's own install-step vocabulary (download, extract, steamcmd,
+# mkdir, copy, move, chmod, write, patch) has no operation for "load a
+# tarball into the local Docker daemon", and no way for a container's own
+# `image:` field to reference whatever an install step produced -- both are
+# real, fixable gaps, not a wrong assumption about this seed, but neither
+# should be built from a third party's docs alone. Below, every core
+# service still declares its real `registry.funcom.com/...` ref exactly as
+# seen, which is the honest thing to do either way: if that inference is
+# right, these fail loudly with a pull error until the install step above
+# gains whatever op actually loads them; if it is wrong, they fail loudly
+# for a different, equally clear reason. Nothing here is a working
+# substitute standing in for the real thing.
+# ---------------------------------------------------------------------------
+
+containers:
+  # --- Infrastructure: PostgreSQL and the two RabbitMQ brokers ------------
+
+  - role: postgres
+    image: { ref: "registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13" }
+    env:
+      POSTGRES_DB: dune
+      POSTGRES_USER: dune
+      POSTGRES_PASSWORD: "{{.Vars.db_password}}"
+      # A second, separate superuser credential a real deployment carries
+      # alongside the ordinary "dune" user -- purpose not yet confirmed
+      # (streaming replication is the one documented use elsewhere for this
+      # class of tool, but this seed has no replica of its own).
+      POSTGRES_SUPER_PASSWORD: "{{.Vars.db_super_password}}"
+    volumes:
+      - { from: pgdata, to: /var/lib/postgresql/data }
+    healthcheck:
+      command: "pg_isready -U dune -d dune"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  - role: admin-rmq
+    name: Admin RabbitMQ
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:UNCONFIRMED-BUILD-TAG" }
+    env:
+      RMQ_AUTH_BACKEND_1: cache
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
+      FuncomLiveServices__RmqTlsEnabled: "false"
+    volumes:
+      - { from: data, to: /var/lib/rabbitmq }
+    healthcheck:
+      command: "rabbitmq-diagnostics -q check_running"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  - role: game-rmq
+    name: Game RabbitMQ
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:UNCONFIRMED-BUILD-TAG" }
+    env:
+      RMQ_AUTH_BACKEND_1: cache
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
+      FuncomLiveServices__RmqTlsEnabled: "true"
+    volumes:
+      - { from: data, to: /var/lib/rabbitmq }
+    healthcheck:
+      command: "rabbitmq-diagnostics -q check_running"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports:
+      # The one broker port real players' game clients actually reach.
+      # Management HTTP (15672 internally) is deliberately not published at
+      # all: a reference deployment binds it to loopback only, and this
+      # platform has no equivalent of a loopback-only allocation -- every
+      # allocated port is reachable, so the safer default is not to publish
+      # an admin surface nothing here needs.
+      - { name: rmq-client, protocol: tcp, default: 31982, kind: other }
+
+  # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
+
+  - role: gateway
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-gateway:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: postgres, condition: healthy }
+      - { role: game-rmq, condition: healthy }
+    # A reference deployment starts this with a hardcoded `sleep 30` before
+    # execing the real process, presumably because plain Docker Compose
+    # depends_on there does not wait for health. This platform's own
+    # condition: healthy above should make that unnecessary -- flagged as
+    # something to confirm live, not assumed away.
+    env:
+      DuneDatabaseInterfacePSQL_DatabaseHost: postgres
+      DuneDatabaseInterfacePSQL_DatabasePort: "5432"
+      DuneDatabaseInterfacePSQL_DatabaseUser: dune
+      DuneDatabaseInterfacePSQL_DatabasePassword: "{{.Vars.db_password}}"
+      DuneDatabaseInterfacePSQL_DatabaseName: "{{.Vars.db_name}}"
+      FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
+      FuncomLiveServices__RmqTlsEnabled: "true"
+      FuncomLiveServices__BattlegroupAuthorizationPreset: BattlegroupInternal
+      FuncomLiveServices__DefaultFlsEnvironment: retail
+      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
+      gateway_farm_api_key: "{{.Vars.fls_token}}"
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
+      HOST_DATACENTER_ID: "{{.Vars.datacenter_id}}"
+      HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
+
+  - role: director
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: postgres, condition: healthy }
+      - { role: admin-rmq, condition: healthy }
+      - { role: game-rmq, condition: healthy }
+    # A reference deployment's own comment records that Director currently
+    # terminates on a malformed login envelope rather than rejecting it --
+    # an upstream Funcom bug, not this seed's doing. This platform's own
+    # crash-then-restart handling covers exactly that shape; nothing extra
+    # needed here beyond knowing it can happen.
+    command: >-
+      --RMQGameHostname game-rmq --RMQGamePort 5672
+      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+    env:
+      Database__address: postgres
+      Database__port: "5432"
+      Database__user: dune
+      Database__password: "{{.Vars.db_password}}"
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
+      BATTLEGROUP_DISPLAY_NAME: "{{.Vars.world_unique_name}}"
+      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
+      FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
+      FuncomLiveServices__RmqTlsEnabled: "true"
+      FuncomLiveServices__DefaultFlsEnvironment: retail
+      BATTLEGROUP_REGION_NAME: "{{.Vars.region}}"
+      HOST_DATACENTER_ID: "{{.Vars.datacenter_id}}"
+      HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
+
+  - role: text-router
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-text-router:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: postgres, condition: healthy }
+      - { role: admin-rmq, condition: healthy }
+      - { role: game-rmq, condition: healthy }
+    command: >-
+      --RMQGameHostname game-rmq --RMQGamePort 5672
+      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+    env:
+      DuneDatabaseInterfacePSQL_DatabaseHost: postgres
+      DuneDatabaseInterfacePSQL_DatabasePort: "5432"
+      DuneDatabaseInterfacePSQL_DatabaseUser: dune
+      DuneDatabaseInterfacePSQL_DatabasePassword: "{{.Vars.db_password}}"
+      DuneDatabaseInterfacePSQL_DatabaseName: "{{.Vars.db_name}}"
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
+      BATTLEGROUP_DISPLAY_NAME: "{{.Vars.world_unique_name}}"
+      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
+      BATTLEGROUP_REGION_NAME: "{{.Vars.region}}"
+      BATTLEGROUP_LANGUAGE: en-US
+      FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
+      FuncomLiveServices__RmqTlsEnabled: "true"
+      FuncomLiveServices__DefaultFlsEnvironment: retail
+      HOST_DATACENTER_ID: "{{.Vars.datacenter_id}}"
+      HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
+
+  # --- The playable map itself --------------------------------------------
+
+  - role: game
+    primary: true
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: postgres, condition: healthy }
+      - { role: admin-rmq, condition: healthy }
+      - { role: game-rmq, condition: healthy }
+      - { role: director, condition: started }
+      - { role: gateway, condition: started }
+      - { role: text-router, condition: started }
+    # Every flag here is confirmed from a real community Docker Compose
+    # project's own service definition for its "Survival_1" partition --
+    # not yet seen in this seed's own boot output, since it has never
+    # booted. PartitionIndex=1 is what makes this the primary survival
+    # instance rather than the Overmap or a named social hub -- see the
+    # optional map-slot containers below for those.
+    command: >-
+      ./run_server.sh
+      -FarmRegion={{.Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
+      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -RMQGameTlsEnabled=true
+      {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
+      --RMQGameHostname game-rmq --RMQGamePort 5672
+      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      -PartitionIndex=1
+    env:
+      WORLD_NAME: "{{.Vars.world_name}}"
+    ports:
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      # A second UDP channel published alongside the main game port on every
+      # map partition in a real reference deployment -- exact purpose
+      # ("IGW") not yet confirmed, kept here because omitting a port a real
+      # deployment always publishes is a worse guess than including one
+      # whose exact job is still unclear.
+      - { name: game-igw, protocol: udp, default: 7888, kind: other }
+
+  # --- Optional additional map partitions ---------------------------------
+  #
+  # A real self-hosted battlegroup can run a farm of up to 30 map partitions
+  # (the overmap, individual Sietch/social-hub zones, and repeated Survival
+  # dimensions), started and stopped dynamically by the director service
+  # above. This platform's pod model is a fixed container set per seed, not
+  # a runtime-elastic one -- so real autoscaling is out of scope, and these
+  # two are declared as ordinary optional addon containers instead: a small,
+  # fixed ceiling an operator can turn on, each its own independently
+  # allocated port pair, matching PartitionIndex 2 and 3 in a real
+  # deployment.
+
+  - role: overmap
+    name: Overmap
+    description: >-
+      The Dune: Awakening meta-map above individual Sietch/social-hub zones.
+      Whether a battlegroup actually needs this running for ordinary play,
+      or only for cross-zone travel, is not yet confirmed.
+    optional: true
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: game, condition: started }
+    command: >-
+      ./run_server.sh
+      -FarmRegion={{.Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
+      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -RMQGameTlsEnabled=true
+      {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
+      --RMQGameHostname game-rmq --RMQGamePort 5672
+      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      /Game/Dune/Systems/Overmap/Overmap.Overmap
+      -PartitionIndex=2
+    env:
+      WORLD_NAME: "{{.Vars.world_name}}"
+    ports:
+      - { name: overmap-port, protocol: udp, default: 7778, kind: other }
+      - { name: overmap-igw, protocol: udp, default: 7889, kind: other }
+
+  - role: arrakeen
+    name: Arrakeen
+    description: The Arrakeen social hub -- a fixed, named map zone rather than a repeated Survival dimension.
+    optional: true
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    depends_on:
+      - { role: game, condition: started }
+    command: >-
+      ./run_server.sh
+      -FarmRegion={{.Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
+      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -RMQGameTlsEnabled=true
+      {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
+      --RMQGameHostname game-rmq --RMQGamePort 5672
+      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      /Game/Dune/Maps/SocialHubs/Arrakeen/SH_Arrakeen.SH_Arrakeen
+      -PartitionIndex=3
+    env:
+      WORLD_NAME: "{{.Vars.world_name}}"
+    ports:
+      - { name: arrakeen-port, protocol: udp, default: 7779, kind: other }
+      - { name: arrakeen-igw, protocol: udp, default: 7890, kind: other }
+
+  # --- Operator UI addons --------------------------------------------------
+
+  - role: dbadmin
+    name: Database Admin
+    description: >-
+      CloudBeaver, a web SQL client. This catalog's standard database
+      interface across every seed that bundles one, not Dune-specific --
+      chosen precisely because it is not tied to one database engine.
+    optional: true
+    image: { ref: "dbeaver/cloudbeaver:latest" }
+    depends_on:
+      - { role: postgres, condition: healthy }
+    env:
+      # Skips CloudBeaver's own first-run setup wizard by provisioning its
+      # admin account directly -- the same shape FiveM's Adminer addon uses
+      # its own env var for, though CloudBeaver's own login form still needs
+      # to be filled in per session; no ui.login block yet below since its
+      # exact field names have not been read off a real running instance.
+      CB_ADMIN_NAME: dune
+      CB_ADMIN_PASSWORD: "{{.Vars.db_password}}"
+      CB_SERVER_NAME: "Dune Awakening"
+    volumes:
+      - { from: workspace, to: /opt/cloudbeaver/workspace }
+    ports:
+      - { name: dbadmin-web, protocol: tcp, default: 8978, kind: web }
+    ui:
+      tab: Database
+      port: dbadmin-web
+
+  - role: director-panel
+    name: Director
+    description: >-
+      dune-admin, a web dashboard for battlegroup operations: player list,
+      map status, server settings, welcome kits and more. Not the same
+      thing as the director container above, which is Funcom's own
+      map-lifecycle orchestrator -- this is an operator-facing panel that
+      talks to it and to the database/brokers directly.
+    optional: true
+    image: { base: linux }
+    workdir: /game/dune-admin
+    # -setup normally runs interactively on first install; this addon has
+    # no way to run that wizard, so its config has to be supplied entirely
+    # through environment variables (the "docker" provider mode's own
+    # supported path) rather than the generated config.yaml a real install
+    # would produce. Confirmed field names from the tool's own published
+    # documentation, not yet from a real boot.
+    command: "./dune-admin"
+    env:
+      CONTROL: docker
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: dune
+      DB_PASS: "{{.Vars.db_password}}"
+      DB_NAME: "{{.Vars.db_name}}"
+      DB_SCHEMA: dune
+      BROKER_GAME_ADDR: "game-rmq:5672"
+      BROKER_ADMIN_ADDR: "admin-rmq:5672"
+      LISTEN_ADDR: ":8080"
+    depends_on:
+      - { role: postgres, condition: healthy }
+      - { role: game, condition: started }
+    ports:
+      - { name: director-web, protocol: tcp, default: 8080, kind: web }
+    ui:
+      tab: Director
+      port: director-web
+
+variables:
+  - name: world_name
+    label: World name
+    description: The save/world identifier, shown to players.
+    default: World
+    editable: true
+
+  - name: world_unique_name
+    label: Unique server name
+    description: >-
+      Registered with Funcom Live Services and must be unique across every
+      self-hosted Dune Awakening server, not just this fleet's own. Exact
+      naming rules not yet confirmed.
+    required: true
+    editable: true
+
+  - name: region
+    label: Region
+    description: Passed as -FarmRegion. Exact accepted values not yet confirmed.
+    default: "us-east"
+    editable: true
+
+  - name: datacenter_id
+    label: Datacenter ID
+    description: Passed to Funcom Live Services as this server's datacenter identifier. Exact meaning not yet confirmed.
+    default: "1"
+    editable: true
+
+  - name: db_name
+    label: Database name
+    description: >-
+      A real deployment's own default embeds a build-specific suffix
+      (observed: dune_sb_1_4_0_0) rather than a bare "dune" -- kept
+      operator-editable rather than hardcoded until that pattern is
+      confirmed against this seed's own install.
+    default: "dune"
+    editable: true
+
+  - name: fls_token
+    label: Funcom Live Services token
+    description: >-
+      The self-hosting token from Funcom's own account portal
+      (account.duneawakening.com). Required to register this server with
+      Funcom Live Services at all.
+    type: password
+    required: true
+    editable: true
+
+  - name: server_login_password
+    label: Server password
+    description: Leave blank for a public server. Sent to players joining as the world's own connect password.
+    type: password
+    default: ""
+    editable: true
+
+  - name: db_password
+    label: Database password
+    description: Shared by every service that talks to PostgreSQL as the "dune" user.
+    generate: password
+    default: ""
+    editable: true
+
+  - name: db_super_password
+    label: Database superuser password
+    generate: password
+    default: ""
+    editable: true
+
+  - name: rmq_secret
+    label: RabbitMQ HTTP auth secret
+    description: An internally-generated secret both brokers' own HTTP token auth backend is keyed on -- not a Funcom-issued credential.
+    generate: hex
+    default: ""
+    editable: true
+
+# No settings: block yet. Every configurable value confirmed so far reaches
+# a command line or an env var shared by more than one container, which is
+# what a variable is for -- nothing found yet is genuinely single-file,
+# single-key game configuration in the way settings: exists to express.
+
+stop:
+  # Confirmed from real deployment: SIGTERM with a long timeout, not a
+  # console command -- no evidence this game accepts one over stdin.
+  timeout: 120s
+  then: SIGTERM
+
+# Readiness stays immediate: no real boot output exists yet to write a log
+# pattern against, and mode: port would need to know which of this pod's
+# many ports actually signals readiness, which is exactly the kind of guess
+# this catalog's own rule against unverified patterns exists to prevent.
+
+connect:
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [saved]
+
+# ---------------------------------------------------------------------------
+# What has actually been checked, and what has not
+#
+# Checked against real, independently-published sources (a real community
+# Docker Compose file, CubeCoders AMP's own template and support forum, and
+# the dune-admin tool's own documentation), cross-referenced across at least
+# two of them wherever stated as confirmed above:
+#   - the service topology (postgres, two RabbitMQ brokers, gateway,
+#     director, text-router, the playable map itself)
+#   - every container's real command-line flags and environment variables
+#   - real port numbers (7777 game, 7888 IGW, 31982 RabbitMQ client)
+#   - the database is PostgreSQL only, "dune" as the ordinary username
+#   - the actual game binary runs natively on Linux, no Proton/VM
+#
+# NOT checked -- and blocking this seed from being provisionable at all,
+# not just imperfect:
+#   - whether the SteamCMD package really contains Docker image tarballs,
+#     and if so their exact paths and how they are meant to be loaded
+#   - the actual container image tags this seed would need (every
+#     UNCONFIRMED-BUILD-TAG placeholder above)
+#   - whether rmq-auth-shim and a database-bootstrap step are genuinely
+#     required infrastructure or a specific third party's own convenience
+#     scripts -- neither is declared as a container above pending that
+#     answer, since guessing wrong here risks a pod that looks complete and
+#     silently cannot actually authenticate players or has never had its
+#     schema created
+#   - this seed has never been validated with `ygg-seed validate`, let alone
+#     installed or booted, because the placeholder image refs above are
+#     expected to fail
+# ---------------------------------------------------------------------------

@@ -8,10 +8,10 @@ description: >
   director, chat routing, PostgreSQL and two RabbitMQ brokers) ships as
   Funcom's own pre-built container image inside the SteamCMD-downloaded
   self-host package, rather than as raw game files this seed installs into
-  one container. See the block comment above `containers:` below before
-  touching this seed -- the exact mechanism for getting those images onto a
-  node is the one thing about this seed that is still genuinely unresolved.
-version: "0.1.0"
+  one container. See the block comment above `containers:` below for how
+  those images actually reach a node -- confirmed live and no longer this
+  seed's blocker, though the seed itself has still never been provisioned.
+version: "0.2.0"
 
 # Confirmed live (2026-08, community reporting): the actual server binaries
 # are native Linux, run directly in Docker with no Windows/Hyper-V/VM layer
@@ -36,6 +36,35 @@ install:
     - op: steamcmd
       app_id: 4754530
       name: "Dune Awakening self-hosted server package"
+    # Six load_image steps, one per real docker-save tarball the depot ships
+    # under images/ -- confirmed live: `podman load -i` on each of these
+    # exact paths, against a real pull of this exact app id, reported the
+    # exact registry.funcom.com refs every container below now declares
+    # `loaded: true` against (yggdrasil ADR-155). server-rabbitmq.tar is
+    # loaded once and shared by both admin-rmq and game-rmq -- loading is a
+    # node-local image-store operation, not a per-container one, so a second
+    # container referencing the same ref needs no second step. One real
+    # tarball ships unused so far: images/battlegroup/server-db-utils.tar
+    # (also confirmed loadable) has no container below, because what it does
+    # is not yet understood -- see the closing comment block.
+    - op: load_image
+      from: images/prerequisites/igw-postgres.tar
+      name: "PostgreSQL image (igw-postgres)"
+    - op: load_image
+      from: images/battlegroup/server-rabbitmq.tar
+      name: "RabbitMQ image (shared by admin-rmq and game-rmq)"
+    - op: load_image
+      from: images/battlegroup/server-gateway.tar
+      name: "Gateway image"
+    - op: load_image
+      from: images/battlegroup/server-bg-director.tar
+      name: "Battlegroup director image"
+    - op: load_image
+      from: images/battlegroup/server-text-router.tar
+      name: "Text router image"
+    - op: load_image
+      from: images/battlegroup/server.tar
+      name: "Map server image (shared by game, overmap, arrakeen)"
     # dune-admin is a companion operator dashboard (github.com/Icehunter/dune-admin),
     # not part of Funcom's own distribution. It has no published container
     # image, but ships as a static, dependency-free Go binary via GitHub
@@ -62,53 +91,52 @@ server:
     - { from: saved, to: /home/dune/server/DuneSandbox/Saved }
 
 # ---------------------------------------------------------------------------
-# THE ONE UNRESOLVED QUESTION THIS SEED IS BLOCKED ON
+# HOW THESE IMAGES ACTUALLY REACH A NODE -- RESOLVED, CONFIRMED LIVE
 #
 # A real community Docker Compose deployment (snapetech/DuneAwakeningSelfHost)
-# shows every core service below referencing an image under Funcom's own
-# private registry, e.g.:
+# showed every core service below referencing an image under Funcom's own
+# private registry, e.g. registry.funcom.com/funcom/self-hosting/seabass-
+# server:${DUNE_IMAGE_TAG}. registry.funcom.com does not resolve in public
+# DNS at all -- confirmed directly, not inferred -- so these were never meant
+# to be pulled from anywhere at runtime. The theory was that the SteamCMD
+# package bundles real `docker save` tarballs for each one, meant to be
+# `docker load`-ed locally rather than pulled.
 #
-#   registry.funcom.com/funcom/self-hosting/seabass-server:${DUNE_IMAGE_TAG}
-#   registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13
-#   registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:${DUNE_IMAGE_TAG}
-#   registry.funcom.com/funcom/self-hosting/seabass-server-gateway:${DUNE_IMAGE_TAG}
-#   registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:${DUNE_IMAGE_TAG}
-#   registry.funcom.com/funcom/self-hosting/seabass-server-text-router:${DUNE_IMAGE_TAG}
-#   registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:${DUNE_IMAGE_TAG}
+# That theory is now proven, not just plausible. Pulling this seed's own app
+# id (4754530) with SteamCMD produced real files under images/ --
+# images/battlegroup/{server,server-gateway,server-rabbitmq,server-text-
+# router,server-bg-director,server-db-utils}.tar and
+# images/prerequisites/igw-postgres.tar -- and `podman load -i` on each of
+# the seven loaded cleanly and reported real, working image names, matching
+# the registry.funcom.com refs above exactly (igw-postgres's already-pinned
+# tag matched precisely) and resolving every build tag to one shared value:
+# 2064155-0-shipping (a Perforce changelist plus an Unreal build-config
+# suffix, coherent across every battlegroup service). The six
+# images/operators/*.tar and six images/prerequisites/*.tar beyond
+# igw-postgres are Funcom's own official k3s-based packaging, confirmed
+# unnecessary for this path -- both the community deployment and CubeCoders
+# AMP run the battlegroup services directly under plain Docker Compose, no
+# Kubernetes involved.
 #
-# Confirmed directly, not just inferred from a third party's docs:
-# registry.funcom.com does not resolve in public DNS at all (a plain `docker
-# pull` against it fails at the lookup, before ever reaching a credentials
-# question). These images are categorically not meant to be pulled from
-# anywhere at runtime -- whatever mechanism gets them onto a node has to
-# come from the SteamCMD package itself. A community Docker Compose
-# deployment's own README says its image tag is "loaded from the Steam
-# package" via a load-images.sh step run before anything else, and nowhere
-# in that project references a registry login -- consistent with, though not
-# yet direct proof of, the package containing `docker save` tarballs for
-# each of these meant to be `docker load`-ed locally. Most of the tags float
-# with the build (only igw-postgres's looks pinned); how a locally-loaded
-# image would get a stable, seed-referenceable name regardless of the
-# underlying build's own tag is a design question for whatever install op
-# ends up doing the loading, not yet answered here.
+# yggdrasil itself had the two real gaps this seed's install steps needed
+# (ADR-155, merged): no op to load a tarball into the local image store, and
+# no way for a container's `image:` to reference one without an attempted
+# pull. Both now exist -- `op: load_image` below, and `loaded: true` on
+# every container that consumes one -- proven end to end in yggdrasil's own
+# conformance suite against a real Docker daemon, not merely designed.
 #
-# This project's own install-step vocabulary (download, extract, steamcmd,
-# mkdir, copy, move, chmod, write, patch) has no operation for "load a
-# tarball into the local Docker daemon", and no way for a container's own
-# `image:` field to reference whatever an install step produced -- both are
-# real, fixable gaps, not a wrong assumption about this seed. Below, every
-# core service still declares its real `registry.funcom.com/...` ref exactly
-# as seen, which is the honest thing to do either way: these fail loudly
-# with a pull error (now confirmed: a DNS failure) until the install step
-# above gains whatever op actually loads them. Nothing here is a working
-# substitute standing in for the real thing.
+# What is still open: images/battlegroup/server-db-utils.tar loads cleanly
+# but has no container here, because what it does is not understood -- see
+# the closing comment block. And none of this has been proven against a
+# real provision of *this* seed: `ygg-seed validate`/`lint` pass, but no pod
+# has actually been built and started from it.
 # ---------------------------------------------------------------------------
 
 containers:
   # --- Infrastructure: PostgreSQL and the two RabbitMQ brokers ------------
 
   - role: postgres
-    image: { ref: "registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13", loaded: true }
     env:
       POSTGRES_DB: dune
       POSTGRES_USER: dune
@@ -128,7 +156,7 @@ containers:
 
   - role: admin-rmq
     name: Admin RabbitMQ
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2064155-0-shipping", loaded: true }
     env:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -143,7 +171,7 @@ containers:
 
   - role: game-rmq
     name: Game RabbitMQ
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2064155-0-shipping", loaded: true }
     env:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -167,7 +195,7 @@ containers:
   # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
 
   - role: gateway
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-gateway:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-gateway:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: game-rmq, condition: healthy }
@@ -194,7 +222,7 @@ containers:
       HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
 
   - role: director
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -224,7 +252,7 @@ containers:
       HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
 
   - role: text-router
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-text-router:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-text-router:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -254,7 +282,7 @@ containers:
 
   - role: game
     primary: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -314,7 +342,7 @@ containers:
       Whether a battlegroup actually needs this running for ordinary play,
       or only for cross-zone travel, is not yet confirmed.
     optional: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: game, condition: started }
     command: >-
@@ -344,7 +372,7 @@ containers:
     name: Arrakeen
     description: The Arrakeen social hub -- a fixed, named map zone rather than a repeated Survival dimension.
     optional: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:UNCONFIRMED-BUILD-TAG" }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
     depends_on:
       - { role: game, condition: started }
     command: >-
@@ -548,19 +576,27 @@ backup:
 #   - the database is PostgreSQL only, "dune" as the ordinary username
 #   - the actual game binary runs natively on Linux, no Proton/VM
 #
-# NOT checked -- and blocking this seed from being provisionable at all,
-# not just imperfect:
-#   - whether the SteamCMD package really contains Docker image tarballs,
-#     and if so their exact paths and how they are meant to be loaded
-#   - the actual container image tags this seed would need (every
-#     UNCONFIRMED-BUILD-TAG placeholder above)
-#   - whether rmq-auth-shim and a database-bootstrap step are genuinely
-#     required infrastructure or a specific third party's own convenience
-#     scripts -- neither is declared as a container above pending that
-#     answer, since guessing wrong here risks a pod that looks complete and
-#     silently cannot actually authenticate players or has never had its
-#     schema created
-#   - this seed has never been validated with `ygg-seed validate`, let alone
-#     installed or booted, because the placeholder image refs above are
-#     expected to fail
+# Checked live and confirmed since the previous version of this seed:
+#   - the SteamCMD package genuinely contains real docker-save tarballs
+#     under images/, at the exact paths every load_image step above names
+#   - every container image tag, by loading each tarball for real and
+#     reading back what the daemon reported -- 2064155-0-shipping shared
+#     across every battlegroup service, igw-postgres's own tag confirmed
+#     an exact match to what was already declared
+#   - this seed now validates and lints clean (`ygg-seed validate`,
+#     `ygg-seed lint`) against yggdrasil's own loader, which is the same
+#     one a control plane uses
+#
+# NOT checked -- real gaps, not just imperfections:
+#   - what images/battlegroup/server-db-utils.tar is for. It loads cleanly
+#     (confirmed) but has no container here, because guessing its role
+#     wrong risks a pod that looks complete and silently cannot actually
+#     authenticate players or has never had its schema created
+#   - whether rmq-auth-shim is genuinely required infrastructure or a
+#     specific third party's own convenience script -- not declared as a
+#     container above pending that answer, same reasoning as db-utils
+#   - this seed has never actually been provisioned. Validating and
+#     linting clean proves the document is well-formed, not that a real
+#     node can boot a pod from it -- that is the next real step, not this
+#     one
 # ---------------------------------------------------------------------------

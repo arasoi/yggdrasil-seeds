@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.3.1"
+version: "1.3.2"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -85,16 +85,9 @@ containers:
     volumes:
       - { from: mysql-data, to: /var/lib/mysql }
     healthcheck:
-      # retries bumped from 20 (100s) as a live test: a genuinely fresh
-      # mysql-data volume's first-ever boot (mariadb-install-db plus
-      # InnoDB's own first-run setup) failed the health gate twice at 100s
-      # with the db container reported running throughout, never crashing --
-      # consistent with first-init genuinely taking longer than that budget,
-      # not yet confirmed. Revisit this comment once a real boot has
-      # actually been watched succeed past the old budget.
       command: "healthcheck.sh --connect --innodb_initialized"
       interval: 5s
-      retries: 60
+      retries: 20
     backup:
       pre: "mariadb-dump -u root -p{{.Vars.db_password}} fivem > /backup/fivem.sql"
       post: "rm -f /backup/fivem.sql"
@@ -281,24 +274,39 @@ backup:
 # from portal.cfx.re, the server boots clean.
 #
 # Confirmed on the real boot: no relocation errors (the symlink-preservation
-# fix this artifact needed, docs/decisions.md's ADR-148, holds), the MariaDB
-# sidecar starts and its declared healthcheck.sh command genuinely passes,
-# and the dbadmin addon (Adminer) is reachable end to end through the
-# Database tab -- confirmed rendering its real login screen after two more
-# yggd-side fixes this same addon needed (ADR-150's container_port, for
-# Adminer's own fixed internal 8080; ADR-151, stripping the
-# `X-Frame-Options: deny` Adminer sends by default, which blocked the tab's
-# own iframe from rendering it at all). This seed's `ui.login` block
-# (ADR-152) now auto-submits that login form from the operator's own
-# generated database credentials -- added right after dbadmin's own
-# reachability was confirmed, not yet re-verified live itself.
+# fix this artifact needed, docs/decisions.md's ADR-148, holds), and the
+# dbadmin addon (Adminer) is reachable end to end through the Database tab
+# -- confirmed rendering its real login screen after two more yggd-side
+# fixes this same addon needed (ADR-150's container_port, for Adminer's own
+# fixed internal 8080; ADR-151, stripping the `X-Frame-Options: deny`
+# Adminer sends by default, which blocked the tab's own iframe from
+# rendering it at all). This seed's `ui.login` block (ADR-152) now
+# auto-submits that login form from the operator's own generated database
+# credentials.
 #
-# Still open, not yet checked against the real boot:
+# A second real boot then found a second, larger bug -- not in this seed at
+# all, but in yggdrasil itself. The MariaDB sidecar crashed on every fresh
+# server, always silently (never a single line of its own output, even
+# after running for a full 5 minutes on one attempt), always failing its
+# own healthcheck. Traced to yggdrasil's own `generate: password` --
+# documented and validated as filling db_password in with a random value
+# per server, but never actually implemented anywhere in the runtime
+# (docs/decisions.md's ADR-153): the create form's blank "Database
+# password" field submitted as a literal empty string, which the official
+# mariadb image flatly refuses to start with. Fixed at the yggdrasil level
+# (ADR-153) rather than worked around here, since any seed declaring
+# `generate:` on any variable had the identical silent gap. Not yet
+# re-verified against a real boot with the fix live.
+#
+# Still open, not yet checked against a real boot:
+#   - a full boot with the generate fix live: does MariaDB actually come up
+#     clean now, and does TXHOST_DEFAULT_ACCOUNT (this seed's own
+#     txadmin_account setting) actually skip txAdmin's account-creation
+#     wizard step the way ADR-152's own design intends
 #   - logs.events (join/leave) for a player list and count
 #   - a crash: rule -- this project's own bar for one is higher than for
 #     readiness, since a wrong pattern stops a healthy server rather than
 #     merely delaying a starting one
-#   - TXHOST_DEFAULT_ACCOUNT's exact expected value shape, noted above
 #   - whether the citizen framework or txAdmin itself refuses to run as
 #     root (base-linux's default); YGG_DROP_PRIVS is base-steamcmd-only and
 #     does not apply here regardless
@@ -306,4 +314,5 @@ backup:
 #   - whether ready: {mode: port, port: txadmin} is actually the right
 #     signal, now that there is real boot output from inside a real pod to
 #     check it against
-#   - the dbadmin addon's new auto-login (ui.login) itself, live
+#   - the dbadmin addon's auto-login (ui.login) itself, live, once the pod
+#     actually reaches a running state

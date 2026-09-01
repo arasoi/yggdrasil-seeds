@@ -76,26 +76,31 @@ server:
 #   registry.funcom.com/funcom/self-hosting/seabass-server-text-router:${DUNE_IMAGE_TAG}
 #   registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:${DUNE_IMAGE_TAG}
 #
-# but nowhere in that project's own docs, scripts or .env.example is there a
-# `docker login` to that registry, and its own README states the image tag
-# is "loaded from the Steam package" via its own load-images.sh step run
-# before anything else. The strong inference -- not yet confirmed by
-# actually inspecting a real download -- is that the SteamCMD package
-# contains `docker save` tarballs for each of these, meant to be `docker
-# load`-ed locally rather than pulled from the registry at all, and that
-# most of the tags float with the build (only igw-postgres's looks pinned).
+# Confirmed directly, not just inferred from a third party's docs:
+# registry.funcom.com does not resolve in public DNS at all (a plain `docker
+# pull` against it fails at the lookup, before ever reaching a credentials
+# question). These images are categorically not meant to be pulled from
+# anywhere at runtime -- whatever mechanism gets them onto a node has to
+# come from the SteamCMD package itself. A community Docker Compose
+# deployment's own README says its image tag is "loaded from the Steam
+# package" via a load-images.sh step run before anything else, and nowhere
+# in that project references a registry login -- consistent with, though not
+# yet direct proof of, the package containing `docker save` tarballs for
+# each of these meant to be `docker load`-ed locally. Most of the tags float
+# with the build (only igw-postgres's looks pinned); how a locally-loaded
+# image would get a stable, seed-referenceable name regardless of the
+# underlying build's own tag is a design question for whatever install op
+# ends up doing the loading, not yet answered here.
 #
 # This project's own install-step vocabulary (download, extract, steamcmd,
 # mkdir, copy, move, chmod, write, patch) has no operation for "load a
 # tarball into the local Docker daemon", and no way for a container's own
 # `image:` field to reference whatever an install step produced -- both are
-# real, fixable gaps, not a wrong assumption about this seed, but neither
-# should be built from a third party's docs alone. Below, every core
-# service still declares its real `registry.funcom.com/...` ref exactly as
-# seen, which is the honest thing to do either way: if that inference is
-# right, these fail loudly with a pull error until the install step above
-# gains whatever op actually loads them; if it is wrong, they fail loudly
-# for a different, equally clear reason. Nothing here is a working
+# real, fixable gaps, not a wrong assumption about this seed. Below, every
+# core service still declares its real `registry.funcom.com/...` ref exactly
+# as seen, which is the honest thing to do either way: these fail loudly
+# with a pull error (now confirmed: a DNS failure) until the install step
+# above gains whatever op actually loads them. Nothing here is a working
 # substitute standing in for the real thing.
 # ---------------------------------------------------------------------------
 

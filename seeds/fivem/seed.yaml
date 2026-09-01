@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.3.0"
+version: "1.3.1"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -85,9 +85,16 @@ containers:
     volumes:
       - { from: mysql-data, to: /var/lib/mysql }
     healthcheck:
+      # retries bumped from 20 (100s) as a live test: a genuinely fresh
+      # mysql-data volume's first-ever boot (mariadb-install-db plus
+      # InnoDB's own first-run setup) failed the health gate twice at 100s
+      # with the db container reported running throughout, never crashing --
+      # consistent with first-init genuinely taking longer than that budget,
+      # not yet confirmed. Revisit this comment once a real boot has
+      # actually been watched succeed past the old budget.
       command: "healthcheck.sh --connect --innodb_initialized"
       interval: 5s
-      retries: 20
+      retries: 60
     backup:
       pre: "mariadb-dump -u root -p{{.Vars.db_password}} fivem > /backup/fivem.sql"
       post: "rm -f /backup/fivem.sql"

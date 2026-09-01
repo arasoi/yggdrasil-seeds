@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.2.0"
+version: "1.3.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -200,6 +200,20 @@ settings:
       refuses every connection.
     required: true
     to: { env: TXHOST_DEFAULT_CFXKEY }
+  - name: txadmin_account
+    group: Admin
+    type: password
+    label: txAdmin admin account
+    description: >-
+      Optional: auto-creates txAdmin's first admin account at boot, skipping
+      its own setup wizard's account-creation step. Format is
+      USERNAME::BCRYPT_HASH (the empty field between the two colons is
+      txAdmin's own FiveM-account-id slot, left blank here) -- generate the
+      hash with any bcrypt tool at cost 10-12; txAdmin never sees or stores
+      the plain password. Leave blank to create the account by hand through
+      txAdmin's own wizard instead, the ordinary path.
+    optional: true
+    to: { env: TXHOST_DEFAULT_ACCOUNT }
   - name: max_players
     group: Server
     type: number

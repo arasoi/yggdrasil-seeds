@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.2.0"
+version: "0.3.0"
 
 # Confirmed live (2026-08, community reporting): the actual server binaries
 # are native Linux, run directly in Docker with no Windows/Hyper-V/VM layer
@@ -36,17 +36,14 @@ install:
     - op: steamcmd
       app_id: 4754530
       name: "Dune Awakening self-hosted server package"
-    # Six load_image steps, one per real docker-save tarball the depot ships
-    # under images/ -- confirmed live: `podman load -i` on each of these
-    # exact paths, against a real pull of this exact app id, reported the
-    # exact registry.funcom.com refs every container below now declares
+    # Seven load_image steps, one per real docker-save tarball the depot
+    # ships under images/ -- confirmed live: `podman load -i` on each of
+    # these exact paths, against a real pull of this exact app id, reported
+    # the exact registry.funcom.com refs every container below now declares
     # `loaded: true` against (yggdrasil ADR-155). server-rabbitmq.tar is
     # loaded once and shared by both admin-rmq and game-rmq -- loading is a
     # node-local image-store operation, not a per-container one, so a second
-    # container referencing the same ref needs no second step. One real
-    # tarball ships unused so far: images/battlegroup/server-db-utils.tar
-    # (also confirmed loadable) has no container below, because what it does
-    # is not yet understood -- see the closing comment block.
+    # container referencing the same ref needs no second step.
     - op: load_image
       from: images/prerequisites/igw-postgres.tar
       name: "PostgreSQL image (igw-postgres)"
@@ -65,6 +62,9 @@ install:
     - op: load_image
       from: images/battlegroup/server.tar
       name: "Map server image (shared by game, overmap, arrakeen)"
+    - op: load_image
+      from: images/battlegroup/server-db-utils.tar
+      name: "Database schema tool image (db-init)"
     # dune-admin is a companion operator dashboard (github.com/Icehunter/dune-admin),
     # not part of Funcom's own distribution. It has no published container
     # image, but ships as a static, dependency-free Go binary via GitHub
@@ -125,11 +125,15 @@ server:
 # every container that consumes one -- proven end to end in yggdrasil's own
 # conformance suite against a real Docker daemon, not merely designed.
 #
-# What is still open: images/battlegroup/server-db-utils.tar loads cleanly
-# but has no container here, because what it does is not understood -- see
-# the closing comment block. And none of this has been proven against a
-# real provision of *this* seed: `ygg-seed validate`/`lint` pass, but no pod
-# has actually been built and started from it.
+# images/battlegroup/server-db-utils.tar is now understood and wired in
+# below as db-init: pulled apart and read directly, it is Funcom's own
+# PostgreSQL schema tool (initdb/startdb/updatedb, ~90 real .sql files that
+# are this game's actual schema), confirmed idempotent by its own
+# docstrings -- exactly the shape yggdrasil's ADR-156 (once: true, a
+# completed dependency condition) exists for. What is still open: none of
+# this has been proven against a real provision of *this* seed --
+# `ygg-seed validate`/`lint` pass, but no pod has actually been built and
+# started from it.
 # ---------------------------------------------------------------------------
 
 containers:
@@ -137,15 +141,21 @@ containers:
 
   - role: postgres
     image: { ref: "registry.funcom.com/funcom/self-hosting/igw-postgres:17.4-alpine-fc-13", loaded: true }
+    # This image is confirmed live to be the stock, unmodified official
+    # PostgreSQL Docker entrypoint (docker-entrypoint.sh, no custom
+    # /docker-entrypoint-initdb.d scripts) -- not a Funcom-patched one. A
+    # previous version of this seed carried a second env var here,
+    # POSTGRES_SUPER_PASSWORD, marked "purpose not yet confirmed"; grepping
+    # the real image for any handling of it found none. The stock entrypoint
+    # creates exactly one role from POSTGRES_USER/POSTGRES_PASSWORD, and
+    # that role is already a superuser (stock behaviour, whatever it is
+    # named) -- there is no second admin role for a second credential to
+    # belong to. Removed rather than kept "just in case": carrying a field
+    # the real image provably never reads is worse than not declaring it.
     env:
       POSTGRES_DB: dune
       POSTGRES_USER: dune
       POSTGRES_PASSWORD: "{{.Vars.db_password}}"
-      # A second, separate superuser credential a real deployment carries
-      # alongside the ordinary "dune" user -- purpose not yet confirmed
-      # (streaming replication is the one documented use elsewhere for this
-      # class of tool, but this seed has no replica of its own).
-      POSTGRES_SUPER_PASSWORD: "{{.Vars.db_super_password}}"
     volumes:
       - { from: pgdata, to: /var/lib/postgresql/data }
     healthcheck:
@@ -192,6 +202,45 @@ containers:
       # an admin surface nothing here needs.
       - { name: rmq-client, protocol: tcp, default: 31982, kind: other }
 
+  # --- Database schema bootstrap -------------------------------------------
+
+  - role: db-init
+    name: Database Init
+    description: >-
+      Funcom's own PostgreSQL schema tool (initdb/startdb/updatedb),
+      applying this game's real schema and ~90 stored-procedure files.
+      Pulled apart and read directly rather than guessed: its own
+      docstrings say startdb "installs and initializes it if needed" and
+      updatedb "does nothing if the database is already up to date" --
+      genuinely idempotent, which is exactly what yggdrasil's Once
+      (ADR-156) needs and asserts nothing beyond.
+    once: true
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:2064155-0-shipping", loaded: true }
+    depends_on:
+      - { role: postgres, condition: healthy }
+    # updatedb.py both initializes (delegates through database.ensure_
+    # initialized(), same as initdb.py) and applies any new schema patches,
+    # so it is the one command that is correct to run on every boot rather
+    # than only the first. --unattended matches IGWO's own convention noted
+    # in the tool's source (its config reader's own comment: "IGWO adds
+    # --unattended to all script calls"). Connection details are passed as
+    # CLI overrides rather than through the [DuneDatabaseInterfacePSQL] ini
+    # file its config reader prefers, since this seed has no ini file to
+    # mount for it -- confirmed from source that CLI flags take precedence
+    # over the ini path either way. No separate admin credential: igw-postgres
+    # is confirmed to be the stock official image, which makes POSTGRES_USER
+    # (dune) the one and only superuser it ever creates, so project and admin
+    # credentials are the same role here.
+    command: >-
+      updatedb.py --unattended
+      --host postgres:5432
+      --project-database {{.Vars.db_name}}
+      --project-user dune
+      --project-password {{.Vars.db_password}}
+      --admin-user dune
+      --admin-password {{.Vars.db_password}}
+      --admin-database {{.Vars.db_name}}
+
   # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
 
   - role: gateway
@@ -199,6 +248,7 @@ containers:
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: game-rmq, condition: healthy }
+      - { role: db-init, condition: completed }
     # A reference deployment starts this with a hardcoded `sleep 30` before
     # execing the real process, presumably because plain Docker Compose
     # depends_on there does not wait for health. This platform's own
@@ -227,6 +277,7 @@ containers:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
       - { role: game-rmq, condition: healthy }
+      - { role: db-init, condition: completed }
     # A reference deployment's own comment records that Director currently
     # terminates on a malformed login envelope rather than rejecting it --
     # an upstream Funcom bug, not this seed's doing. This platform's own
@@ -257,6 +308,7 @@ containers:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
       - { role: game-rmq, condition: healthy }
+      - { role: db-init, condition: completed }
     command: >-
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
@@ -287,9 +339,16 @@ containers:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
       - { role: game-rmq, condition: healthy }
+      - { role: db-init, condition: completed }
       - { role: director, condition: started }
       - { role: gateway, condition: started }
       - { role: text-router, condition: started }
+    # db-init is technically transitive here already -- gateway/director/
+    # text-router each wait on it themselves, and game only waits for their
+    # own start, which cannot happen until their own wait resolves. Declared
+    # directly anyway: game is the service actually writing player data, and
+    # a reader should not have to trace three hops of transitivity to see
+    # that it needs a migrated schema before it starts.
     # Every flag here is confirmed from a real community Docker Compose
     # project's own service definition for its "Survival_1" partition --
     # not yet seen in this seed's own boot output, since it has never
@@ -522,13 +581,14 @@ variables:
 
   - name: db_password
     label: Database password
-    description: Shared by every service that talks to PostgreSQL as the "dune" user.
-    generate: password
-    default: ""
-    editable: true
-
-  - name: db_super_password
-    label: Database superuser password
+    description: >-
+      Shared by every service that talks to PostgreSQL as the "dune" user --
+      including db-init's admin operations, since igw-postgres is confirmed
+      to be the stock official image, which makes POSTGRES_USER (dune) the
+      one and only superuser it ever creates. A previous version of this
+      seed generated a second, separate db_super_password for a
+      POSTGRES_SUPER_PASSWORD env var; removed once the real image was
+      confirmed to read no such variable at all.
     generate: password
     default: ""
     editable: true
@@ -583,20 +643,33 @@ backup:
 #     reading back what the daemon reported -- 2064155-0-shipping shared
 #     across every battlegroup service, igw-postgres's own tag confirmed
 #     an exact match to what was already declared
+#   - what images/battlegroup/server-db-utils.tar is for: pulled the real
+#     tool out of the loaded image and read its source directly rather than
+#     inferring from behaviour. It is Funcom's own PostgreSQL schema CLI
+#     (initdb/startdb/updatedb, ~90 real .sql files), genuinely idempotent
+#     by its own docstrings, and now wired in as db-init (once: true,
+#     yggdrasil ADR-156) gating gateway/director/text-router/game on
+#     depends_on's completed condition
+#   - igw-postgres is the stock, unmodified official PostgreSQL Docker
+#     image (docker-entrypoint.sh, no custom /docker-entrypoint-initdb.d
+#     scripts) -- which is what let POSTGRES_SUPER_PASSWORD be resolved
+#     rather than left open: grepping the real image found no handling of
+#     it anywhere, so it was removed along with the db_super_password
+#     variable that generated it, and db-init's admin operations use the
+#     same "dune" role the project connection already does
 #   - this seed now validates and lints clean (`ygg-seed validate`,
 #     `ygg-seed lint`) against yggdrasil's own loader, which is the same
 #     one a control plane uses
 #
 # NOT checked -- real gaps, not just imperfections:
-#   - what images/battlegroup/server-db-utils.tar is for. It loads cleanly
-#     (confirmed) but has no container here, because guessing its role
-#     wrong risks a pod that looks complete and silently cannot actually
-#     authenticate players or has never had its schema created
 #   - whether rmq-auth-shim is genuinely required infrastructure or a
 #     specific third party's own convenience script -- not declared as a
-#     container above pending that answer, same reasoning as db-utils
+#     container above pending that answer
 #   - this seed has never actually been provisioned. Validating and
 #     linting clean proves the document is well-formed, not that a real
 #     node can boot a pod from it -- that is the next real step, not this
-#     one
+#     one. db-init's exact command-line invocation (updatedb.py --unattended
+#     with CLI-flag connection overrides) is confirmed correct by reading
+#     the tool's own source, not by watching it actually run against this
+#     seed's postgres container
 # ---------------------------------------------------------------------------

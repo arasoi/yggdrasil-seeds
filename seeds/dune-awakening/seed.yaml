@@ -11,7 +11,16 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.3.0"
+version: "0.3.1"
+
+branding:
+  # The base game's own Steam app id, for branding only -- distinct from the
+  # dedicated-server tool's own app id (4754530) used by the steamcmd install
+  # step below, which has no public store page or artwork of its own.
+  steam_app_id: 1172710
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
 
 # Confirmed live (2026-08, community reporting): the actual server binaries
 # are native Linux, run directly in Docker with no Windows/Hyper-V/VM layer

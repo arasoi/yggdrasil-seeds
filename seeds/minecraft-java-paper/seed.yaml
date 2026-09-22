@@ -4,7 +4,7 @@ name: Minecraft Java (Paper)
 description: >
   Vanilla-compatible Minecraft Java Edition server running Paper, with
   plugin support. Runs on any architecture with a JRE.
-version: "3.0.2"
+version: "3.1.0"
 
 # Not on Steam. The logo is PaperMC's own project mark (papermc.io); the
 # banner is Mojang's 2024 key art, mirrored on the Minecraft Wiki -- this
@@ -33,8 +33,7 @@ install:
   # reserves multi-step resolution for steamcmd in phase 5). So the URL
   # itself is the editable variable: bumping the Minecraft version is an
   # operator editing one field, still a data change rather than a Go one
-  # (ADR-007). Check https://fill.papermc.io/v3/projects/paper for a newer
-  # build's URL.
+  # (ADR-007).
   mount: { path: /game, mode: ro }
   # No image: a plain fetch needs no container, so this runs in the agent
   # process exactly as it always has. install.image is forbidden rather than
@@ -46,6 +45,20 @@ install:
       # default was a trap for exactly this seed: the URL is a variable, so its
       # basename could change under the command that references it.
       into: server.jar
+  # The generic version-check mechanism (yggdrasil ADR-172), for exactly the
+  # case it was built around: this seed's own download_url used to need an
+  # operator to visit the Fill API by hand and paste in a fresh URL for
+  # every build. [0] is the latest build -- confirmed live against the real
+  # API, whose list is newest-first, the opposite of what the now-sunset v2
+  # API this project first assumed would have meant. "server:default" is
+  # the download map's own key, a literal colon included. No `value:`
+  # template needed: the extracted field is already a complete,
+  # ready-to-fetch URL, exactly what download_url wants.
+  version_check:
+    kind: json
+    url: "https://fill.papermc.io/v3/projects/paper/versions/{{.Vars.mc_version}}/builds"
+    field: "[0].downloads.server:default.url"
+    variable: download_url
 
 server:
   writable_paths:
@@ -118,13 +131,25 @@ groups:
 
 variables:
   # ---- Not server.properties: how this seed is built and run -------------
+  - name: mc_version
+    group: Server
+    label: Minecraft version
+    description: >-
+      Which Minecraft version's builds to watch for updates. Changing this
+      alone does not change the running server -- it only points version_check
+      at a different build list; Apply update (or the next automatic check)
+      still has to fetch a fresh download URL for it.
+    default: "1.21.4"
+    editable: true
   - name: download_url
     group: Server
     label: Paper download URL
     description: >-
       PaperMC hands out a content-addressed URL per build rather than one a
-      version number can template, so bumping Minecraft means pasting a new
-      URL here. Find one at https://fill.papermc.io/v3/projects/paper.
+      version number can template. Kept current automatically by this
+      install's own version_check once a build for the Minecraft version
+      above is checked and applied; paste one by hand from
+      https://fill.papermc.io/v3/projects/paper to jump to a specific build.
     default: "https://fill-data.papermc.io/v1/objects/5ee4f542f628a14c644410b08c94ea42e772ef4d29fe92973636b6813d4eaffc/paper-1.21.4-232.jar"
     editable: true
   - name: memory_mib

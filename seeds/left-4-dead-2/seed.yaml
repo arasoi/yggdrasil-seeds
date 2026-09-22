@@ -9,7 +9,7 @@ description: >
   (see the install block below for why) but does not reach a confirmed
   boot; see the primary container's own comment for the full live account
   of what was tried.
-version: "1.2.1"
+version: "1.2.2"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -216,11 +216,45 @@ containers:
     # Net, sharper than before: this is conclusively a Wine/GE-Proton
     # socket-emulation bug in how this engine's non-blocking UDP recv
     # interacts with Wine -- not this project's networking, container, or
-    # image setup, and not (definitively) an fsync problem. Going further
-    # needs Wine-internals-level work no tooling in any session so far has
-    # had: a debug Wine build with socket-layer symbols, a comparison
-    # against another Source-engine-under-Proton title known to work, or
-    # an upstream report against GE-Proton/Wine itself.
+    # image setup, and not (definitively) an fsync problem.
+    #
+    # COMPARED AGAINST A KNOWN-WORKING CASE (2026-09-22, same session).
+    # Searching for a real Source-engine title the community has actually
+    # confirmed working under Wine came up empty -- LinuxGSM's own policy
+    # explicitly refuses any server requiring Wine outright, which is
+    # itself the likely reason the pelican egg's "windows depot secretly
+    # has Linux binaries" assumption (step 4, above) went unchallenged for
+    # this app for so long. Built a tighter, cleaner control instead of a
+    # second full game: a ~20-line C program doing exactly what step 6-8's
+    # strace showed srcds.exe itself doing -- bind a UDP socket, set it
+    # non-blocking, poll recvfrom() in a loop -- cross-compiled to a
+    # Windows PE binary and run in this exact image, on this exact host.
+    #
+    # It received and replied to a real UDP packet correctly, twice: once
+    # under raw `wine` with no Steam/Proton runtime at all, and again
+    # through the *full* `ygg-proton` wrapper this seed actually uses --
+    # `waitforexitandrun`, the `steam.exe` emulation layer, protonfixes,
+    # fsync all present and unchanged. Also directly compared the two
+    # programs' own `recvmsg()` traces: both show the same bizarre-looking
+    # `msg_namelen` garbage value noted in step 6 -- ruling that detail out
+    # as a real clue rather than a lead, since it's identical in the
+    # working case too (harmless uninitialised memory in Wine's own
+    # recvmsg wrapper, touched only on success).
+    #
+    # This is the comparison step 5's "genuinely open" question and this
+    # amendment's own prior paragraph both called for, and it lands more
+    # precisely than a second whole game would have: this project's own
+    # Wine/Proton/Steam-runtime stack is *not* the problem, on this host,
+    # for a plain non-blocking UDP socket, full stop. Whatever srcds.exe
+    # itself does differently -- a specific socket option, a threading or
+    # overlapped-I/O pattern this simple poll loop doesn't exercise, or
+    # something else entirely in the engine's own Winsock usage -- is now
+    # the entire remaining unknown. Going further needs the engine's own
+    # socket setup calls traced and compared against this test program's
+    # (`strace -e trace=network` covers bind/setsockopt/ioctl too, not
+    # just recv, and was not yet compared call-for-call), or a debug Wine
+    # build with ws2_32 symbols to see where inside Wine's own recvmsg
+    # wrapper an arrived packet actually goes missing.
     #
     # Net effect on this seed, unchanged from before: the WINEDLLOVERRIDES
     # fix is real and kept (it demonstrably gets further); PROTON_USE_WINED3D

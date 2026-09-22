@@ -9,7 +9,7 @@ description: >
   (see the install block below for why) but does not reach a confirmed
   boot; see the primary container's own comment for the full live account
   of what was tried.
-version: "1.2.0"
+version: "1.2.1"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -177,12 +177,58 @@ containers:
     #    tooling in this session to attach a debugger or strace the actual
     #    process, so which reading is correct remains genuinely open.
     #
-    # Net effect: the WINEDLLOVERRIDES fix is real and kept (it demonstrably
-    # gets further); PROTON_USE_WINED3D and -dedicated are omitted (no
-    # evidence either does anything); -condebug is omitted from the
-    # shipped command (it produced nothing and is a diagnostic aid, not a
-    # fix) but is worth reaching for again first in any future session
-    # picking this up, alongside a real debugger attached to the node.
+    # REVISITED (2026-09-22), with exactly the tooling step 5 named as
+    # missing -- real shell access to a real amd64 node, so a debugger
+    # could finally be attached rather than reasoned about from outside.
+    # Conclusively narrows the question step 5 left open, in three
+    # independent, cross-checked steps:
+    #
+    # 6. `strace -f` attached to the real Linux PID behind `srcds.exe`
+    #    (confirmed via `/proc/net/udp`'s socket inode, not assumed from
+    #    the process list) shows it correctly, continuously
+    #    non-blocking-polling `recvmsg()` on its own bound game-port
+    #    socket -- and getting a clean `EAGAIN` every single time,
+    #    including in the exact window immediately after a real
+    #    A2S_INFO query packet was sent at it.
+    # 7. That packet is not lost in transit: `tcpdump`, run in a sidecar
+    #    sharing the container's own network namespace, shows it arriving
+    #    at `eth0` correctly addressed to the bound port. A plain `nc -ul`
+    #    control listener in the identical namespace, on two different
+    #    port numbers, received a test packet cleanly both times -- this
+    #    is conclusively not a networking, host, or docker-bridge problem,
+    #    and not anything specific to port 27015.
+    # 8. `WINEDEBUG=+winsock` shows Wine's own Winsock emulation
+    #    (`WS2_recv_base`) agrees with the raw syscall trace: a consistent
+    #    "would block" status, unchanged by a real packet arriving moments
+    #    earlier. The gap sits squarely between the kernel handing the
+    #    game's UDP socket a packet and Wine's own socket layer ever
+    #    surfacing it to the application.
+    # 9. The SIGUSR1 storm step 5 already noticed (`wineserver` signalling
+    #    this process hundreds of times a second) reproduces every time,
+    #    but is not fsync's doing: disabling GE-Proton's fsync backend
+    #    entirely (`PROTON_NO_FSYNC=1`, `WINEFSYNC=0` -- confirmed via the
+    #    boot log's own "wineserver: using server-side synchronization")
+    #    changes nothing about the outcome. Whatever is silently dropping
+    #    an arrived packet before Wine's socket layer sees it is not
+    #    fsync specifically, even though the signal storm may still be a
+    #    symptom of the same underlying layer rather than its cause.
+    #
+    # Net, sharper than before: this is conclusively a Wine/GE-Proton
+    # socket-emulation bug in how this engine's non-blocking UDP recv
+    # interacts with Wine -- not this project's networking, container, or
+    # image setup, and not (definitively) an fsync problem. Going further
+    # needs Wine-internals-level work no tooling in any session so far has
+    # had: a debug Wine build with socket-layer symbols, a comparison
+    # against another Source-engine-under-Proton title known to work, or
+    # an upstream report against GE-Proton/Wine itself.
+    #
+    # Net effect on this seed, unchanged from before: the WINEDLLOVERRIDES
+    # fix is real and kept (it demonstrably gets further); PROTON_USE_WINED3D
+    # and -dedicated are omitted (no evidence either does anything);
+    # -condebug is omitted from the shipped command (still only a
+    # diagnostic aid, and still never produced output in any session's
+    # testing window, though no session has yet run it for long enough to
+    # rule out a slow flush rather than a genuine no-op).
     command: >-
       ygg-proton srcds.exe -game left4dead2 -console -strictportbind -norestart
       -ip 0.0.0.0 -port {{.Ports.game}}

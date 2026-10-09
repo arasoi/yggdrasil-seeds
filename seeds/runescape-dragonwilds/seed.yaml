@@ -6,7 +6,7 @@ description: >-
   one persistent world for up to six players. Needs about 2 GB of RAM plus 1 GB
   per player, and outbound internet: matchmaking and the server browser run
   through Epic Online Services.
-version: "0.4.0"
+version: "0.5.0"
 
 # The base game's Steam listing, distinct from 4019830, the dedicated server
 # tool installed below -- the same split Palworld makes. No art yet.
@@ -221,6 +221,36 @@ logs:
     # session's. Whether players can type it in-game is not yet confirmed.
     - { name: join_code, label: "Join code", fleet: true, pattern: 'Setting \["JoinCode"\] written with key\[[a-z]+\] value\[([A-Z0-9]{4}-[A-Z0-9]{4})\]' }
 
+  events:
+    # Both lines are copied from a real session -- one player joined, played and
+    # left -- and are the session-level pair, so they fire for every way of
+    # arriving and leaving:
+    #
+    #   LogDomMatcherSession: Player ADDED to session [<player id>]-[<name>]
+    #   LogDomMatcherSession: Player Removed from session [<player id>]-[<name>]
+    #
+    # The id is a stable 32-hex Player ID (the same kind of value owner_id takes),
+    # so the leave rule correlates on it rather than on the name: it is unique,
+    # where a name need not be. The name is greedy to the last `]` so a name that
+    # itself contains one is kept whole (checked against a synthetic line; no
+    # such player was seen).
+    #
+    # Deliberately not `Join succeeded: <name>` or `ClientRequestDisconnect`,
+    # which are also real. The first has no id, and the second fires only for a
+    # graceful quit -- a dropped connection would leave the player listed forever.
+    # Only graceful leaves were observed; that the Removed line also covers a
+    # timeout or a kick is inferred from where it is logged, not seen.
+    - { event: join,  pattern: 'LogDomMatcherSession: Player ADDED to session \[(?P<id>[0-9a-f]{32})\]-\[(?P<player>.+)\]' }
+    - { event: leave, pattern: 'LogDomMatcherSession: Player Removed from session \[(?P<id>[0-9a-f]{32})\]' }
+
+connect:
+  # Verified: a real client joined by typing this address into the Direct tab of
+  # the Worlds screen, on the allocated port. The port has to be typed -- the
+  # client assumes 7777 without one. No `uri`: there is no scheme a client is
+  # known to honour.
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
 backup:
   # The world, the config the game and this seed share, and the logs.
   include: [saved]
@@ -234,11 +264,19 @@ groups:
     description: What the server shares.
     collapsed: true
 
-# NOT VERIFIED (nothing below has been run against a real player):
-#   - that a real client can find and join a server through this seed at all, and
-#     whether it needs the beacon port reachable to do so
-#   - join and leave lines, so there is no player list and no logs.events rule
+# VERIFIED WITH A REAL CLIENT (2026-10-09): a player connected by typing
+# <node address>:<allocated game port> into the Direct tab, played, and left; the
+# world saved on disconnect. The beacon port was also contacted by the client
+# before it connected, so it is used and worth publishing.
+#
+# NOT VERIFIED:
+#   - that the server appears when a client searches the Public tab by world name.
+#     It did not show up when first tried, and the cause is not established: the
+#     matchmaking session is created and advertised (`AdvertiseSession[1]`,
+#     `ReadyToJoin` = 1), so the leading suspects are a typed name that is not the
+#     exact, case-sensitive WORLD name, and a client/server build mismatch
 #   - whether players can use the Join code in-game
+#   - that the Removed line fires for a dropped connection, a timeout or a kick
 #   - that a platform-restricted policy actually keeps other platforms out. Every
 #     value was accepted by the server and changed the session's PlayerPlatform
 #     attribute (Crossplay is 128, PC is 2); nothing connected to test it

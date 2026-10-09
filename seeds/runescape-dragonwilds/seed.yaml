@@ -1,0 +1,254 @@
+id: runescape-dragonwilds
+schema: 3
+name: "RuneScape: Dragonwilds"
+description: >-
+  Jagex's co-op survival crafting game set in Gielinor. A dedicated server hosts
+  one persistent world for up to six players. Needs about 2 GB of RAM plus 1 GB
+  per player, and outbound internet: matchmaking and the server browser run
+  through Epic Online Services.
+version: "0.4.0"
+
+# The base game's Steam listing, distinct from 4019830, the dedicated server
+# tool installed below -- the same split Palworld makes. No art yet.
+branding:
+  steam_app_id: 1374490
+
+# amd64 only: the depot's own app record declares osarch 64 and ships no arm64
+# build. Checked against `app_info_print` on a real node, 2026-10-09.
+architectures: [amd64]
+
+install:
+  # One world per server, so nothing is gained by sharing a 5.2 GB depot.
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      # The *dedicated server* tool (type "Tool", free, anonymous login), not
+      # the game (1374490). Its Linux depot is 3501791, tagged oslist=linux with
+      # no osarch, so the project's linux/64 platform pin resolves it. Install
+      # observed: 5.48 GB downloaded, 5.2 GB on disk, native Linux, no Proton.
+      #
+      # A first install attempt made right after Jagex pushed a build failed all
+      # three SteamCMD attempts with a bare `Missing configuration`, and the
+      # same install succeeded on a manual retry minutes later. Transient, not a
+      # depot or platform problem -- retry before suspecting the seed.
+      app_id: 4019830
+    # SteamCMD already preserves the executable bit; this runs while the install
+    # directory is still writable, the only moment anything can set a mode in it.
+    # Jagex's own launcher RSDragonwildsServer.sh does the same chmod at every
+    # start, which cannot work on a read-only mount.
+    - op: chmod
+      path: RSDragonwilds/Binaries/Linux/RSDragonwildsServer-Linux-Shipping
+      mode: "0755"
+
+server:
+  writable_paths:
+    # Everything the game writes: saves, logs, and its Config tree.
+    - { from: saved, to: /game/RSDragonwilds/Saved }
+    # HOME for the container's unprivileged user.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # The shipping binary is exec'd directly rather than through
+    # RSDragonwildsServer.sh. The script's whole body is a chmod of this binary
+    # (which fails on a read-only mount) followed by this exact exec with
+    # `RSDragonwilds` -- the Unreal project name -- as the first argument, so
+    # bypassing it loses nothing. Dropping that first argument is the one way to
+    # get this wrong quietly.
+    #
+    #   * -log puts the engine's output on stdout, and is the prerequisite for
+    #     anything reading it.
+    #   * -Port and -BeaconPort are the allocated ports, never the declared
+    #     defaults. Both verified: the log reads `IpNetDriver listening on port
+    #     <allocated>` for the first and `World settings beacon listening on port
+    #     <allocated>` for the second. Without -BeaconPort the game binds a fixed
+    #     8888 whatever it is told, so a second server on one node would claim
+    #     the same host port.
+    command: >-
+      /game/RSDragonwilds/Binaries/Linux/RSDragonwildsServer-Linux-Shipping
+      RSDragonwilds -log -Port={{.Ports.game}} -BeaconPort={{.Ports.beacon}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      # The binary prints "Refusing to run with the root privileges." and aborts
+      # as root (reproduced on a real node), and a container otherwise runs as the
+      # image's default user, which is root.
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/RSDragonwilds/Saved"
+    ports:
+      # Both UDP. The game port is per Jagex's own setup page and the engine log.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      # The "world settings beacon", a second socket the game opens itself:
+      # `LogDomGameMode: World settings beacon listening on port 8888`. A
+      # community image states its internal and external numbers must match or
+      # players are kicked to the title screen, which is exactly what a port
+      # published to itself gives. Whether a real client needs it reachable is
+      # NOT yet confirmed -- see the list at the foot of this file.
+      - { name: beacon, protocol: udp, default: 8888, kind: other }
+
+config:
+  files:
+    # Linux's directory is LinuxServer, not "Linux" as Jagex's own setup page
+    # says: the game created Config/LinuxServer/DedicatedServer.ini on a real
+    # node, and no Config/Linux at all.
+    #
+    # Patched rather than rewritten. The game owns this file: it writes a
+    # ServerGuid into it on first run, which identifies the server and must
+    # survive every rebuild (verified: unchanged across rebuilds), and it
+    # rewrites the file at every start, dropping any key it does not recognise.
+    # `patch` sets only the keys named by the settings below.
+    - path: saved/Config/LinuxServer/DedicatedServer.ini
+      parser: ini
+      manage: patch
+      importable: true
+
+settings:
+  - name: owner_id
+    type: text
+    label: Owner ID
+    description: >-
+      The Player ID of the person who owns this server -- the one shown at the
+      bottom of the in-game Settings menu, not a Steam ID. The owner can ban and
+      unban anyone, online or offline. The server will not continue without it:
+      "The [OwnerId] for this server is empty. An OwnerId is required for normal
+      Server operation."
+    group: Server
+    required: true
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/OwnerId" }
+
+  - name: server_name
+    type: text
+    label: Server name
+    description: >-
+      The name shown in the server browser. Observed once: a 17-character name
+      was advertised in the matchmaking session as its first 16 characters,
+      while the config kept the full name.
+    group: Server
+    default: Dragonwilds Server
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/ServerName" }
+
+  - name: default_world_name
+    type: text
+    label: World name
+    description: >-
+      The world created on first start. Players find it by searching for this
+      name, case-sensitively. Changing it later does not rename a world that
+      already exists -- the server loads the newest save it finds.
+    group: Server
+    default: MyWorld
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/DefaultWorldName" }
+
+  - name: platform_policy
+    type: select
+    label: Allowed platforms
+    description: >-
+      Which players may join. Crossplay allows every platform; the others
+      restrict the server to one. The server refuses to start on any other value,
+      which is why this is a fixed list: it prints "The [PlatformPolicy] value
+      [Bogus] is invalid. Valid values: Crossplay, PC, PlayStation, Xbox,
+      Nintendo."
+    group: Server
+    default: Crossplay
+    options:
+      - { value: Crossplay, label: Crossplay (all platforms) }
+      - { value: PC, label: PC only }
+      - { value: PlayStation, label: PlayStation only }
+      - { value: Xbox, label: Xbox only }
+      - { value: Nintendo, label: Nintendo only }
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/PlatformPolicy" }
+
+  - name: world_password
+    type: password
+    label: World password
+    description: >-
+      Players must enter this to join. Leave empty for an open world. Overrides
+      any password stored in the world itself.
+    group: Access
+    default: ""
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/WorldPassword" }
+
+  - name: allow_crash_dumps
+    type: bool
+    label: Send crash dumps to Jagex
+    description: >-
+      Lets the server upload crash reports to the developer. The game's own
+      default is on.
+    group: Privacy
+    default: "True"
+    true_value: "True"
+    false_value: "False"
+    to: { file: saved/Config/LinuxServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/bAllowSendingCrashDumps" }
+
+ready:
+  # Verified on two real starts (and the same line on a third and fourth): the
+  # matchmaking session finishes starting about eight seconds after the process
+  # does. It is printed once per start, after the world has loaded and the Epic
+  # session exists, so it means players can actually find the server -- not
+  # merely that the process is up. The logs carry it twice, once from each of two
+  # subsystems; either matches.
+  mode: log
+  pattern: "LogDomMatcherSession: START SESSION - Success"
+  timeout: 180s
+
+# No crash block. A wrong crash pattern stops a healthy server, and nothing here
+# has been checked against a real crash. The one fatal condition seen -- an empty
+# OwnerId -- leaves the process running and prints "Dedicated Server cannot
+# continue due to DedicatedServer.ini configuration", which is also the reason
+# owner_id is required.
+
+stop:
+  # SIGTERM, with no console command: the server reads none. Verified on a real
+  # run -- SIGTERM logs `Draining save requests before world teardown`, deletes
+  # the Epic session, and exits with code 143 within about a second, so this is
+  # the graceful path rather than a fallback. The timeout is generous for a
+  # large world.
+  timeout: 60s
+  then: SIGTERM
+
+logs:
+  values:
+    # Printed twice per start, identically, once when the session is created and
+    # once when it is finalised:
+    #
+    #   LogNetSessionSettings: Setting ["JoinCode"] written with key[xz] value[FBHQ-AK2G]
+    #
+    # Four hex-ish characters, a hyphen, four more. It is NEW ON EVERY START
+    # (FR3G-1T5T, then FBHQ-AK2G on the next), so it is only ever the current
+    # session's. Whether players can type it in-game is not yet confirmed.
+    - { name: join_code, label: "Join code", fleet: true, pattern: 'Setting \["JoinCode"\] written with key\[[a-z]+\] value\[([A-Z0-9]{4}-[A-Z0-9]{4})\]' }
+
+backup:
+  # The world, the config the game and this seed share, and the logs.
+  include: [saved]
+
+groups:
+  - name: Server
+    description: Identity, ownership and who may play.
+  - name: Access
+    description: Joining a world.
+  - name: Privacy
+    description: What the server shares.
+    collapsed: true
+
+# NOT VERIFIED (nothing below has been run against a real player):
+#   - that a real client can find and join a server through this seed at all, and
+#     whether it needs the beacon port reachable to do so
+#   - join and leave lines, so there is no player list and no logs.events rule
+#   - whether players can use the Join code in-game
+#   - that a platform-restricted policy actually keeps other platforms out. Every
+#     value was accepted by the server and changed the session's PlayerPlatform
+#     attribute (Crossplay is 128, PC is 2); nothing connected to test it
+#   - the admin password. Jagex's wiki and setup page document an AdminPassword
+#     key, but the game strips it from DedicatedServer.ini at startup (a
+#     non-empty value written before boot was gone after it), so it is not
+#     exposed. How in-game admin access is meant to be configured is unknown.
+#   - MaxPlayers: Jagex fixes the cap at 6 and a community image overrides it
+#     with `-ini:Game:[/Script/Engine.GameSession]:MaxPlayers=N`; neither is
+#     tried here.
+#   - the "LAN probe" socket on a fixed UDP 45453 that the game also opens. It
+#     is not published, so it is invisible outside the container, and nothing
+#     here depends on it.

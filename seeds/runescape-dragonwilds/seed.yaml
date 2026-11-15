@@ -429,24 +429,31 @@ groups:
 # contacted by the client before it connected, so it is used and worth
 # publishing.
 #
-# VERIFIED FOR THE WINDOWS BUILD (2026-11-15): the install, and the shipping
-# executable's path. An anonymous `platform: windows` install of 4019830
-# succeeds (buildid 26574459, 4.3 GB), and a listing of its .exe files found
-# RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe. Nothing
-# below has been run under Proton yet.
+# VERIFIED FOR THE WINDOWS BUILD (2026-11-15), live on a real node, on a newly
+# created server:
+#   - the install: an anonymous `platform: windows` install of 4019830 succeeds
+#     (buildid 26574459, 4.6 GB on disk). The first attempt right after creation
+#     failed `Missing configuration` and the retry minutes later succeeded --
+#     the same transient the Linux build showed
+#   - the shipping executable's path, from a listing of the depot's .exe files
+#   - it boots under Proton with no WINEDLLOVERRIDES and no PROTON_USE_WINED3D:
+#     the engine loads, Epic Online Services connects, the matchmaking session
+#     is created and heartbeats, and the world simulation runs
+#   - Saved/Config/WindowsServer is the directory the game reads: with Owner ID
+#     unset it refused to run, quoting "The [OwnerId] for this server is
+#     empty"; once Owner ID was set through this seed's setting, it ran
+#   - the log file name and forwarding: readiness matched (the server reached
+#     running) and the join code was extracted from Saved/Logs/RSDragonwilds.log
+#   - stop and start from the control plane, with the world saved across them
+#     (operator-verified) -- so SIGTERM through ygg-proton reaches the game in
+#     time to save, the data-loss risk this port carried
 #
-# NOT VERIFIED -- THE WINDOWS/PROTON PORT (check these first, live):
-#   - that the server boots under Proton at all, with no WINEDLLOVERRIDES for
-#     steamclient and no PROTON_USE_WINED3D (see the container's env comment
-#     for the symptoms that would call for each)
-#   - the config directory, Saved/Config/WindowsServer, and therefore that the
-#     settings apply at all
-#   - the log file name, Saved/Logs/RSDragonwilds.log, which readiness, the
-#     join code and the player list now all depend on; and whether the engine
-#     also writes to stdout under Wine (lines would appear twice)
-#   - that SIGTERM still produces the graceful `Draining save requests` shutdown
-#     under Proton (see stop:). Data-loss risk if not
-#   - that -Port and -BeaconPort are honoured by the Windows build
+# NOT VERIFIED -- THE WINDOWS/PROTON PORT:
+#   - that a client can join: by join code or by direct connect to the game port
+#   - that -Port and -BeaconPort are honoured by the Windows build (the log
+#     lines that would show it were beyond the console's scrollback when read)
+#   - whether the engine also writes to stdout under Wine (lines would appear
+#     twice); none were seen doubled in the console
 #   - the ServerGuid carry-over on a real existing server: the console prints
 #     "carried ServerGuid over from Config/LinuxServer" once, and the GUID in
 #     Config/WindowsServer/DedicatedServer.ini afterwards matches the Linux one.

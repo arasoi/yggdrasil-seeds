@@ -447,11 +447,12 @@ groups:
 #   - stop and start from the control plane, with the world saved across them
 #     (operator-verified) -- so SIGTERM through ygg-proton reaches the game in
 #     time to save, the data-loss risk this port carried
+#   - a real client joined by the in-game join code, and the server was found
+#     on its allocated ports (2101 game, 2102 beacon on that node) rather than
+#     the 7777/8888 defaults -- so the Windows build honours -Port and
+#     -BeaconPort exactly as the Linux build did (operator-verified)
 #
 # NOT VERIFIED -- THE WINDOWS/PROTON PORT:
-#   - that a client can join: by join code or by direct connect to the game port
-#   - that -Port and -BeaconPort are honoured by the Windows build (the log
-#     lines that would show it were beyond the console's scrollback when read)
 #   - whether the engine also writes to stdout under Wine (lines would appear
 #     twice); none were seen doubled in the console
 #   - the ServerGuid carry-over on a real existing server: the console prints

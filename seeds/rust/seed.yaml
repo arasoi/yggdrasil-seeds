@@ -6,7 +6,7 @@ description: >
   and defend it from raiders. This seed runs the dedicated server, not the
   game. KNOWN BROKEN as of this version -- see the comment below before
   installing.
-version: "1.0.3"
+version: "1.0.4"
 
 # The base game's own Steam listing (252490) -- 258550, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -201,7 +201,7 @@ variables:
       - { value: "HapisIsland", label: "Hapis Island" }
       - { value: "SavasIsland_koth", label: "Savas Island (King of the Hill)" }
   - { name: world_seed, group: World, label: World seed, description: Only meaningful for a procedural map -- the same seed and world size always generate the identical map., default: "1", editable: true }
-  - { name: world_salt, group: World, label: World salt, description: A second procedural-generation input, alongside the seed above. Facepunch's own default., default: "1234", editable: true }
+  - { name: world_salt, group: World, label: World salt, description: "A second procedural-generation input, alongside the seed above. Facepunch's own default.", default: "1234", editable: true }
   - name: world_size
     group: World
     label: World size

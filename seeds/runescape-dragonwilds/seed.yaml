@@ -98,12 +98,14 @@ containers:
     # the same trap Empyrion's launcher was. ARK Survival Ascended launches its
     # shipping exe directly for the same reason.
     #
-    # INFERRED, NOT OBSERVED: the path. Only the depot's top level was listed.
-    # RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe is the
-    # Unreal convention, and the exact Windows counterpart of the Linux build's
-    # verified RSDragonwilds/Binaries/Linux/RSDragonwildsServer-Linux-Shipping.
-    # If the container exits at once with ERROR_FILE_NOT_FOUND from Wine, list
-    # Binaries/Win64 and fix this.
+    # The path is observed: a fresh `platform: windows` install of buildid
+    # 26574459 holds exactly three executables --
+    # RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe (this),
+    # the RSDragonwildsServer.exe launcher stub at the top level, and Sentry's
+    # RSDragonwilds/Plugins/Developer/Sentry/Binaries/Win64/crashpad_handler.exe.
+    # The last is worth knowing about: ARK Survival Ascended's Crashpad stalled
+    # its start under one Proton launch path (not the one ygg-proton uses), so a
+    # server that loads and then sits silent is the symptom to compare against.
     #
     # Arguments carried over from the Linux build, where all were verified:
     #
@@ -427,14 +429,13 @@ groups:
 # contacted by the client before it connected, so it is used and worth
 # publishing.
 #
-# VERIFIED FOR THE WINDOWS BUILD (2026-11-15): only the install. An anonymous
-# `platform: windows` install of 4019830 succeeds (buildid 26574459, 4.3 GB).
-# Nothing below has been run under Proton yet.
+# VERIFIED FOR THE WINDOWS BUILD (2026-11-15): the install, and the shipping
+# executable's path. An anonymous `platform: windows` install of 4019830
+# succeeds (buildid 26574459, 4.3 GB), and a listing of its .exe files found
+# RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe. Nothing
+# below has been run under Proton yet.
 #
 # NOT VERIFIED -- THE WINDOWS/PROTON PORT (check these first, live):
-#   - the shipping executable's path,
-#     RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe.
-#     Inferred from the Unreal convention; only the depot's top level was listed
 #   - that the server boots under Proton at all, with no WINEDLLOVERRIDES for
 #     steamclient and no PROTON_USE_WINED3D (see the container's env comment
 #     for the symptoms that would call for each)

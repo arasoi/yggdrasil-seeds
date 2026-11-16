@@ -5,7 +5,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.7.1"
+version: "5.8.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -154,13 +154,32 @@ containers:
     # client" (BattlEye above is the one that turned out fine; the Steam
     # Subsystem comment above it is the standing reminder that it does not
     # always). Confirm with a real client before removing this note.
+    # "$@" and the trailing `ark`: a cluster member's -clusterid and
+    # -ClusterDirOverride are appended after this whole command, which made
+    # them sh's own $0 and $1 rather than ARK's arguments -- ShooterGame.log's
+    # Commandline line ended at -PublicIPForEpic, so cluster transfers never
+    # had a cluster to use. `ark` fills $0, and "$@" forwards the rest.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
-      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog {{.Vars.battleye}} -Port={{.Ports.game}}{{if .NodeAddress}} -PublicIPForEpic={{.NodeAddress}}{{end}}'
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe "${ARK_MAP}?listen?SessionName=${ARK_SESSION_NAME}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword=${ARK_ADMIN_PASSWORD}?MaxPlayers=${ARK_MAX_PLAYERS}" -WinLiveMaxPlayers="${ARK_MAX_PLAYERS}" -oldconsole -servergamelog ${ARK_BATTLEYE} -Port={{.Ports.game}}{{if .NodeAddress}} -PublicIPForEpic={{.NodeAddress}}{{end}} "$@"' ark
     workdir: /game
     env:
       HOME: /home/steam
+      # The operator's values reach the launch line through
+      # the environment, expanded inside double quotes by the sh -c script,
+      # so a value with spaces stays one argument whatever it contains. They
+      # were spliced straight into the script, unquoted: a session named
+      # "Ghost Ronin - Rag Test" split at its first space, so ARK registered
+      # "Ghost" with EOS and lost every ?option after it (the query and RCON
+      # ports, the admin password, max players). Found live, 2026-11-15:
+      # ShooterGame.log read `Server: "Ghost" has successfully started!`.
+      ARK_MAP: "{{.Vars.map}}"
+      ARK_SESSION_NAME: "{{.Vars.session_name}}"
+      ARK_ADMIN_PASSWORD: "{{.Vars.admin_password}}"
+      ARK_MAX_PLAYERS: "{{.Vars.max_players}}"
+      # Unquoted where it is used: empty, or the one -NoBattlEye flag.
+      ARK_BATTLEYE: "{{.Vars.battleye}}"
       # The image always takes ownership of HOME; these are the seed's own
       # writable mounts that also have to belong to the container's user.
       # Unreal fails softly without it — unable to create ShooterGame.log it

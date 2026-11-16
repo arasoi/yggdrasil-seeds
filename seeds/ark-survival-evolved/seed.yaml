@@ -5,7 +5,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.4.1"
+version: "1.4.2"
 
 # icon is the store's own portrait capsule (library_600x900.jpg) for the same
 # base-game app id above; the top-level icon: emoji is gone, since a seed may
@@ -67,7 +67,7 @@ containers:
     # seed to disable it unconditionally. See the battleye variable below.
     command: >-
       ./ShooterGame/Binaries/Linux/ShooterGameServer
-      {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}}
+      "{{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}}"
       -server -log {{.Vars.battleye}} -servergamelog
     workdir: /game
     env:

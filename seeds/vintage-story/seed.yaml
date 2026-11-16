@@ -5,7 +5,7 @@ description: >
   Dedicated server for Vintage Story, a sandbox survival and building game.
   Each server gets its own copy of the game files, so different worlds can run
   different versions.
-version: "2.1.1"
+version: "2.2.0"
 
 # Not on Steam, so no steam_app_id -- every image comes from Anego Studios'
 # own official properties: logo and banner from their wiki (wiki.vintagestory.at)
@@ -71,6 +71,17 @@ install:
       name: "Extracting Vintage Story server"
       from: vs_server.tar.gz
       archive: targz
+  # Vintage Story publishes its latest stable version as a bare string, and
+  # names its server tarball after it, so the check builds the same CDN URL
+  # vintagestory_download_url already holds (ADR-172). Confirmed live
+  # 2026-11-16: lateststable.txt read 1.22.7, and the URL below for it
+  # answered 200.
+  version_check:
+    kind: regex
+    url: "https://api.vintagestory.at/lateststable.txt"
+    pattern: '^\s*([0-9]+\.[0-9]+\.[0-9]+)'
+    value: "https://cdn.vintagestory.at/gamefiles/stable/vs_server_linux-x64_{{.CheckValue}}.tar.gz"
+    variable: vintagestory_download_url
 
 server:
   # Everything Vintage Story owns — serverconfig.json, Saves/, Mods/, logs —
@@ -1631,6 +1642,11 @@ stop:
   then: SIGTERM
 
 logs:
+  # The game's own version, shown as the server's game version (ADR-198);
+  # the version check above manages a URL, which is no version to show.
+  # Printed at boot: "[Notification] Game Version: v1.22.7 (Stable)".
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Game Version: v(\S+)' }
   # No steamid, and none is possible: Vintage Story has its own account
   # system entirely separate from Steam (every player, however they bought
   # the game, registers at vintagestory.at and authenticates against that

@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.3.2"
+version: "1.4.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -229,7 +229,16 @@ settings:
 # and this project's own rule is to write a log pattern only after watching
 # real output, never guessed from documentation. txAdmin's own HTTP port
 # accepting a connection is a reasonable first cut; revisit with a real
-# readiness line once this has actually booted.
+# readiness line once this has actually booted.
+logs:
+  # The FXServer build, shown as the server's game version (ADR-198).
+  # txAdmin prints it on every start; seen live against this seed's pinned
+  # build (2026-11-16): "[tx] Starting txAdmin v8.1.1/b35245/Lin...".
+  # txAdmin, not this seed, updates FXServer, so the running build can
+  # differ from the one the install downloaded.
+  values:
+    - { name: game_version, label: "FXServer build", version: true, pattern: 'Starting txAdmin v\S+/(b[0-9]+)/' }
+
 ready:
   mode: port
   port: txadmin

@@ -5,7 +5,7 @@ description: >
   Dedicated server for Valheim, a Norse survival and exploration game.
   Crossplay is on by default, so the server prints a join code players can
   use instead of an address.
-version: "2.3.0"
+version: "2.4.0"
 
 # The base game's own Steam listing (896660, the dedicated-server tool app
 # id installed below, has no store page and so no artwork of its own). icon
@@ -377,6 +377,9 @@ ready:
 
 logs:
   values:
+    # The game's own version, shown as the server's game version (ADR-198).
+    # Seen live 2026-11-16: "Valheim version: l-1.0.21 (network version 41)".
+    - { name: game_version, label: "Game version", version: true, pattern: 'Valheim version: (\S+)' }
     # Verified against a real crossplay server's own log, start to finish
     # (ADR-073). Three lines carry the phrase, in this order:
     #

@@ -4,7 +4,7 @@ name: Palworld
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.2.2"
+version: "1.3.0"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
 # server tool app installed below. icon is the store's own portrait capsule
@@ -225,6 +225,10 @@ stop:
   then: SIGTERM
 
 logs:
+  values:
+    # The game's own version, shown as the server's game version (ADR-198).
+    # Seen live 2026-11-16: "Game version is v1.0.5.102999".
+    - { name: game_version, label: "Game version", version: true, pattern: 'Game version is v(\S+)' }
   events:
     # Both patterns are copied from a real server's console, on a run a player
     # joined and then left -- which is the whole bar for putting one in a field

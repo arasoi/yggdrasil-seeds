@@ -5,7 +5,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.4.2"
+version: "1.5.0"
 
 # icon is the store's own portrait capsule (library_600x900.jpg) for the same
 # base-game app id above; the top-level icon: emoji is gone, since a seed may
@@ -132,6 +132,7 @@ variables:
     type: select
     default: TheIsland
     editable: true
+    per_server: true
     options:
       - { value: TheIsland, label: The Island }
       - { value: TheCenter, label: The Center }
@@ -146,7 +147,7 @@ variables:
       - { value: LostIsland, label: Lost Island }
       - { value: Fjordur, label: Fjordur }
       - { value: Aquatica, label: Aquatica, description: Non-canonical 10th-anniversary DLC map. }
-  - { name: session_name, default: YggdrasilARK, editable: true }
+  - { name: session_name, default: YggdrasilARK, editable: true, per_server: true }
   - { name: max_players, default: "70", editable: true }
   # RCON only actually binds its port when an admin password is set, the
   # same behaviour ASA's own seed already records against a live server;

@@ -5,7 +5,7 @@ description: >
   Dedicated server for Minecraft Bedrock Edition — the version played on
   consoles, phones and Windows. The server downloads itself when it first
   starts, so there is no separate install step.
-version: "4.0.3"
+version: "4.1.0"
 
 # Minecraft is not sold on Steam, so there is no steam_app_id here -- all
 # three images are Mojang's own official franchise assets (minecraft.net's
@@ -509,6 +509,12 @@ connect:
 # `[^,]+` because a Bedrock gamertag may contain spaces, which `\S+` would cut
 # short — Paper's rule can use \S+ because a Java username cannot.
 logs:
+  # The game's own version, shown as the server's game version (ADR-198).
+  # The image downloads the newest Bedrock server on every start, so this
+  # line is the only record of which one is running. Seen live
+  # (2026-10-15): "[2026-10-15 19:31:54:682 INFO] Version: 1.26.52.3".
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'INFO\] Version: ([0-9][0-9.]*)' }
   events:
     - { event: join, pattern: 'Player connected: (?P<player>[^,]+),' }
     - { event: leave, pattern: 'Player disconnected: (?P<player>[^,]+),' }

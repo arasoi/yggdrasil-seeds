@@ -5,7 +5,7 @@ description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.8.1"
+version: "5.8.2"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
@@ -2259,6 +2259,11 @@ ready:
 # testing the pattern against both real lines quoted above, not by
 # inspection.
 logs:
+  # The game's own version, which a player's client has to match; shown as
+  # the server's game version rather than as a fact (ADR-198). Printed near
+  # the top of ShooterGame.log as "ARK Version: 98.6".
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'ARK Version: (\S+)' }
   events:
     - { event: join,  pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] joined this ARK!' }
     - { event: leave, pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] left this ARK!' }

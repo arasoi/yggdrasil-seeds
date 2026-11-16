@@ -7,7 +7,7 @@ description: >-
   server under Proton. Needs about 2 GB of RAM plus 1 GB per player, and
   outbound internet: matchmaking and the server browser run through Epic Online
   Services.
-version: "0.6.0"
+version: "0.7.0"
 
 # The base game's Steam listing, distinct from 4019830, the dedicated server
 # tool installed below -- the same split Palworld makes. No art yet.
@@ -379,6 +379,11 @@ logs:
     # (FR3G-1T5T, then FBHQ-AK2G on the next), so it is only ever the current
     # session's. Whether players can type it in-game is not yet confirmed.
     - { name: join_code, label: "Join code", fleet: true, pattern: 'Setting \["JoinCode"\] written with key\[[a-z]+\] value\[([A-Z0-9]{4}-[A-Z0-9]{4})\]' }
+
+    # The build changelist, shown as the server's game version (ADR-198): the
+    # game prints no other version, and a client must be on the same build.
+    # Seen live 2026-11-16: "LogInit: Build: ++dominion+live-CL-260223".
+    - { name: game_version, label: "Game build", version: true, pattern: 'LogInit: Build: \S*?(CL-[0-9]+)' }
 
   events:
     # Both lines are copied from a real session -- one player joined, played and

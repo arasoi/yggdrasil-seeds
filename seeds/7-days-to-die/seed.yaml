@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.2.1"
+version: "1.3.0"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
@@ -501,6 +501,10 @@ ready:
 # exact failure mode before the steamclient.so fix landed) -- join has to
 # be the point where the game itself has decided the connection is real.
 logs:
+  values:
+    # The game's own version, shown as the server's game version (ADR-198).
+    # Seen live 2026-11-16: "INF Version: V 3.4.0 (b10) Compatibility Version: V 3.4.0, Build: LinuxServer 64 Bit".
+    - { name: game_version, label: "Game version", version: true, pattern: 'INF Version: V ([0-9][0-9.]*(?: \(b[0-9]+\))?)' }
   events:
     - event: join
       pattern: "PlayerSpawnedInWorld \\(reason: JoinMultiplayer.*PltfmId='(?:Steam_(?P<steamid>\\d+)|[^']*)'.*PlayerName='(?P<player>[^']+)'"

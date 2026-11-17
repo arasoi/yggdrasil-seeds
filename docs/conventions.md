@@ -134,6 +134,11 @@ Yggdrasil's.
   stuck. Always fix forward.
 - A comment-only change may skip the bump. If in doubt, bump the patch.
 
+**Every seed change that is published gets a line in `CHANGELOG.md`**, under a
+`## <date>` heading, naming the seed and its new version. Keep it terse and written for an
+operator. `publish.yml` copies the three newest entries into the release notes of whichever
+channel is published. Yggdrasil itself keeps a changelog the same way.
+
 ## What counts as a breaking seed change
 
 Anything that changes behaviour for a server that **already exists**. These are

@@ -146,6 +146,15 @@ jobs:
           Catalog: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/seeds.json
           EOF
 
+          # What changed: the three newest CHANGELOG.md entries, headings
+          # demoted so they sit under the release title.
+          changes=$(awk '/^## /{n++} n>=1 && n<=3' CHANGELOG.md | sed 's/^## /### /')
+          if [ -n "$changes" ]; then
+            printf '\n## What changed\n\n%s\n' "$changes" >> "$notes"
+          else
+            echo "::warning::CHANGELOG.md has no entries"
+          fi
+
           args=(--repo "$GITHUB_REPOSITORY" --title "$TITLE — $seed_count seeds" --notes-file "$notes")
           if [ "$PRERELEASE" = "true" ]; then
             args+=(--prerelease)

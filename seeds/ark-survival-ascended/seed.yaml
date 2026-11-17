@@ -1,18 +1,20 @@
 id: ark-survival-ascended
 schema: 3
 name: ARK Survival Ascended
-icon: "🦖"
 description: >
   Dedicated server for ARK Survival Ascended. Several maps can share one copy
   of the game files and a cluster volume, so players keep their characters and
   items when they travel between maps.
-version: "5.5.0"
+version: "5.9.0"
 
 # The base game's own Steam listing — distinct from 2430930, the
 # SteamCMD-only dedicated-server tool app installed below, which has no
-# store page and so no artwork of its own (ADR-051).
+# store page and so no artwork of its own (ADR-051). icon is the store's own
+# portrait capsule (library_600x900.jpg); the top-level icon: emoji is gone,
+# since a seed may declare one or the other, never both.
 branding:
   steam_app_id: 2399830
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 
@@ -127,13 +129,57 @@ containers:
     # startup and is now advertising for join." BattlEye under Proton is no
     # longer a documentation claim on this seed; it is a thing this project
     # has watched work.
+    # -PublicIPForEpic={{.NodeAddress}}: ARK ASA lists servers through Epic
+    # Online Services, not the Steam master server, and EOS needs to be told
+    # what address to hand out to a connecting client. ARK's own
+    # documentation (ark.wiki.gg/wiki/Server_configuration) is explicit that
+    # without this flag, a multihomed or NAT'd server can register a session
+    # advertising an address nobody outside the host can reach -- which is
+    # exactly this project's own topology: every server runs in its own
+    # Docker bridge network (ADR-019) and only ever sees its own
+    # container-internal address unless told otherwise, never the node's real
+    # one. `.NodeAddress` is the same address ADR-065's connect block and the
+    # server page's own allocations already hand out to a player, so this
+    # reuses the one place this project already tracks "what a player should
+    # be given" rather than inventing a second notion of it. Renders to
+    # nothing (the {{if}} is false) when the node's address is not known yet,
+    # matching how a connect block already degrades (ADR-065) rather than
+    # advertising a fabricated address.
+    #
+    # NOT YET LIVE-VERIFIED: added from ARK's own documentation and
+    # corroborating real-world reports (ArkNest, LinuxGSM's own ASA support,
+    # both 2026), not from a real Epic client finding a rebuilt server in the
+    # in-game browser. This project's own seed authoring history has more
+    # than one entry for "seemed right, was not checked against a real
+    # client" (BattlEye above is the one that turned out fine; the Steam
+    # Subsystem comment above it is the standing reminder that it does not
+    # always). Confirm with a real client before removing this note.
+    # "$@" and the trailing `ark`: a cluster member's -clusterid and
+    # -ClusterDirOverride are appended after this whole command, which made
+    # them sh's own $0 and $1 rather than ARK's arguments -- ShooterGame.log's
+    # Commandline line ended at -PublicIPForEpic, so cluster transfers never
+    # had a cluster to use. `ark` fills $0, and "$@" forwards the rest.
     command: >-
       sh -c 'mkdir -p /game/ShooterGame/Saved/Logs;
       tail -F -n +1 /game/ShooterGame/Saved/Logs/ShooterGame.log 2>/dev/null &
-      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe {{.Vars.map}}?listen?SessionName={{.Vars.session_name}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword={{.Vars.admin_password}}?MaxPlayers={{.Vars.max_players}} -WinLiveMaxPlayers={{.Vars.max_players}} -oldconsole -servergamelog {{.Vars.battleye}} -Port={{.Ports.game}}'
+      exec ygg-proton ./ShooterGame/Binaries/Win64/ArkAscendedServer.exe "${ARK_MAP}?listen?SessionName=${ARK_SESSION_NAME}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?RCONPort={{.Ports.rcon}}?RCONEnabled=True?ServerAdminPassword=${ARK_ADMIN_PASSWORD}?MaxPlayers=${ARK_MAX_PLAYERS}" -WinLiveMaxPlayers="${ARK_MAX_PLAYERS}" -oldconsole -servergamelog ${ARK_BATTLEYE} -Port={{.Ports.game}}{{if .NodeAddress}} -PublicIPForEpic={{.NodeAddress}}{{end}} "$@"' ark
     workdir: /game
     env:
       HOME: /home/steam
+      # The operator's values reach the launch line through
+      # the environment, expanded inside double quotes by the sh -c script,
+      # so a value with spaces stays one argument whatever it contains. They
+      # were spliced straight into the script, unquoted: a session named
+      # "Ghost Ronin - Rag Test" split at its first space, so ARK registered
+      # "Ghost" with EOS and lost every ?option after it (the query and RCON
+      # ports, the admin password, max players). Found live, 2026-11-15:
+      # ShooterGame.log read `Server: "Ghost" has successfully started!`.
+      ARK_MAP: "{{.Vars.map}}"
+      ARK_SESSION_NAME: "{{.Vars.session_name}}"
+      ARK_ADMIN_PASSWORD: "{{.Vars.admin_password}}"
+      ARK_MAX_PLAYERS: "{{.Vars.max_players}}"
+      # Unquoted where it is used: empty, or the one -NoBattlEye flag.
+      ARK_BATTLEYE: "{{.Vars.battleye}}"
       # The image always takes ownership of HOME; these are the seed's own
       # writable mounts that also have to belong to the container's user.
       # Unreal fails softly without it — unable to create ShooterGame.log it
@@ -156,21 +202,22 @@ containers:
       # passing -nullrhi does not prevent. Forcing Wine's own D3D
       # implementation avoids it. Confirmed against the real binary.
       PROTON_USE_WINED3D: "1"
-      # ARK's depot ships its own Windows steamclient64.dll, and the
-      # Windows DLL search order prefers the application directory, so that
-      # native copy wins over anything Proton stages into the prefix. It
-      # then blocks forever waiting for a Steam client that does not exist
-      # — the server reached exactly this point and hung indefinitely,
-      # with or without network access. Forcing the builtin makes the load
-      # fail fast instead, and the server boots.
+      # ARK's depot ships its own Windows steamclient64.dll, and the Windows
+      # DLL search order prefers it. An earlier version of this seed forced
+      # Wine's builtin instead (WINEDLLOVERRIDES=steamclient64=b;steamclient=b),
+      # because the native copy blocked forever at boot; the cost was
+      # "Steam Subsystem initialized: FAILED" on every start.
       #
-      # The cost is real and not yet fully assessed: the server logs
-      # "Steam Subsystem initialized: FAILED". ARK ASA lists servers
-      # through Epic Online Services rather than the Steam master server,
-      # so this is expected not to prevent players joining — but that has
-      # NOT been verified with a real game client. Revisit before treating
-      # this seed as production-ready.
-      WINEDLLOVERRIDES: "steamclient64=b;steamclient=b"
+      # Telling the native client which game it is, through SteamAppId and
+      # SteamGameId (the base game's id, 2399830, not the server tool's),
+      # removes the need for that. CONFIRMED LIVE: production's operator copy
+      # of this seed ran three ASA servers this way for 33 days, logging
+      # "Steam Subsystem initialized: Success" and "EOS ownership validation
+      # initialized: Success", with the override empty. Adopted here when
+      # that copy was retired (2026-11-15).
+      SteamAppId: "2399830"
+      SteamGameId: "2399830"
+      WINEDLLOVERRIDES: ""
     ports:
       - { name: game, protocol: udp, default: 7777 }
       # ARK binds a second UDP socket at game+1, its raw/reliable channel, and
@@ -219,6 +266,7 @@ variables:
     type: select
     default: TheIsland_WP
     editable: true
+    per_server: true
     options:
       - { value: TheIsland_WP, label: The Island }
       - { value: TheCenter_WP, label: The Center }
@@ -230,8 +278,8 @@ variables:
       - { value: Genesis_WP, label: "Genesis: Part 1" }
       - { value: Astraeos_WP, label: Astraeos, description: Paid DLC map. }
       - { value: LostColony_WP, label: Lost Colony, description: Paid DLC expansion map. }
-      - { value: BobsMissions_WP, label: Club ARK, description: A minigame hub, not an open-world survival map. }
-  - { name: session_name, default: YggdrasilARK, editable: true }
+      - { value: BobsMissions_WP, label: Club ARK, description: "A minigame hub, not an open-world survival map." }
+  - { name: session_name, default: YggdrasilARK, editable: true, per_server: true }
   - { name: max_players, default: "70", editable: true }
   # RCON only actually binds its port when an admin password is set —
   # verified live: without this the server starts normally but nothing
@@ -2125,12 +2173,25 @@ settings:
 # already configured by hand: read the file back off the node and adopt the
 # values this seed recognises, rather than having the next rebuild quietly
 # patch over them.
+#
+# CONFIRMED LIVE (2026-08-20): every real ARK ASA server this seed has built
+# writes a GameUserSettings.ini with no [Internationalization] section at all
+# -- checked on two running servers, neither had one. That section, and the
+# Culture key in it, is not something ARK's own first-run bootstrap adds under
+# this seed's SteamCMD-plus-Proton install path, and its absence is a
+# documented cause of an otherwise-healthy ASA server never appearing in any
+# server list: the game derives locale metadata for its session registration
+# from that key, and without it the registration silently doesn't take. Set
+# as a fixed `set:` key rather than a `settings:` control, because it is a
+# correctness fix an operator should never need to toggle -- there is no
+# reason to run without it.
 config:
   files:
     - path: config/WindowsServer/GameUserSettings.ini
       parser: ini
       manage: patch
       importable: true
+      set: { "Internationalization/Culture": "en" }
     - path: config/WindowsServer/Game.ini
       parser: ini
       manage: patch
@@ -2166,6 +2227,47 @@ ready:
 # crash:
 #   mode: log
 #   pattern: "Fatal error"
+
+# Unlike ASE, ASA's own console brackets an id onto the same line:
+#
+#   SurvivorOne [UniqueNetId:12345678901234567890123456789012 Platform:Steam] joined this ARK!
+#   SurvivorOne [UniqueNetId: Platform:None] left this ARK!
+#
+# That id is deliberately not captured. It is a 32-character hex EOS
+# (Epic Online Services) Product User ID, not a SteamID64 -- ASA
+# authenticates every player through EOS under the hood, even a Steam
+# client, so a real SteamID64 never appears here regardless of platform.
+# It is also frequently blank, especially on leave (`Platform:None` above
+# is a real, currently-running server's own leave line) -- an id this
+# unreliable, with no consumer once captured, is not worth the schema
+# surface. `.+?` non-greedy up to the literal ` [UniqueNetId:` is what
+# lets the bracket (present on every real line, empty or not) anchor the
+# match regardless of what it contains.
+#
+# Sourced from CubeCoders AMP's production ark-sa template (a widely-run
+# commercial hosting panel's own Console.UserJoinRegex/UserLeaveRegex,
+# matched against real customer servers), PatchRaptor (a real ASA-only
+# player-tracking tool whose regex explicitly requires 32 hex characters),
+# and MusclePr/asaui, whose parser captured the real blank-id leave line
+# quoted above from a genuinely running ASA server -- not this seed's own
+# install. Low stakes either way: a wrong match here is a confusing name
+# in a list until the next restart, never a stranded or killed server.
+#
+# Anchored on ARK's own `YYYY.MM.DD_HH.MM.SS: ` timestamp rather than left
+# unanchored, for the same reason ASE's own sibling pattern is: an
+# unanchored search matches but swallows the frame's own
+# `[UE-timestamp][frame#]` prefix into the captured name. Confirmed by
+# testing the pattern against both real lines quoted above, not by
+# inspection.
+logs:
+  # The game's own version, which a player's client has to match; shown as
+  # the server's game version rather than as a fact (ADR-198). Printed near
+  # the top of ShooterGame.log as "ARK Version: 98.6".
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'ARK Version: (\S+)' }
+  events:
+    - { event: join,  pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] joined this ARK!' }
+    - { event: leave, pattern: '\d{4}\.\d{2}\.\d{2}_\d{2}\.\d{2}\.\d{2}: (?P<player>.+?) \[UniqueNetId:[^\]]*\] left this ARK!' }
 
 backup:
   include: [saved, config]

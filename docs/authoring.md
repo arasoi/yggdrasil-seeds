@@ -102,8 +102,9 @@ Usually faster than starting blank. The five bundles here cover most shapes:
 | `ark-survival-ascended` | Shared install with writable overlays; clusters; Proton |
 
 Copy the directory, change the `id` **and the directory name** to match, reset
-`version:` to `1.0.0`, and delete the `branding:` block — its filenames point at
-images that do not exist for your new seed.
+`version:` to `1.0.0`, and delete the `branding:` block along with the image
+files it names — they are the *other* game's art. Source and add your own
+before you open a PR; see [Branding](#branding) below.
 
 ## Choosing an image
 
@@ -298,6 +299,75 @@ time so you find it immediately instead.
 
 `command` is **not run through a shell**: no expansion, no globbing, no pipes.
 Write `sh -c '...'` explicitly if you need them.
+
+## Branding
+
+Every seed needs real `icon`, `logo` and `banner` artwork before it is done —
+not optional polish, and not the top-level `icon:` emoji, which is a
+placeholder for a seed that has not been finished yet. A control plane shows
+the icon everywhere the seed or its servers are listed, and leads a server's
+own page with the banner (falling back to the logo when there is no banner) —
+a seed with no branding is what makes a fleet page fall back to a striped
+placeholder card, and that fallback exists for seeds nobody has gotten to yet,
+not as a normal end state.
+
+```yaml
+branding:
+  steam_app_id: 892970   # optional: the base game's own Steam listing, for the editor's picker
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+```
+
+`branding.icon`, `.logo` and `.banner` name plain image files sitting next to
+`seed.yaml` in the bundle directory — `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
+or `.svg`, whichever the source actually is. **Setting both the top-level
+`icon:` and `branding.icon` is a validation error, not a precedence rule** —
+finishing a seed's branding means deleting the emoji, not layering a real
+icon on top of it.
+
+### Finding real art
+
+**A Steam-distributed game** almost always has usable art on Steam's own CDN,
+whether or not the *dedicated-server tool's own app id* has a store page:
+
+```
+https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/library_600x900.jpg   # -> icon (portrait capsule)
+https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/logo.png              # -> logo (transparent)
+https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/library_hero.jpg      # -> banner (wide)
+```
+
+Try the **install step's own `app_id` first** — check with `curl -sI` before
+assuming it has nothing, since some dedicated-server tool apps genuinely do
+carry their own art (7 Days to Die's `294420` has a logo that reads "7 DAYS TO
+DIE DEDICATED SERVER", distinct from the base game's). Where it does not (Rust's
+`258550`, Team Fortress 2's `232250`), fall back to the **base game's** own
+Steam listing instead and record both ids in `branding.steam_app_id` — the
+same base-game-vs-tool-app split this project already tracks for install
+purposes (see the Rust and Team Fortress 2 seeds' own comments). Set
+`branding.steam_app_id` to whichever id the art actually came from, so a
+future editor's "fetch from Steam" button points at the right listing.
+
+**A game not on Steam** needs the developer's own official assets instead —
+their site's press kit or media page, their wiki (if the developer runs it
+themselves), or their own GitHub organization's avatar for a piece of
+community server software (PaperMC's own mark, for the `minecraft-java-paper`
+seed, came from exactly that). A site's own favicon set
+(`apple-icon-*.png`/`android-chrome-*.png` link tags) is usually the cleanest
+source for a square, text-free `icon` — a full wordmark logo reused as an icon
+reads as illegible text at the sizes an icon actually renders at.
+
+**Never** a fan wiki of unclear provenance, a search-engine image result, or
+anything you cannot point at an official source for. That is what the
+checklist's redistribution item in [contributing.md](contributing.md) is
+checking.
+
+Reusing one image for two slots is fine when it is honestly a good fit for
+both — several seeds here use the same square mark for `icon` and `logo`
+because the official logo already *is* a square, text-free mark rather than a
+wide wordmark. Do not force a mismatch the other way: a wide wordmark cropped
+down to a square icon is worse than spending the extra minute finding a
+proper mark.
 
 ## Before you open a PR
 

@@ -1,0 +1,536 @@
+id: 7-days-to-die
+schema: 3
+name: 7 Days to Die
+description: >
+  Open-world zombie survival: scavenge, build a base, and defend it through
+  recurring horde nights. This seed runs the dedicated server, not the game.
+version: "1.3.0"
+
+# All three images come straight from this same app id's own Steam CDN
+# assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)
+# -- unlike Rust's or Team Fortress 2's dedicated-server tool apps, this one
+# genuinely has its own dedicated artwork, confirmed live (the logo reads
+# "7 DAYS TO DIE DEDICATED SERVER", not a copy of the base game's plain
+# logo), so there was no need to fall back to the base game's own listing
+# (251570) for art the way those two seeds do. The top-level icon: emoji is
+# gone, since a seed may declare one or the other, never both.
+branding:
+  steam_app_id: 294420
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+# The dedicated-server tool's own app id (294420), separate from the base
+# game's, ships a real native Linux binary: confirmed both against LinuxGSM
+# (github.com/GameServerManagers/LinuxGSM), which has run it that way for
+# years with no Wine/Proton involved anywhere in its codebase, and now live
+# on a real amd64 node -- this control plane's own host is arm64, where the
+# 32-bit x86 SteamCMD/Steam client segfaults under both Docker's and
+# Podman's amd64 emulation ("Loading Steam API..." then SIGSEGV, reproduced
+# identically on both runtimes) before it can even print appinfo.
+#
+# A real install and boot found three generations of config drift that
+# nothing short of running it would have caught: the old web control panel
+# properties (ControlPanelEnabled/Port/Password) abort boot with "Unknown
+# config option" against this build -- this seed originally read that as the
+# whole feature being gone, but a later pass against the Valve Developer
+# Wiki's own reference table found it had only been renamed, to
+# WebDashboardEnabled/Port/Url plus EnableMapRendering (see web_dashboard_
+# enabled below, not re-verified live); V3.0 ("Dead Hot Summer") folded
+# thirty separate difficulty/zombie/loot/airdrop properties into one
+# generated SandboxCode string; and SaveGameFolder itself no longer exists,
+# superseded by UserDataFolder. The reference configs this seed started from
+# (LinuxGSM's companion Game-Server-Configs repo, and the 7 Days to Die
+# wiki) were current when read but describe a version this build has since
+# moved well past -- the properties still declared below are the ones that
+# survived a real boot, not merely the ones a reference document happened to
+# list. `sandbox_code` has one further limit worth stating plainly: this
+# seed cannot compose, validate, or preview one, since it is an opaque
+# string the game's own Sandbox Options menu generates.
+#
+# What is now confirmed live, end to end: install, boot past config parsing,
+# world load (Navezgane), EOS session registration, and a genuinely running
+# container with real resource stats. Not yet confirmed: a real client
+# actually connecting and playing, and graceful shutdown's effect on saved
+# state -- see the stop section below for why that one stays a real
+# question rather than a formality.
+architectures: [amd64]
+
+install:
+  # No cluster/character-transfer concept here, and no reason for two
+  # 7 Days to Die servers to share one copy of the game files -- the same
+  # call Valheim's seed makes for the same reason.
+  shared: false
+  mount: { path: /game, mode: ro }
+  # A steamcmd step runs in a container, so the seed names which one (ADR-057).
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 294420
+
+server:
+  # A single writable root outside the read-only install, the same shape
+  # Valheim's seed uses. SaveGameFolder in the templated config below points
+  # here rather than at Unity's default ~/.local/share/7DaysToDie, which
+  # would otherwise depend on exactly which uid the container runs as.
+  writable_paths:
+    - { from: "", to: /data }
+
+containers:
+  - role: game
+    primary: true
+    # base-linux, not base-steamcmd: the install step above already
+    # materialised the depot, so this container only execs the binary.
+    image: { base: linux }
+    # Exact flags LinuxGSM uses in production (lgsm/config-default/config-lgsm/
+    # sdtdserver/_default.cfg's startparameters). No -logfile: this project's
+    # agent captures the container's own stdout for the console (ADR-032),
+    # and Unity's headless build already writes there under -batchmode
+    # -nographics with nothing else asked of it -- the same reasoning
+    # Valheim's own seed records for omitting -logFile.
+    #
+    # Found live: a real server ran, was directly connectable, showed up in
+    # the browser (both fixed above), and still kicked every join with
+    # "Kicking player (Server is still initializing)" -- forever, not for a
+    # startup window. The actual cause is two lines above every one of
+    # those: "[S_API] SteamAPI_Init(): Sys_LoadModule failed to load:
+    # /root/.steam/sdk64/steamclient.so" then "[Steamworks.NET] Could not
+    # initialize GameServer". steamclient.so genuinely ships inside this
+    # depot, sitting next to the binary -- confirmed both by web references
+    # describing a real Linux install's file listing and by this seed's own
+    # steamcmd step, which fetches the depot whole -- but nothing put a copy
+    # where the Steamworks SDK actually looks for it. LinuxGSM and every
+    # other reference this seed has checked run SteamCMD and the game in the
+    # same persistent environment, where a `~/.steam` layout is incidentally
+    # already there from steamcmd's own first run; this project deliberately
+    # runs the steamcmd step in a separate, throwaway container (ADR-057),
+    # so the game's own container never gets that side effect. Without a
+    # live Steamworks GameServer object, this build never lets a Steam-
+    # platform client (every PC client) past the engine's own ServerState
+    # check, no matter how long the world has been up -- confirmed by eight
+    # separate join attempts across two restarts, with EAC and the join
+    # password each toggled off in turn to rule them out, all identical.
+    # `sh -c` is what this needs: containers[].command is tokenised, never
+    # run through a shell (internal/seed/container.go), so `;`/`exec` only
+    # work if the seed asks for a shell itself -- Valheim's own seed does
+    # exactly this for its own LD_LIBRARY_PATH/SteamAppId setup, and this
+    # follows the same shape.
+    command: >-
+      sh -c 'mkdir -p /root/.steam/sdk64;
+      ln -sf /game/steamclient.so /root/.steam/sdk64/steamclient.so;
+      exec ./7DaysToDieServer.x86_64
+      -quit -batchmode -nographics -dedicated
+      -configfile=/data/serverconfig.xml'
+    workdir: /game
+    ports:
+      # The Valve Developer Wiki's own "7 Days to Die Dedicated Server" page
+      # (developer.valvesoftware.com) is the authoritative source this seed
+      # is now built from, and its Firewall Ports section is explicit: TCP
+      # 26900 (the server port) plus 8080-8081 for remote admin, and UDP
+      # 26900-26903. That confirms, rather than merely infers, two things
+      # this seed previously had to reconstruct from secondary sources: the
+      # base port really is dual-protocol (TCP and UDP on the same number --
+      # offset_from/offset:0 is this project's mechanism for a same-number
+      # dual-protocol pair, ADR-083/ADR-109, already used for exactly this
+      # shape by the Vintage Story seed), and the UDP range really does run
+      # through offset 3, not offset 2 -- the exact gap a real operator hit:
+      # the server ran and was directly connectable by IP, but never
+      # appeared in the in-game server browser. The Wiki's port list is
+      # unconditional: it does not grow if server_allow_crossplay below is
+      # ever turned on, so no extra ports are declared for that case.
+      #
+      # The same page separately warns to avoid 27000-27099 for whichever
+      # number a server ends up bound to, due to heavy unrelated Steam
+      # traffic on that range. This seed has no way to steer the number
+      # ADR-061's allocator actually picks away from that range -- worth
+      # keeping in mind when sizing a node's own configured port range.
+      - { name: game, protocol: udp, default: 26900, kind: game }
+      - { name: game-tcp, protocol: tcp, offset_from: game, offset: 0 }
+      # Declared right after the base port and before the
+      # independently-allocated telnet/web-dashboard ports below, so a base
+      # candidate is never granted a number one of these needs (ports
+      # allocate in declaration order -- the same reasoning ARK's own seed
+      # records for its own offset sibling).
+      - { name: query1, protocol: udp, offset_from: game, offset: 1 }
+      - { name: query2, protocol: udp, offset_from: game, offset: 2 }
+      - { name: query3, protocol: udp, offset_from: game, offset: 3 }
+      # Independent: telnet is the game's remote-console interface and has
+      # no fixed relationship to the game port. Same for the web dashboard --
+      # off by default (web_dashboard_enabled below), but still always
+      # allocated, the same choice this seed already makes for telnet.
+      - { name: telnet, protocol: tcp, default: 8081, kind: rcon }
+      - { name: webdash, protocol: tcp, default: 8080, kind: web }
+
+# serverconfig.xml's flat <property name="X" value="Y"/> list has no format
+# support in internal/configfile (ini.go, structured.go's JSON/YAML,
+# properties.go -- no xml.go), so this is `manage: always`, a whole-file
+# template, the same choice Palworld's seed makes for its own single-tuple
+# ini and for the identical reason: every value below is a `variable`, never
+# a `setting`, because a setting's `to: {file, key}` destination addresses
+# one key and there is nothing here that can.
+#
+# Found live: this block was missing entirely on first publish -- the
+# template file existed in configs/ and the command referenced its path, but
+# nothing told the control plane to ever render it, so every server built
+# from that version crashed on boot with "Specified configfile not found".
+# ygg-seed validate has nothing to say about an orphaned template: SourcePath
+# resolution only runs against a file a config.files entry actually names.
+config:
+  files:
+    - path: serverconfig.xml
+      source_path: configs/serverconfig.xml.tmpl
+      manage: always
+
+# GameWorld is free text rather than a closed dropdown (unlike ARK's `map`):
+# "Navezgane" is the only world bundled with the install, but the game also
+# accepts any name and will either load an existing world under that name or
+# generate a new one via WorldGenSeed/WorldGenSize. Only the Navezgane path
+# is covered by anything checked for this seed -- it ships inside the
+# read-only install, so it needs no separate write target. Whether a freshly
+# generated custom world writes entirely under SaveGameFolder (safe) or
+# tries to write generated map data somewhere else (which, under this
+# project's read-only-install model, would fail) was not established from
+# the sources available here. Confirm before relying on a non-Navezgane
+# world on a real server.
+variables:
+  # ---- Server -------------------------------------------------------------
+  - { name: server_name, group: Server, label: Server name, default: "A Yggdrasil server", editable: true }
+  - name: server_password
+    group: Server
+    label: Join password
+    description: Blank leaves the server open.
+    type: password
+    default: ""
+    editable: true
+  - { name: server_description, group: Server, label: Description, description: Shown in the server browser., default: "A 7 Days to Die server", editable: true }
+  # Officially "Only 8-players are supported. Past 20 will cause issues with
+  # data being saved properly." (Valve Developer Wiki) -- left editable past
+  # that, since it's the game's own soft guidance rather than an enforced
+  # cap, but the description says so rather than letting an operator find
+  # out the hard way.
+  - { name: max_players, group: Server, label: Max players, description: "Officially supported up to 8; past 20 risks save-file corruption.", type: number, min: 1, max: 64, step: 1, default: "8", editable: true }
+  - { name: server_website_url, group: Server, label: Website URL, description: Shown in the server browser as a clickable link., default: "", editable: true }
+  - { name: server_login_confirmation_text, group: Server, label: Login confirmation text, description: A message players must confirm before joining. Blank shows nothing., default: "", editable: true }
+  # Added following a review against the Valve Developer Wiki's own
+  # serverconfig.xml reference: this seed shipped with neither Region nor
+  # Language declared, so every server silently ran under the game's
+  # internal defaults (NorthAmericaEast / English) with no way for an
+  # operator to say otherwise -- and a player's server browser can filter on
+  # both. Values are the exact literal set the Wiki documents; Language is
+  # free text there ("the English name of the language, e.g. not 'Deutsch'
+  # but 'German'"), not a closed list.
+  - name: region
+    group: Server
+    label: Region
+    description: Shown in the server browser and used for its region filter.
+    type: select
+    default: NorthAmericaEast
+    editable: true
+    options:
+      - { value: NorthAmericaEast, label: North America East }
+      - { value: NorthAmericaWest, label: North America West }
+      - { value: CentralAmerica, label: Central America }
+      - { value: SouthAmerica, label: South America }
+      - { value: Europe, label: Europe }
+      - { value: Russia, label: Russia }
+      - { value: Asia, label: Asia }
+      - { value: MiddleEast, label: Middle East }
+      - { value: Africa, label: Africa }
+      - { value: Oceania, label: Oceania }
+  - { name: language, group: Server, label: Language, description: "Primary language players should search for -- the English name of it (e.g. \"German\", not \"Deutsch\").", default: English, editable: true }
+
+  # ---- Networking -----------------------------------------------------------
+  # Split out from Server: these are the Valve Developer Wiki's own
+  # "Networking" and "Other technical settings" tables, moved here from
+  # Server (server_visibility) or newly added, rather than left implicit.
+  - name: server_visibility
+    group: Networking
+    label: Visibility
+    type: select
+    default: "2"
+    editable: true
+    options:
+      - { value: "2", label: Public }
+      - { value: "1", label: Friends only, description: "Only reachable if the first player connects directly by IP -- a dedicated server is never \"friends\" with anyone." }
+      - { value: "0", label: Unlisted }
+  - name: server_max_world_transfer_speed_kibs
+    group: Networking
+    label: World transfer speed cap (KiB/s)
+    description: Caps how fast the world downloads to a client on first connect. The game ignores anything past ~1300.
+    type: number
+    min: 1
+    max: 1300
+    step: 1
+    default: "512"
+    editable: true
+  # Capped at 8 players and needs EAC on -- both real, external constraints
+  # (Valve Developer Wiki: "crossplay servers ... have a default or lower
+  # player slot count"), not something this seed enforces for you.
+  - name: server_allow_crossplay
+    group: Networking
+    label: Allow crossplay
+    description: Lets console players join. Requires EasyAntiCheat on and effectively caps Max players at 8.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: ignore_eos_sanctions
+    group: Networking
+    label: Ignore EOS sanctions
+    description: Allows sanctioned Epic Online Services accounts to join. Mainly relevant with crossplay on.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+  # ---- World ---------------------------------------------------------------
+  - { name: game_world, group: World, label: World name, description: "\"Navezgane\" (bundled, the default) or a name to generate/load via the two fields below.", default: Navezgane, editable: true }
+  - { name: world_gen_seed, group: World, label: World generation seed, description: Only read when generating a new world under the name above., default: "asdf", editable: true }
+  - name: world_gen_size
+    group: World
+    label: World generation size
+    description: Width and height in blocks of a newly generated world. Large sizes take a long time to generate.
+    type: number
+    min: 2048
+    max: 16384
+    step: 1
+    default: "4096"
+    editable: true
+  - { name: game_name, group: World, label: Game name, description: Also seeds decoration placement (trees etc) in a generated world., default: "My Game", editable: true }
+  # V3.0 ("Dead Hot Summer", stable 2026-06-29) replaced thirty separate
+  # difficulty/zombie/loot/airdrop properties with one opaque generated code
+  # covering all of them at once -- confirmed live, the hard way: every one
+  # of those old properties now aborts boot with "Unknown config option"
+  # rather than being ignored, so keeping them declared as seed variables
+  # would mean every one of this seed's own defaults broke the game it was
+  # supposed to configure. There is no way to compose or validate a
+  # SandboxCode from here -- it is an opaque string generated by the game's
+  # own Sandbox Options menu (or https://7daystodie.com/sandboxcode, TFP's
+  # own encoder/decoder) and pasted in whole. The default below is the
+  # documented equivalent of the pre-V3.0 "Adventurer" preset.
+  - name: sandbox_code
+    group: World
+    label: Sandbox code
+    description: >-
+      Encodes difficulty, zombie behavior, blood moons, and loot in one
+      string. Generate one in-game (Options > Sandbox) or at
+      7daystodie.com/sandboxcode, then paste it here -- this seed cannot
+      build one for you.
+    default: "AAAJABJACJADJARFBNC"
+    editable: true
+
+  # ---- Zombies --------------------------------------------------------------
+  - { name: max_spawned_zombies, group: Zombies, label: Max spawned zombies, description: "Above ~80 can cost real framerate on the node.", type: number, min: 0, step: 1, default: "60", editable: true }
+  - { name: max_spawned_animals, group: Zombies, label: Max spawned animals, default: "50", type: number, min: 0, step: 1, editable: true }
+
+  # ---- PvP ---------------------------------------------------------
+  # This group used to also hold loot abundance/respawn, air drops, and
+  # drop-on-death/quit -- all moved into sandbox_code above along with
+  # everything else V3.0 folded in, leaving player killing as the one
+  # control still addressable on its own.
+  - name: player_killing_mode
+    group: PvP
+    label: Player killing
+    type: select
+    default: "3"
+    editable: true
+    options:
+      - { value: "0", label: No killing }
+      - { value: "1", label: Allies only }
+      - { value: "2", label: Strangers only }
+      - { value: "3", label: Everyone }
+
+  # ---- Land claims ------------------------------------------------------------
+  - { name: land_claim_expiry_time, group: "Land claims", label: "Claim expiry, offline (days)", type: number, min: 0, step: 1, default: "3", editable: true }
+
+  # ---- Remote access ------------------------------------------------------
+  - name: telnet_enabled
+    group: Remote access
+    label: Telnet console
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  # A blank password is not "no security" here -- the game itself falls back
+  # to binding telnet on loopback only when none is set (confirmed in the
+  # reference config's own comment), the same "a password is what actually
+  # opens the port" behaviour ARK's own RCON already has in this project.
+  - name: telnet_password
+    group: Remote access
+    label: Telnet password
+    description: Blank keeps telnet loopback-only even though its port is published.
+    type: password
+    default: ""
+    editable: true
+  # Matches the reference config's own default. Not verified end to end in
+  # this environment (see the architectures comment above) -- if a real
+  # server fails to start or a client can't authenticate, this is the first
+  # thing to try disabling, the same way ARK's own seed treats BattlEye.
+  - name: eac_enabled
+    group: Remote access
+    label: EasyAntiCheat
+    description: Turn off only if a real server shows EAC interfering.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  # This seed's own top-of-file comment previously concluded the web admin
+  # panel was "gone from the build entirely, not merely renamed" -- true of
+  # the old ControlPanelEnabled/Port/Password properties (confirmed live:
+  # they abort boot with "Unknown config option"), but not of the feature
+  # itself. The Valve Developer Wiki's own serverconfig.xml reference table,
+  # and Xylona's independently maintained 7 Days to Die game definition (a
+  # real, current game panel), both instead list WebDashboardEnabled,
+  # WebDashboardPort, WebDashboardUrl and EnableMapRendering as the current
+  # names: a rename, not a removal. Not re-verified against a real boot in
+  # this environment (see the architectures comment above), so the template
+  # only emits these properties when this is turned on, and defaults off --
+  # if the new names are themselves wrong, only an operator who turns this
+  # on pays for it, and the fix is the same toggle that broke it.
+  - name: web_dashboard_enabled
+    group: Remote access
+    label: Web dashboard
+    description: >-
+      A browser-based admin panel. If the server refuses to boot with
+      "Unknown config option: WebDashboardEnabled" after turning this on,
+      the property has been renamed or removed again -- turn it back off.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: enable_map_rendering
+    group: Remote access
+    label: Render map for dashboard
+    description: Only useful with the web dashboard enabled above.
+    type: bool
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+
+groups:
+  - name: Server
+    description: Identity, access, and player limits.
+  - name: Networking
+    description: Ports, transfer limits, and crossplay.
+  - name: World
+    description: Which world loads, and its sandbox ruleset.
+  - name: Zombies
+    collapsed: true
+  - name: PvP
+    collapsed: true
+  - name: "Land claims"
+    collapsed: true
+  - name: Remote access
+    description: Telnet and anti-cheat.
+    collapsed: true
+
+# V3.0 folded thirty difficulty/zombie/loot/airdrop properties into the
+# single sandbox_code variable above; these are documentation of that intent
+# (drop is already the default for a name a seed no longer declares) so an
+# operator's own stored choice for, say, loot_abundance is discarded rather
+# than lingering as a harmless-looking orphan in the stored row.
+migrations:
+  - drop: game_difficulty
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: day_night_length
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: day_light_length
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: zombie_move
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: zombie_move_night
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: zombie_feral_move
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: zombie_bm_move
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: enemy_spawn_mode
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: enemy_difficulty
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: blood_moon_enemy_count
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: loot_abundance
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: loot_respawn_days
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: air_drop_frequency
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: drop_on_death
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+  - drop: drop_on_quit
+    note: Folded into sandbox_code (V3.0 SandboxCode migration).
+
+# mode: immediate, not a guess at mode: port -- the game's primary port is
+# UDP, and mode: port dials TCP, so it could never succeed here regardless of
+# how confident a guess was (Palworld's own seed history records exactly
+# this mistake and its symptom: every start sits in `starting` for the full
+# timeout, then reports running anyway, indistinguishable from a real
+# failure). mode: log needs a pattern copied from real output, and nothing
+# here has been booted (see the architectures comment above) -- so
+# immediate is the honest choice, not a placeholder to come back to lightly.
+ready:
+  mode: immediate
+
+# Confirmed live, watching a real connect/disconnect cycle end to end. The
+# game also broadcasts a plain "GMSG: Player 'Arasoi' joined/left the game"
+# for both events, the same shape this project's other seeds match on
+# (join/leave), but join uses PlayerSpawnedInWorld instead, since that line
+# is the only one that carries a Steam ID (ADR-119's optional field)
+# alongside the name in the same line -- a join event's pattern is one
+# regex against one line, so capturing both meant picking the line that has
+# both rather than the simpler GMSG one. Scoped to "reason: JoinMultiplayer"
+# specifically: PlayerSpawnedInWorld also fires on an ordinary respawn after
+# death, with a different reason value each time (confirmed by construction
+# -- the field is literally named "reason" -- not by killing a real
+# character to watch one), and matching those as new joins would inflate
+# the player list every time someone dies. The steamid group sits inside an
+# alternation so a console/EOS-only player (no PltfmId='Steam_...' prefix)
+# still matches and still gets a player name, just no steamid -- verified
+# against a constructed non-Steam PltfmId line, since this seed has no way
+# to test a real console client. None of the auth lines that fire earlier
+# in the sequence work for this ([Auth] PlatformAuth authorization
+# successful, etc. -- fire just as readily for a connection this build goes
+# on to reject, confirmed the hard way this same session watching that
+# exact failure mode before the steamclient.so fix landed) -- join has to
+# be the point where the game itself has decided the connection is real.
+logs:
+  values:
+    # The game's own version, shown as the server's game version (ADR-198).
+    # Seen live 2026-11-16: "INF Version: V 3.4.0 (b10) Compatibility Version: V 3.4.0, Build: LinuxServer 64 Bit".
+    - { name: game_version, label: "Game version", version: true, pattern: 'INF Version: V ([0-9][0-9.]*(?: \(b[0-9]+\))?)' }
+  events:
+    - event: join
+      pattern: "PlayerSpawnedInWorld \\(reason: JoinMultiplayer.*PltfmId='(?:Steam_(?P<steamid>\\d+)|[^']*)'.*PlayerName='(?P<player>[^']+)'"
+    - { event: leave, pattern: "GMSG: Player '(?P<player>[^']+)' left the game" }
+
+# No console-command stop. This project's StopSpec writes a command to the
+# primary container's stdin, but 7 Days to Die's own graceful shutdown is
+# issued over its *telnet* interface (`shutdown`, sent after the login
+# banner) -- confirmed by reading LinuxGSM's actual implementation
+# (fn_stop_graceful_sdtd in lgsm/modules/command_stop.sh), which is a bespoke
+# telnet client for exactly this game rather than the plain
+# `fn_stop_graceful_cmd "shutdown" 30` (a tmux send-keys into stdin) LinuxGSM
+# uses for most other games. That a game needed its own telnet-based stop
+# function, when typing the same word into its stdin was already the default
+# for everything else LinuxGSM supports, is real evidence that this
+# console's stdin does not accept it. This project has no mechanism to send
+# a command over telnet instead, so this falls back to a plain signal --
+# unverified for save-on-exit behaviour, and the first thing to investigate
+# if a stopped server is ever found to have lost world state.
+stop:
+  timeout: 30s
+  then: SIGTERM
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include_root: true

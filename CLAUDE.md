@@ -21,6 +21,8 @@ suggestions.
 - @docs/decisions.md — Decision records (`SEED-NNN`)
 - @docs/seed-spec.md — **The seed format (schema 3). Mirrored — do not edit here**
 - @docs/seed-fields.md — Generated field index. **Mirrored — do not edit here**
+- @docs/catalog-steam.md — Candidate Steam-distributed games worth a seed, tiered by Linux confidence
+- @docs/catalog-nonsteam.md — Candidate direct-download/installer games worth a seed, tiered similarly
 
 ## Key Rules
 

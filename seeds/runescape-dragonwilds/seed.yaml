@@ -1,0 +1,492 @@
+id: runescape-dragonwilds
+schema: 3
+name: "RuneScape: Dragonwilds"
+description: >-
+  Jagex's co-op survival crafting game set in Gielinor. A dedicated server hosts
+  one persistent world for up to six players. Runs Jagex's Windows dedicated
+  server under Proton. Needs about 2 GB of RAM plus 1 GB per player, and
+  outbound internet: matchmaking and the server browser run through Epic Online
+  Services.
+version: "0.7.0"
+
+# The base game's Steam listing, distinct from 4019830, the dedicated server
+# tool installed below -- the same split Palworld makes. No art yet.
+branding:
+  steam_app_id: 1374490
+
+# amd64 only. The architecture here is the *node's*: the Windows server runs
+# under Proton, and GE-Proton is x86 Wine with no arm64 build. (The Linux depot
+# this seed used to install was osarch 64 with no arm64 build either, checked
+# against `app_info_print` on a real node, 2026-10-09.)
+architectures: [amd64]
+
+install:
+  # One world per server, so nothing is gained by sharing a 4.3 GB depot.
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      # The *dedicated server* tool (type "Tool", free, anonymous login), not
+      # the game (1374490).
+      #
+      # WHY WINDOWS. `app_info_print 4019830` lists exactly two depots, both
+      # public: 4019831 (oslist windows) and 3501791 (oslist linux). This seed
+      # used to install the Linux one under the project's default linux/64
+      # platform pin, and ran natively. As of 2026-11-15 anonymous login is
+      # refused that depot's manifest. SteamCMD's content_log, on a production
+      # node:
+      #
+      #   CDepotDownloadMgr::BYldRequestDepotManifest(App: 4019830,
+      #     Depot: 3501791, ...): Failed to get manifest request code,
+      #     'Access Denied'
+      #
+      # The console only says `state is 0x6 after update job` on an existing
+      # install, and a fresh linux install says `Missing configuration` --
+      # neither names the depot or the refusal. Every update since has failed,
+      # leaving the installed server stuck on build 25811348. 3501791 is
+      # numbered outside the app's own 4019830+ range, so it is very likely a
+      # depot shared from another Jagex app and gated by that app's ownership --
+      # inferred from the number, not confirmed.
+      #
+      # A fresh anonymous install forcing windows succeeded on the same node the
+      # same day: `Success! App '4019830' fully installed.`, StateFlags 4,
+      # buildid 26574459, 1.48 GB downloaded, 4.3 GB on disk. Top level:
+      # Engine/, RSDragonwilds/, RSDragonwildsServer.exe, steamapps/ and
+      # Manifest_*_Win64.txt files.
+      #
+      # osarch is left at the project's default of 64, which is what that
+      # successful install used.
+      #
+      # A first install attempt made right after Jagex pushed a build once
+      # failed all three SteamCMD attempts with a bare `Missing configuration`
+      # and succeeded on a manual retry minutes later (Linux depot, 2026-10).
+      # That one was transient; the Access Denied above is not -- check the
+      # content_log before assuming a retry covers it.
+      app_id: 4019830
+      platform: windows
+    # No chmod step any more. The Linux binary needed +x set while the install
+    # was still writable; a Windows .exe run through Proton is opened by Wine,
+    # which needs only read access.
+
+server:
+  writable_paths:
+    # Everything the game writes: saves, logs, and its Config tree. Unchanged
+    # from the Linux build, so an existing server's world stays where it was.
+    #
+    # Unreal's save files are its own serialisation format rather than anything
+    # platform-specific, so a world written by the Linux build should load
+    # unchanged in the Windows one. Expected, NOT verified for this game -- see
+    # the list at the foot of this file.
+    - { from: saved, to: /game/RSDragonwilds/Saved }
+    # HOME for the container's user. Everything Proton keeps per server lives
+    # here -- the Wine prefix (compatdata), the native steamclient.so ygg-proton
+    # stages into .steam/sdk64, and Proton's own scratch state -- so it must be
+    # per-server and writable, never part of the read-only install.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    # base-steamcmd-proton: GE-Proton plus SteamCMD, nothing game-specific baked
+    # in. Named symbolically so it follows the control plane's own channel.
+    image: { base: steamcmd-proton }
+    # The shipping executable, not the top-level RSDragonwildsServer.exe. That
+    # one is Unreal's launcher stub, which spawns the shipping exe and exits;
+    # ygg-proton waits on the process it was given (waitforexitandrun), so the
+    # container would go down with the stub and take the real server with it --
+    # the same trap Empyrion's launcher was. ARK Survival Ascended launches its
+    # shipping exe directly for the same reason.
+    #
+    # The path is observed: a fresh `platform: windows` install of buildid
+    # 26574459 holds exactly three executables --
+    # RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe (this),
+    # the RSDragonwildsServer.exe launcher stub at the top level, and Sentry's
+    # RSDragonwilds/Plugins/Developer/Sentry/Binaries/Win64/crashpad_handler.exe.
+    # The last is worth knowing about: ARK Survival Ascended's Crashpad stalled
+    # its start under one Proton launch path (not the one ygg-proton uses), so a
+    # server that loads and then sits silent is the symptom to compare against.
+    #
+    # Arguments carried over from the Linux build, where all were verified:
+    #
+    #   * `RSDragonwilds` -- the Unreal project name -- first. Jagex's own
+    #     launcher script passed it to the shipping binary, and dropping it is
+    #     the one way to get this wrong quietly.
+    #   * -log asks the engine for its log output.
+    #   * -Port and -BeaconPort are the allocated ports, never the declared
+    #     defaults. On Linux the log read `IpNetDriver listening on port
+    #     <allocated>` for the first and `World settings beacon listening on
+    #     port <allocated>` for the second. Without -BeaconPort the game bound a
+    #     fixed 8888 whatever it was told, so a second server on one node would
+    #     claim the same host port. That the Windows build honours both the same
+    #     way is expected (same game code) but not yet seen.
+    #
+    # Wrapped in a shell for three things, in order:
+    #
+    # 1. CARRY THE SERVER'S IDENTITY OVER FROM THE LINUX BUILD. The game writes
+    #    a ServerGuid into DedicatedServer.ini on first run, and that GUID is
+    #    the server's identity (verified unchanged across rebuilds on Linux). The
+    #    file's directory is per platform -- Config/LinuxServer before,
+    #    Config/WindowsServer now -- so without this an existing server rebuilt
+    #    onto this version would start with no GUID and the game would mint a
+    #    new one: a different server, as far as matchmaking is concerned.
+    #
+    #    It cannot be done declaratively. Install steps only write into the
+    #    install, never a server's own directory, and a config file entry renders
+    #    a template rather than copying another file. And the condition cannot
+    #    be "the Windows file does not exist": `manage: patch` below runs at
+    #    every rebuild, *before* the container starts, and with no file to read
+    #    it creates one holding only the declared keys. So the test is "the
+    #    Windows file has no ServerGuid yet, and the Linux one does". The game
+    #    writes its GUID into the Windows file on its first run, after which
+    #    this never fires again. A brand-new server has no Linux file and is
+    #    never touched.
+    #
+    #    Copying the whole Linux file over the freshly patched one is safe: the
+    #    Linux file holds the same settings, patched in from the same stored
+    #    values at that server's last rebuild, and the next rebuild patches the
+    #    Windows file again anyway. The Linux file is left where it is, unread.
+    #
+    # 2. FOLLOW THE LOG FILE. ARK under this same image writes nothing to stdout
+    #    -- everything goes to its log file -- and readiness, the join code and
+    #    the player list all match on what the container prints. So the log is
+    #    tailed onto stdout. Saved/Logs/RSDragonwilds.log is Unreal's
+    #    <project>.log convention, INFERRED and not observed for this game. If
+    #    Wine also passes the engine's -log output to stdout, every line appears
+    #    twice; the rules below tolerate that (the join code was already printed
+    #    twice per start on Linux).
+    #
+    #    -n 0, not ARK's -n +1: the previous run's log is still in place when
+    #    this starts, and replaying it would match the previous run's readiness
+    #    line and report its join code -- a code for a session that no longer
+    #    exists. Unreal renames the old log aside and creates a new one at
+    #    start; tail -F treats that as a new file and reads it from the top, so
+    #    nothing of this run is skipped. It is a background child, so the
+    #    container still exits when the server does.
+    #
+    # 3. exec ygg-proton, so the server is the container's main process.
+    command: >-
+      sh -c 'cfg=/game/RSDragonwilds/Saved/Config;
+      mkdir -p $cfg/WindowsServer /game/RSDragonwilds/Saved/Logs;
+      if grep -qs ServerGuid $cfg/LinuxServer/DedicatedServer.ini && ! grep -qs ServerGuid $cfg/WindowsServer/DedicatedServer.ini;
+      then cp $cfg/LinuxServer/DedicatedServer.ini $cfg/WindowsServer/DedicatedServer.ini;
+      echo "carried ServerGuid over from Config/LinuxServer"; fi;
+      tail -F -n 0 /game/RSDragonwilds/Saved/Logs/RSDragonwilds.log 2>/dev/null &
+      exec ygg-proton /game/RSDragonwilds/Binaries/Win64/RSDragonwildsServer-Win64-Shipping.exe
+      RSDragonwilds -log -Port={{.Ports.game}} -BeaconPort={{.Ports.beacon}}'
+    workdir: /game
+    env:
+      HOME: /home/steam
+      # The image always takes ownership of HOME; this is the seed's own writable
+      # mount, which also has to belong to the container's user. Unreal fails
+      # softly without it -- unable to create its log file it falls back to
+      # Wine's stubbed Windows event log and dies with nothing to read. It also
+      # covers Config/LinuxServer, which an older Linux-build container wrote,
+      # so the carry-over above can read it.
+      #
+      # No YGG_DROP_PRIVS: that was base-steamcmd's opt-in. This image always
+      # drops from root to its own user before running anything.
+      YGG_PROTON_CHOWN_DIRS: "/game/RSDragonwilds/Saved"
+      # The Wine prefix, per server under HOME. Must end in the Steam app id:
+      # Proton's protonfixes parses the id back out of this path with a regex,
+      # and ygg-proton refuses one that does not.
+      STEAM_COMPAT_DATA_PATH: /home/steam/compatdata/4019830
+      STEAM_COMPAT_CLIENT_INSTALL_PATH: /home/steam/steam
+      # Deliberately NOT set, unlike ARK and Empyrion, because nothing here has
+      # shown a need for them yet:
+      #
+      #   * WINEDLLOVERRIDES=steamclient64=b;steamclient=b. Both of those depots
+      #     ship their own steamclient64.dll, which wins on Windows' DLL search
+      #     order and then blocks forever waiting for a Steam client. Whether
+      #     this depot ships one was not checked. The symptom is a server that
+      #     loads, holds memory, uses no CPU, writes no log and never opens a
+      #     port -- if that is what happens, this override is the first fix to
+      #     try.
+      #   * PROTON_USE_WINED3D. ARK's server crashed in VKD3D's D3D12 path. This
+      #     is a dedicated Server target, which should create no renderer at
+      #     all; add it if a crash names d3d12 or dxgi.
+    ports:
+      # Both UDP, unchanged from the Linux build. The game port is per Jagex's
+      # own setup page and the engine log.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      # The "world settings beacon", a second socket the game opens itself:
+      # `LogDomGameMode: World settings beacon listening on port 8888`. A
+      # community image states its internal and external numbers must match or
+      # players are kicked to the title screen, which is exactly what a port
+      # published to itself gives. A real client was seen contacting it before
+      # connecting (Linux build, 2026-10-09).
+      - { name: beacon, protocol: udp, default: 8888, kind: other }
+
+config:
+  files:
+    # WindowsServer, because this is now the Windows build. Unreal names a
+    # dedicated server's config directory <platform>Server: the Linux build
+    # created Config/LinuxServer/DedicatedServer.ini on a real node (not
+    # "Config/Linux" as Jagex's own setup page says), and ARK's Windows server
+    # under this same image uses Config/WindowsServer. That this game's Windows
+    # build does the same is INFERRED from that convention, not yet observed.
+    # If it is wrong, every setting below silently stops applying -- the game
+    # would read a different file -- and the ServerGuid carry-over in the
+    # command above would never see the game's own GUID land.
+    #
+    # The old Config/LinuxServer file stays on disk (and in backups) after the
+    # move. Nothing reads it except that one-time carry-over.
+    #
+    # Patched rather than rewritten. The game owns this file: it writes a
+    # ServerGuid into it on first run, which identifies the server and must
+    # survive every rebuild (verified on the Linux build: unchanged across
+    # rebuilds), and it rewrites the file at every start, dropping any key it
+    # does not recognise.
+    # `patch` sets only the keys named by the settings below.
+    - path: saved/Config/WindowsServer/DedicatedServer.ini
+      parser: ini
+      manage: patch
+      importable: true
+
+settings:
+  - name: owner_id
+    type: text
+    label: Owner ID
+    description: >-
+      The Player ID of the person who owns this server -- the one shown at the
+      bottom of the in-game Settings menu, not a Steam ID. The owner can ban and
+      unban anyone, online or offline. The server will not continue without it:
+      "The [OwnerId] for this server is empty. An OwnerId is required for normal
+      Server operation."
+    group: Server
+    required: true
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/OwnerId" }
+
+  - name: server_name
+    type: text
+    label: Server name
+    description: >-
+      The name shown in the server browser. Observed once: a 17-character name
+      was advertised in the matchmaking session as its first 16 characters,
+      while the config kept the full name.
+    group: Server
+    default: Dragonwilds Server
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/ServerName" }
+
+  - name: default_world_name
+    type: text
+    label: World name
+    description: >-
+      The world created on first start. Players find it by searching for this
+      name, case-sensitively. Changing it later does not rename a world that
+      already exists -- the server loads the newest save it finds.
+    group: Server
+    default: MyWorld
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/DefaultWorldName" }
+
+  - name: platform_policy
+    type: select
+    label: Allowed platforms
+    description: >-
+      Which players may join. Crossplay allows every platform; the others
+      restrict the server to one. The server refuses to start on any other value,
+      which is why this is a fixed list: it prints "The [PlatformPolicy] value
+      [Bogus] is invalid. Valid values: Crossplay, PC, PlayStation, Xbox,
+      Nintendo."
+    group: Server
+    default: Crossplay
+    options:
+      - { value: Crossplay, label: Crossplay (all platforms) }
+      - { value: PC, label: PC only }
+      - { value: PlayStation, label: PlayStation only }
+      - { value: Xbox, label: Xbox only }
+      - { value: Nintendo, label: Nintendo only }
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/PlatformPolicy" }
+
+  - name: world_password
+    type: password
+    label: World password
+    description: >-
+      Players must enter this to join. Leave empty for an open world. Overrides
+      any password stored in the world itself.
+    group: Access
+    default: ""
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/WorldPassword" }
+
+  - name: allow_crash_dumps
+    type: bool
+    label: Send crash dumps to Jagex
+    description: >-
+      Lets the server upload crash reports to the developer. The game's own
+      default is on.
+    group: Privacy
+    default: "True"
+    true_value: "True"
+    false_value: "False"
+    to: { file: saved/Config/WindowsServer/DedicatedServer.ini, key: "/Script/Dominion.DedicatedServerSettings/bAllowSendingCrashDumps" }
+
+ready:
+  # Verified on the Linux build on two real starts (and the same line on a third
+  # and fourth): the matchmaking session finishes starting about eight seconds
+  # after the process does. It is printed once per start, after the world has
+  # loaded and the Epic session exists, so it means players can actually find
+  # the server -- not merely that the process is up. The logs carry it twice,
+  # once from each of two subsystems; either matches.
+  #
+  # Kept for the Windows build because it is the game's own log category
+  # (LogDomMatcherSession is Jagex's code, not the platform layer), so the same
+  # binary logic prints it on either platform. What is new and unverified is how
+  # it reaches the container's output: through the tail of the log file in the
+  # command above. If that file name is wrong, nothing ever matches and every
+  # start waits out the timeout before being reported running with a reason --
+  # slow, not stranded.
+  #
+  # 300s rather than the Linux 180s: the first start under Proton also builds
+  # the Wine prefix before the game runs at all.
+  mode: log
+  pattern: "LogDomMatcherSession: START SESSION - Success"
+  timeout: 300s
+
+# No crash block. A wrong crash pattern stops a healthy server, and nothing here
+# has been checked against a real crash. The one fatal condition seen -- an empty
+# OwnerId -- leaves the process running and prints "Dedicated Server cannot
+# continue due to DedicatedServer.ini configuration", which is also the reason
+# owner_id is required.
+
+stop:
+  # SIGTERM, with no console command: the server reads none. Verified on the
+  # LINUX build -- SIGTERM logs `Draining save requests before world teardown`,
+  # deletes the Epic session, and exits with code 143 within about a second, so
+  # there it was the graceful path rather than a fallback. The timeout is
+  # generous for a large world.
+  #
+  # NOT VERIFIED UNDER PROTON, and the most important thing to check live. A
+  # Windows process has no SIGTERM; the signal reaches Proton's own launcher
+  # (ygg-proton execs it), and whether it is turned into a shutdown the game
+  # handles -- rather than Wine simply being torn down mid-write -- is unknown.
+  # Look for the draining line above in the log after a stop. If it is missing,
+  # stopping this server can lose whatever the game had not yet saved.
+  timeout: 60s
+  then: SIGTERM
+
+logs:
+  # Every rule here was written against the Linux build's output, and every line
+  # it matches is the game's own log category rather than the platform's, so
+  # they carry over -- arriving now through the log-file tail in the command.
+  # Re-check them against the Windows build's first real log.
+  values:
+    # Printed twice per start, identically, once when the session is created and
+    # once when it is finalised:
+    #
+    #   LogNetSessionSettings: Setting ["JoinCode"] written with key[xz] value[FBHQ-AK2G]
+    #
+    # Four hex-ish characters, a hyphen, four more. It is NEW ON EVERY START
+    # (FR3G-1T5T, then FBHQ-AK2G on the next), so it is only ever the current
+    # session's. Whether players can type it in-game is not yet confirmed.
+    - { name: join_code, label: "Join code", fleet: true, pattern: 'Setting \["JoinCode"\] written with key\[[a-z]+\] value\[([A-Z0-9]{4}-[A-Z0-9]{4})\]' }
+
+    # The build changelist, shown as the server's game version (ADR-198): the
+    # game prints no other version, and a client must be on the same build.
+    # Seen live 2026-11-16: "LogInit: Build: ++dominion+live-CL-260223".
+    - { name: game_version, label: "Game build", version: true, pattern: 'LogInit: Build: \S*?(CL-[0-9]+)' }
+
+  events:
+    # Both lines are copied from a real session -- one player joined, played and
+    # left -- and are the session-level pair, so they fire for every way of
+    # arriving and leaving:
+    #
+    #   LogDomMatcherSession: Player ADDED to session [<player id>]-[<name>]
+    #   LogDomMatcherSession: Player Removed from session [<player id>]-[<name>]
+    #
+    # The id is a stable 32-hex Player ID (the same kind of value owner_id takes),
+    # so the leave rule correlates on it rather than on the name: it is unique,
+    # where a name need not be. The name is greedy to the last `]` so a name that
+    # itself contains one is kept whole (checked against a synthetic line; no
+    # such player was seen).
+    #
+    # Deliberately not `Join succeeded: <name>` or `ClientRequestDisconnect`,
+    # which are also real. The first has no id, and the second fires only for a
+    # graceful quit -- a dropped connection would leave the player listed forever.
+    # Only graceful leaves were observed; that the Removed line also covers a
+    # timeout or a kick is inferred from where it is logged, not seen.
+    - { event: join,  pattern: 'LogDomMatcherSession: Player ADDED to session \[(?P<id>[0-9a-f]{32})\]-\[(?P<player>.+)\]' }
+    - { event: leave, pattern: 'LogDomMatcherSession: Player Removed from session \[(?P<id>[0-9a-f]{32})\]' }
+
+connect:
+  # Verified: a real client joined by typing this address into the Direct tab of
+  # the Worlds screen, on the allocated port. The port has to be typed -- the
+  # client assumes 7777 without one. No `uri`: there is no scheme a client is
+  # known to honour.
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  # The world, the config the game and this seed share, and the logs.
+  include: [saved]
+
+groups:
+  - name: Server
+    description: Identity, ownership and who may play.
+  - name: Access
+    description: Joining a world.
+  - name: Privacy
+    description: What the server shares.
+    collapsed: true
+
+# VERIFIED WITH A REAL CLIENT, ON THE LINUX BUILD (2026-10-09): a player
+# connected by typing <node address>:<allocated game port> into the Direct tab,
+# played, and left; the world saved on disconnect. The beacon port was also
+# contacted by the client before it connected, so it is used and worth
+# publishing.
+#
+# VERIFIED FOR THE WINDOWS BUILD (2026-11-15), live on a real node, on a newly
+# created server:
+#   - the install: an anonymous `platform: windows` install of 4019830 succeeds
+#     (buildid 26574459, 4.6 GB on disk). The first attempt right after creation
+#     failed `Missing configuration` and the retry minutes later succeeded --
+#     the same transient the Linux build showed
+#   - the shipping executable's path, from a listing of the depot's .exe files
+#   - it boots under Proton with no WINEDLLOVERRIDES and no PROTON_USE_WINED3D:
+#     the engine loads, Epic Online Services connects, the matchmaking session
+#     is created and heartbeats, and the world simulation runs
+#   - Saved/Config/WindowsServer is the directory the game reads: with Owner ID
+#     unset it refused to run, quoting "The [OwnerId] for this server is
+#     empty"; once Owner ID was set through this seed's setting, it ran
+#   - the log file name and forwarding: readiness matched (the server reached
+#     running) and the join code was extracted from Saved/Logs/RSDragonwilds.log
+#   - stop and start from the control plane, with the world saved across them
+#     (operator-verified) -- so SIGTERM through ygg-proton reaches the game in
+#     time to save, the data-loss risk this port carried
+#   - a real client joined by the in-game join code, and the server was found
+#     on its allocated ports (2101 game, 2102 beacon on that node) rather than
+#     the 7777/8888 defaults -- so the Windows build honours -Port and
+#     -BeaconPort exactly as the Linux build did (operator-verified)
+#
+# NOT VERIFIED -- THE WINDOWS/PROTON PORT:
+#   - whether the engine also writes to stdout under Wine (lines would appear
+#     twice); none were seen doubled in the console
+#   - the ServerGuid carry-over on a real existing server: the console prints
+#     "carried ServerGuid over from Config/LinuxServer" once, and the GUID in
+#     Config/WindowsServer/DedicatedServer.ini afterwards matches the Linux one.
+#     Where in the file the game writes ServerGuid was never recorded; the
+#     carry-over copies the whole file, so it does not depend on that
+#   - that a world saved by the Linux build loads in the Windows build. Unreal
+#     save files are engine-serialised rather than platform-specific, so it is
+#     expected to, but this game has not been seen doing it
+#
+# NOT VERIFIED -- CARRIED OVER FROM THE LINUX BUILD:
+#   - that the server appears when a client searches the Public tab by world name.
+#     It did not show up when first tried, and the cause is not established: the
+#     matchmaking session is created and advertised (`AdvertiseSession[1]`,
+#     `ReadyToJoin` = 1), so the leading suspects are a typed name that is not the
+#     exact, case-sensitive WORLD name, and a client/server build mismatch
+#   - whether players can use the Join code in-game
+#   - that the Removed line fires for a dropped connection, a timeout or a kick
+#   - that a platform-restricted policy actually keeps other platforms out. Every
+#     value was accepted by the server and changed the session's PlayerPlatform
+#     attribute (Crossplay is 128, PC is 2); nothing connected to test it
+#   - the admin password. Jagex's wiki and setup page document an AdminPassword
+#     key, but the game strips it from DedicatedServer.ini at startup (a
+#     non-empty value written before boot was gone after it), so it is not
+#     exposed. How in-game admin access is meant to be configured is unknown.
+#   - MaxPlayers: Jagex fixes the cap at 6 and a community image overrides it
+#     with `-ini:Game:[/Script/Engine.GameSession]:MaxPlayers=N`; neither is
+#     tried here.
+#   - the "LAN probe" socket on a fixed UDP 45453 that the game also opens. It
+#     is not published, so it is invisible outside the container, and nothing
+#     here depends on it.

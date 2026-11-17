@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<ServerSettings>
+  <property name="ServerPort" value="{{.Ports.game}}"/>
+  <property name="ServerVisibility" value="{{.Vars.server_visibility}}"/>
+  <property name="ServerName" value="{{.Vars.server_name}}"/>
+  <property name="ServerPassword" value="{{.Vars.server_password}}"/>
+  <property name="ServerMaxPlayerCount" value="{{.Vars.max_players}}"/>
+  <property name="ServerReservedSlots" value="0"/>
+  <property name="ServerReservedSlotsPermission" value="100"/>
+  <property name="ServerAdminSlots" value="0"/>
+  <property name="ServerAdminSlotsPermission" value="0"/>
+
+  <property name="ServerDescription" value="{{.Vars.server_description}}"/>
+  <property name="ServerWebsiteURL" value="{{.Vars.server_website_url}}"/>
+  <property name="ServerLoginConfirmationText" value="{{.Vars.server_login_confirmation_text}}"/>
+  <!-- Added following a review against the Valve Developer Wiki's own
+       serverconfig.xml reference: this file previously declared neither of
+       these, so every server ran under the game's own internal defaults
+       (NorthAmericaEast / English) with no way for an operator to say
+       otherwise, and a player's server browser can filter on both. -->
+  <property name="Region" value="{{.Vars.region}}"/>
+  <property name="Language" value="{{.Vars.language}}"/>
+  <!-- A dedicated server with correctly forwarded ports doesn't need Steam's
+       own P2P relay layer; the reference config this is built from
+       disables it for exactly that reason. -->
+  <property name="ServerDisabledNetworkProtocols" value="SteamNetworking"/>
+  <property name="ServerMaxWorldTransferSpeedKiBs" value="{{.Vars.server_max_world_transfer_speed_kibs}}"/>
+
+  <property name="GameWorld" value="{{.Vars.game_world}}"/>
+  <property name="WorldGenSeed" value="{{.Vars.world_gen_seed}}"/>
+  <property name="WorldGenSize" value="{{.Vars.world_gen_size}}"/>
+  <property name="GameName" value="{{.Vars.game_name}}"/>
+  <property name="GameMode" value="GameModeSurvival"/>
+
+  <!-- V3.0 ("Dead Hot Summer", stable 2026-06-29) removed thirty separate
+       difficulty/zombie-speed/blood-moon/loot/airdrop properties, among
+       them GameDifficulty, DayNightLength, DayLightLength, every ZombieMove
+       variant, EnemySpawnMode/Difficulty, BloodMoonEnemyCount, LootAbundance/
+       RespawnDays, AirDropFrequency/Marker, and DropOnDeath/Quit, and
+       folded all of it into this one generated code (confirmed live: each
+       one now aborts boot with "Unknown config option" rather than being
+       ignored, not merely deprecated). See the seed comment above
+       sandbox_code for where to generate one. -->
+  <property name="SandboxCode" value="{{.Vars.sandbox_code}}"/>
+  <property name="BuildCreate" value="false"/>
+  <property name="PlayerKillingMode" value="{{.Vars.player_killing_mode}}"/>
+  <property name="PersistentPlayerProfiles" value="false"/>
+
+  <property name="PlayerSafeZoneLevel" value="5"/>
+  <property name="PlayerSafeZoneHours" value="5"/>
+
+  <!-- The old web control panel properties (ControlPanelEnabled/Port/
+       Password) are not recognized against the current dedicated server
+       build; they abort startup with "Unknown config option" the instant
+       they are present. Confirmed live against a real fresh SteamCMD depot,
+       and matches other operators hitting the same abort on current builds
+       (GameServerManagers/LinuxGSM#4291). This seed originally read that as
+       the whole feature being gone; the Valve Developer Wiki's own
+       serverconfig.xml reference table, and Xylona's independently
+       maintained 7 Days to Die game definition (a real, current game
+       panel), both instead list WebDashboardEnabled, WebDashboardPort,
+       WebDashboardUrl and EnableMapRendering as the current names: a
+       rename, not a removal. Not re-verified against a real boot in this
+       environment, so these are only emitted when turned on below, and
+       default off; if the new names are themselves wrong too, only an
+       operator who enables this pays for it, with the same toggle as the
+       fix. Telnet remains the always-on remote admin interface this seed
+       exposes, below. -->
+  {{if eq .Vars.web_dashboard_enabled "true"}}
+  <property name="WebDashboardEnabled" value="true"/>
+  <property name="WebDashboardPort" value="{{.Ports.webdash}}"/>
+  <property name="WebDashboardUrl" value=""/>
+  <property name="EnableMapRendering" value="{{.Vars.enable_map_rendering}}"/>
+  {{end}}
+
+  <property name="TelnetEnabled" value="{{.Vars.telnet_enabled}}"/>
+  <property name="TelnetPort" value="{{.Ports.telnet}}"/>
+  <property name="TelnetPassword" value="{{.Vars.telnet_password}}"/>
+  <property name="TelnetFailedLoginLimit" value="10"/>
+  <property name="TelnetFailedLoginsBlocktime" value="10"/>
+
+  <!-- Windows-only console window; meaningless under -nographics on Linux. -->
+  <property name="TerminalWindowEnabled" value="false"/>
+
+  <property name="AdminFileName" value="serveradmin.xml"/>
+
+  <!-- BlockDurabilityModifier is gone the same way as the properties above
+       (confirmed live, "Unknown config option"), with no named successor
+       in the V3.0 release notes, unlike its BlockDamage* siblings which
+       SandboxCode does document replacing. -->
+
+  <property name="LandClaimSize" value="41"/>
+  <property name="LandClaimDeadZone" value="30"/>
+  <property name="LandClaimExpiryTime" value="{{.Vars.land_claim_expiry_time}}"/>
+  <property name="LandClaimDecayMode" value="0"/>
+  <property name="LandClaimOnlineDurabilityModifier" value="4"/>
+  <property name="LandClaimOfflineDurabilityModifier" value="4"/>
+
+  <property name="PartySharedKillRange" value="100"/>
+  <property name="MaxSpawnedZombies" value="{{.Vars.max_spawned_zombies}}"/>
+  <property name="MaxSpawnedAnimals" value="{{.Vars.max_spawned_animals}}"/>
+
+  <property name="ServerAllowCrossplay" value="{{.Vars.server_allow_crossplay}}"/>
+  <property name="EACEnabled" value="{{.Vars.eac_enabled}}"/>
+  <property name="IgnoreEOSSanctions" value="{{.Vars.ignore_eos_sanctions}}"/>
+  <property name="HideCommandExecutionLog" value="0"/>
+  <property name="MaxUncoveredMapChunksPerPlayer" value="131072"/>
+  <property name="BedrollDeadZoneSize" value="15"/>
+
+  <!-- SaveGameFolder itself is gone (confirmed live, "Unknown config
+       option", the same as every property fixed above), though this one
+       isn't in TFP's own V3.0 removal list and so isn't a SandboxCode
+       casualty; it may simply have been folded into UserDataFolder, which
+       every reference config already documented as overriding "all
+       generated data, including RWG generated worlds" (a superset of just
+       the save path). UserDataFolder redirects everything (and, per the
+       game's own AdminFileName documentation, serveradmin.xml too) into
+       this server's writable mount rather than Unity's default
+       ~/.local/share/7DaysToDie; see the seed comment above the
+       writable_paths block for why this one is hardcoded rather than
+       exposed as a variable. -->
+  <property name="UserDataFolder" value="/data"/>
+</ServerSettings>

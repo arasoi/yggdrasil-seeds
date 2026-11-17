@@ -1,16 +1,18 @@
 id: palworld
 schema: 3
 name: Palworld
-icon: "🐾"
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.1.0"
+version: "1.3.0"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
-# server tool app installed below.
+# server tool app installed below. icon is the store's own portrait capsule
+# (library_600x900.jpg); the top-level icon: emoji is gone, since a seed may
+# declare one or the other, never both.
 branding:
   steam_app_id: 1623730
+  icon: icon.jpg
   logo: logo.png
   banner: banner.jpg
 
@@ -79,15 +81,16 @@ containers:
     # dlopen()s $HOME/.steam/sdk64/steamclient.so, and SteamCMD's own copy is
     # the one to stage there -- the same file, from the same place, that
     # ygg-proton stages for ARK (ADR-047's final amendment). base-linux does
-    # not carry it.
+    # not carry it. base-steamcmd's own entrypoint now stages it generically
+    # on every container start (docs/architecture.md, "Container image
+    # library"), so this seed no longer copies it by hand -- without it,
+    # PalServer logs `dlopen failed trying to load: steamclient.so` and,
+    # depending on the build, either carries on degraded or never finishes
+    # starting.
     image: { base: steamcmd }
     # One readable line would be better, and this is the shortest honest
     # version of it:
     #
-    #   * The staging step is why this is a shell command at all. Without it
-    #     PalServer logs `dlopen failed trying to load: steamclient.so` and,
-    #     depending on the build, either carries on degraded or never finishes
-    #     starting. Copying it is cheap and removes the question.
     #   * -port is the allocated port, never the seed's declared default
     #     (ADR-061). PublicPort in the config file is set from the same
     #     allocation, so what the server binds and what it advertises agree.
@@ -119,21 +122,20 @@ containers:
     # destination is already correct.
     #
     # Bypassing the script costs nothing here. The two things it does are stage
-    # steamclient.so -- which the line below already does, into
-    # $HOME/.steam/sdk64, the path PalServer actually dlopen()s -- and chmod the
-    # binary, now an install step where the directory is still writable. `Pal`
-    # is the project name the script passes as the first argument; Unreal needs
-    # it and dropping it is the one way to get this wrong quietly.
+    # steamclient.so -- now the base image's own job -- and chmod the binary,
+    # now an install step where the directory is still writable. `Pal` is the
+    # project name the script passes as the first argument; Unreal needs it
+    # and dropping it is the one way to get this wrong quietly. No shell
+    # needed any more either, now that nothing here chains a prep step ahead
+    # of the real launch.
     command: >-
-      sh -c 'mkdir -p "$HOME/.steam/sdk64" &&
-      cp -n /opt/steamcmd/linux64/steamclient.so "$HOME/.steam/sdk64/steamclient.so" || true;
-      exec /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
+      /game/Pal/Binaries/Linux/PalServer-Linux-Shipping Pal
       -log
       -port={{.Ports.game}}
       -queryport={{.Ports.query}}
       -players={{.Vars.server_player_max_num}}
       -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
-      {{.Vars.community_server}}'
+      {{.Vars.community_server}}
     workdir: /game
     env:
       # base-steamcmd honours HOME (its own descriptor says so), and the
@@ -223,6 +225,10 @@ stop:
   then: SIGTERM
 
 logs:
+  values:
+    # The game's own version, shown as the server's game version (ADR-198).
+    # Seen live 2026-11-16: "Game version is v1.0.5.102999".
+    - { name: game_version, label: "Game version", version: true, pattern: 'Game version is v(\S+)' }
   events:
     # Both patterns are copied from a real server's console, on a run a player
     # joined and then left -- which is the whole bar for putting one in a field
@@ -243,7 +249,14 @@ logs:
     # has no matching disconnect line, so pairing on it would leave a player
     # list that only ever grows -- and it would count one person twice, since
     # both lines fire for a single player joining.
-    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\.' }
+    #
+    # steamid is captured on join only, not leave -- the schema's own rule
+    # (ADR-119): a leave is matched on name alone, so a steamid captured
+    # there would just be discarded. `steam_` is followed by a plain
+    # SteamID64, independently confirmed against a real, differently-sourced
+    # server log (thijsvanloef/palworld-server-docker#538): "[LOG] Tanaka
+    # Lyanne joined the server. (User id: steam_76561198379551257)".
+    - { event: join,  pattern: '\[LOG\] (?P<player>.+?) joined the server\. \(User id: steam_(?P<steamid>\d+)' }
     - { event: leave, pattern: '\[LOG\] (?P<player>.+?) left the server\.' }
 
 connect:

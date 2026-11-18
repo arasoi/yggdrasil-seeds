@@ -1,0 +1,97 @@
+id: necesse
+schema: 3
+name: Necesse
+description: >
+  A top-down sandbox of exploring, building settlements and fighting bosses,
+  for up to 250 players on one dedicated server.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 1169040
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# Native Linux depot 1169375, which ships its own JRE under jre/. Launch line
+# cross-checked against the pelican-eggs/games-steamcmd Necesse egg.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1169370
+
+server:
+  writable_paths:
+    # Without -localdir the server keeps cfg/server.cfg, saves/ and logs/ in
+    # ~/.config/Necesse. HOME is the writable path (not just that directory)
+    # so the entrypoint's privilege drop inherits the agent's uid.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    command: >-
+      /game/jre/bin/java -Xms128M -Xmx{{.Vars.memory_mb}}M
+      -Dterminal.jline=false -Dterminal.ansi=true
+      -jar /game/Server.jar -nogui
+      -world {{.Vars.world}}
+      -port {{.Ports.game}}
+      -slots {{.Vars.slots}}
+      {{if .Vars.password}}-password {{.Vars.password}}{{end}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      - { name: game, protocol: udp, default: 14159, kind: game }
+
+ready:
+  mode: log
+  pattern: "Type help for list of commands"
+  timeout: 300s
+
+stop:
+  command: "stop"
+  timeout: 60s
+  then: SIGTERM
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]
+
+variables:
+  - name: world
+    label: World name
+    description: The save to load, created on first start. A new name starts a new world.
+    default: World
+    editable: true
+  - name: slots
+    type: number
+    label: Player slots
+    min: 1
+    max: 250
+    step: 1
+    default: "10"
+    editable: true
+  - name: password
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    editable: true
+  - name: memory_mb
+    type: number
+    label: Java heap (MiB)
+    min: 512
+    max: 65536
+    step: 256
+    default: "2048"
+    editable: true

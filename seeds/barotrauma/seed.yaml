@@ -66,7 +66,9 @@ containers:
       - { name: game, protocol: udp, default: 27015, kind: game }
       - { name: query, protocol: udp, default: 27016, kind: query }
 
-# Copied from a real boot (inari, 2026-11-18): a few seconds.
+# Copied from a real boot (inari, 2026-11-18): a few seconds. Verified
+# through Yggdrasil: first start writes the port stub and the game fills in
+# the rest; a restart keeps the full file and only moves the ports.
 ready:
   mode: log
   pattern: "Server started"

@@ -7,6 +7,11 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-18
+
+- **runescape-dragonwilds 0.7.1**: now has its icon, logo and banner, so it no longer shows
+  as a placeholder card. Every other seed already had artwork.
+
 ## 2026-11-16
 
 - **ark-survival-ascended 5.9.0** and **ark-survival-evolved 1.5.0**: `map` and `session_name`

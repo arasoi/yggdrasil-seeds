@@ -7,12 +7,22 @@ description: >-
   server under Proton. Needs about 2 GB of RAM plus 1 GB per player, and
   outbound internet: matchmaking and the server browser run through Epic Online
   Services.
-version: "0.7.0"
+version: "0.7.1"
 
 # The base game's Steam listing, distinct from 4019830, the dedicated server
-# tool installed below -- the same split Palworld makes. No art yet.
+# tool installed below -- the same split Palworld makes.
+#
+# Icon and banner are Steam's own library_capsule and library_hero for the game,
+# taken from the paths the Store API's IStoreBrowseService lists (the hashed
+# store_item_assets/... ones; the old unhashed library_600x900.jpg and logo.png
+# paths 404 for this app, and the unhashed library_hero.jpg is a different, older
+# image). Steam serves no logo for this app at all, so the logo is the
+# transparent wordmark from the game's own site, dragonwilds.runescape.com.
 branding:
   steam_app_id: 1374490
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
 
 # amd64 only. The architecture here is the *node's*: the Windows server runs
 # under Proton, and GE-Proton is x86 Wine with no arm64 build. (The Linux depot

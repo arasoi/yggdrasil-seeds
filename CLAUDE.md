@@ -64,6 +64,22 @@ that corrupts the save. All of those are silent, and all of them validate.
 So: **never present a seed as working on the strength of validation alone.** Say
 what was actually run and what was not. `docs/testing.md` is the manual pass.
 
+## Every seed ships its artwork
+
+A new seed is not finished until it has a real `branding.icon`, `branding.logo`
+and `branding.banner` — image files sitting next to `seed.yaml`, all three, from
+an official source. Do this before opening the PR, not as a follow-up: a seed
+without them shows as a striped placeholder card on every operator's fleet page.
+
+- Never leave the top-level `icon:` emoji as the final state (setting it together
+  with `branding.icon` is a validation error, so adding real art means deleting
+  the emoji).
+- Check that all three files exist and are real images. Where to find them,
+  including Steam's current hashed asset paths, is in `docs/authoring.md`,
+  "Branding"; the PR checklist is in `docs/contributing.md`.
+- Duplicating a seed copies its art references, not the bytes — the new seed needs
+  its own.
+
 ## Things that cost operators data
 
 - **Never rename a variable or setting without `renamed_from`.** Stored values

@@ -4,7 +4,7 @@ name: Project Zomboid
 description: >
   The Indie Stone's isometric zombie survival sandbox. The dedicated server
   hosts one persistent world in Knox County for many players at once.
-version: "1.1.0"
+version: "1.2.0"
 
 branding:
   steam_app_id: 108600
@@ -27,8 +27,14 @@ install:
 
 server:
   writable_paths:
-    # -cachedir: the world, the player database, Server/<name>.ini and logs.
-    - { from: zomboid, to: /home/steam/Zomboid }
+    # HOME itself, not just -cachedir below it: the base image's entrypoint
+    # drops to whoever owns HOME, and only a writable path is owned by the
+    # agent. Found live: with only Zomboid/ mounted, HOME stayed the image's
+    # root-owned directory, the game ran as uid 1000, created Server/ with
+    # 0700, and the agent could no longer write ygg.ini on a rebuild.
+    # -cachedir (Zomboid/) holds the world, player database, Server/<name>.ini
+    # and logs.
+    - { from: home, to: /home/steam }
 
 containers:
   - role: game
@@ -62,7 +68,7 @@ config:
   files:
     # Written by the game on first boot with every key; patched by key
     # thereafter. The name is -servername's, fixed above.
-    - path: zomboid/Server/ygg.ini
+    - path: home/Zomboid/Server/ygg.ini
       parser: properties
       manage: patch
       importable: true
@@ -95,7 +101,7 @@ connect:
   copy: "{{.Endpoint.game}}"
 
 backup:
-  include: [zomboid]
+  include: [home]
 
 variables:
   - name: admin_username
@@ -126,8 +132,8 @@ groups:
     collapsed: true
 
 settings:
-  - { name: public_name, group: Server, label: Server name, default: "My PZ Server", to: { file: zomboid/Server/ygg.ini, key: PublicName } }
-  - { name: public_description, group: Server, label: Description, default: "", to: { file: zomboid/Server/ygg.ini, key: PublicDescription } }
+  - { name: public_name, group: Server, label: Server name, default: "My PZ Server", to: { file: home/Zomboid/Server/ygg.ini, key: PublicName } }
+  - { name: public_description, group: Server, label: Description, default: "", to: { file: home/Zomboid/Server/ygg.ini, key: PublicDescription } }
   - name: public
     group: Server
     type: bool
@@ -135,14 +141,14 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "false"
-    to: { file: zomboid/Server/ygg.ini, key: Public }
+    to: { file: home/Zomboid/Server/ygg.ini, key: Public }
   - name: password
     group: Server
     type: password
     label: Join password
     description: Leave blank for none.
     default: ""
-    to: { file: zomboid/Server/ygg.ini, key: Password }
+    to: { file: home/Zomboid/Server/ygg.ini, key: Password }
   - name: max_players
     group: Server
     type: number
@@ -151,7 +157,7 @@ settings:
     max: 100
     step: 1
     default: "32"
-    to: { file: zomboid/Server/ygg.ini, key: MaxPlayers }
+    to: { file: home/Zomboid/Server/ygg.ini, key: MaxPlayers }
   - name: open
     group: Server
     type: bool
@@ -160,7 +166,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: Open }
+    to: { file: home/Zomboid/Server/ygg.ini, key: Open }
   - name: map
     group: Server
     label: Map
@@ -168,7 +174,7 @@ settings:
       Semicolon-separated map folders. The default is the whole base map;
       modded maps go first.
     default: "Muldraugh, KY"
-    to: { file: zomboid/Server/ygg.ini, key: Map }
+    to: { file: home/Zomboid/Server/ygg.ini, key: Map }
   - name: pvp
     group: Gameplay
     type: bool
@@ -176,7 +182,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: PVP }
+    to: { file: home/Zomboid/Server/ygg.ini, key: PVP }
   - name: safety_system
     group: Gameplay
     type: bool
@@ -185,7 +191,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: SafetySystem }
+    to: { file: home/Zomboid/Server/ygg.ini, key: SafetySystem }
   - name: pause_empty
     group: Gameplay
     type: bool
@@ -193,7 +199,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: PauseEmpty }
+    to: { file: home/Zomboid/Server/ygg.ini, key: PauseEmpty }
   - name: sleep_allowed
     group: Gameplay
     type: bool
@@ -201,7 +207,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "false"
-    to: { file: zomboid/Server/ygg.ini, key: SleepAllowed }
+    to: { file: home/Zomboid/Server/ygg.ini, key: SleepAllowed }
   - name: player_safehouse
     group: Gameplay
     type: bool
@@ -209,7 +215,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "false"
-    to: { file: zomboid/Server/ygg.ini, key: PlayerSafehouse }
+    to: { file: home/Zomboid/Server/ygg.ini, key: PlayerSafehouse }
   - name: global_chat
     group: Gameplay
     type: bool
@@ -217,7 +223,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: GlobalChat }
+    to: { file: home/Zomboid/Server/ygg.ini, key: GlobalChat }
   - name: announce_death
     group: Gameplay
     type: bool
@@ -225,7 +231,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "false"
-    to: { file: zomboid/Server/ygg.ini, key: AnnounceDeath }
+    to: { file: home/Zomboid/Server/ygg.ini, key: AnnounceDeath }
   - name: save_every_minutes
     group: Saving
     type: number
@@ -235,7 +241,7 @@ settings:
     max: 1440
     step: 1
     default: "0"
-    to: { file: zomboid/Server/ygg.ini, key: SaveWorldEveryMinutes }
+    to: { file: home/Zomboid/Server/ygg.ini, key: SaveWorldEveryMinutes }
   - name: backups_on_start
     group: Saving
     type: bool
@@ -243,7 +249,7 @@ settings:
     true_value: "true"
     false_value: "false"
     default: "true"
-    to: { file: zomboid/Server/ygg.ini, key: BackupsOnStart }
+    to: { file: home/Zomboid/Server/ygg.ini, key: BackupsOnStart }
   - name: backups_count
     group: Saving
     type: number
@@ -252,13 +258,13 @@ settings:
     max: 100
     step: 1
     default: "5"
-    to: { file: zomboid/Server/ygg.ini, key: BackupsCount }
-  - { name: workshop_items, group: Mods, label: Workshop item IDs, default: "", to: { file: zomboid/Server/ygg.ini, key: WorkshopItems } }
-  - { name: mods, group: Mods, label: Mod IDs, default: "", to: { file: zomboid/Server/ygg.ini, key: Mods } }
+    to: { file: home/Zomboid/Server/ygg.ini, key: BackupsCount }
+  - { name: workshop_items, group: Mods, label: Workshop item IDs, default: "", to: { file: home/Zomboid/Server/ygg.ini, key: WorkshopItems } }
+  - { name: mods, group: Mods, label: Mod IDs, default: "", to: { file: home/Zomboid/Server/ygg.ini, key: Mods } }
   - name: rcon_password
     group: Remote access
     type: password
     label: RCON password
     description: RCON listens only while this is set.
     default: ""
-    to: { file: zomboid/Server/ygg.ini, key: RCONPassword }
+    to: { file: home/Zomboid/Server/ygg.ini, key: RCONPassword }

@@ -9,9 +9,9 @@ release notes.
 
 ## 2026-11-18
 
-- **soulmask 1.0.0**: new seed. Native Linux dedicated server with a generated GM password.
-- **arma-reforger 1.0.0**: new seed. Native Linux dedicated server; the Direct Join Code shows on the
-  server's card.
+- **soulmask 1.0.1**: new seed. Native Linux dedicated server with a generated GM password.
+- **arma-reforger 1.0.1**: new seed. Native Linux dedicated server; the Direct Join Code shows on the
+  server's card, and the scenario field lists every base-game scenario.
 - **unturned 1.0.2**: new seed. Native Linux dedicated server; the Server Code players join with
   shows on the server's card, and Stop saves the world.
 - **the-front 1.0.1**: new seed, KNOWN BROKEN: the published Linux server build crashes on start

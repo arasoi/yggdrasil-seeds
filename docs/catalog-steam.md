@@ -52,7 +52,8 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger) and `2334200` (The Front -- known broken, its Linux server crashes on
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2)
+and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
 
@@ -65,7 +66,6 @@ this table.
 | Assetto Corsa | 302550 |
 | Avorion | 565060 |
 | Ballistic Overkill | 416880 |
-| Barotrauma | 1026340 |
 | Base Defense | 817300 |
 | BATTALION: Legacy | 805140 |
 | Black Mesa: Deathmatch | 346680 |
@@ -76,7 +76,6 @@ this table.
 | Codename CURE | 383410 |
 | Colony Survival | 748090 |
 | Counter-Strike 1.6 | 90 |
-| Counter-Strike 2 | 730 |
 | Counter-Strike: Condition Zero | 90 |
 | Counter-Strike: Global Offensive | 740 |
 | Counter-Strike: Source | 232330 |

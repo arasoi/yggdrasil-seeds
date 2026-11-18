@@ -1,0 +1,186 @@
+id: unturned
+schema: 3
+name: Unturned
+description: >
+  Smartly Dressed Games' free-to-play zombie survival sandbox. The dedicated
+  server prints a Server Code players can enter under Connect Directly, so it
+  can be joined without port forwarding.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 304930
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# Native Linux depot 1110392. Cross-checked against the
+# pelican-eggs/games-steamcmd Unturned egg and the depot's own ServerHelper.sh /
+# ExampleServer.sh.
+install:
+  shared: false
+  # Read-write, unusually. Verified on inari: with the install mounted
+  # read-only the server dies loading the map with UnauthorizedAccessException
+  # on /game/Maps/PEI/Environment/Bounds.dat -- it opens shipped map files for
+  # writing. Each server has its own install (shared: false), so no other
+  # server sees what it touches; saves still go to the writable paths below.
+  mount: { path: /game, mode: rw }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1110390
+
+server:
+  writable_paths:
+    # Servers/<id>/: Commands.dat, Config.txt, the world and Workshop content.
+    - { from: servers, to: /game/Servers }
+    - { from: logs, to: /game/Logs }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # The depot ships its own steamclient.so under linux64/; ServerHelper.sh
+    # adds that to LD_LIBRARY_PATH, and so does this.
+    command: >-
+      /game/Unturned_Headless.x86_64 -batchmode -nographics -logfile -
+      +InternetServer/ygg
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      LD_LIBRARY_PATH: /game/linux64
+      TERM: xterm
+    ports:
+      # Verified live: Port N binds UDP N and N+1. The command-line form
+      # (-Port/N) was ignored on 3.26.3.15; Commands.dat's "Port N" works.
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: game2, protocol: udp, offset_from: game, offset: 1, kind: other }
+
+config:
+  files:
+    # The seed owns Commands.dat outright: it is a list of startup commands
+    # in the game's own "Command argument" format, which no config parser
+    # here round-trips, and its Port line has to follow the allocation.
+    # Edits made to it by hand are replaced on every rebuild; the rest of the
+    # server's options live in Servers/ygg/Config.txt (Files tab), which the
+    # game owns and this seed does not touch.
+    - path: servers/ygg/Server/Commands.dat
+      source_path: configs/Commands.dat.tmpl
+      manage: always
+
+# Copied from a real boot (game 3.26.3.15, 2026-11-18): about 40 seconds.
+ready:
+  mode: log
+  pattern: "Loading level: 100%"
+  timeout: 300s
+
+stop:
+  command: "shutdown"
+  timeout: 60s
+  then: SIGTERM
+
+logs:
+  values:
+    - { name: server_code, label: "Server Code", fleet: true, pattern: 'Server Code: (\d+)' }
+    - { name: game_version, label: "Game version", version: true, pattern: 'Game version: (\S+)' }
+
+connect:
+  label: "Connect directly"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [servers]
+
+groups:
+  - name: Server
+  - name: Gameplay
+  - name: Access
+
+variables:
+  - { name: server_name, group: Server, label: Server name, default: Unturned, editable: true }
+  - name: map
+    group: Server
+    type: combo
+    label: Map
+    description: A built-in map, or the name of a Workshop map the server has installed.
+    default: PEI
+    editable: true
+    options:
+      - { value: PEI }
+      - { value: Washington }
+      - { value: Russia }
+      - { value: Germany }
+      - { value: Yukon }
+      - { value: Hawaii }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 200
+    step: 1
+    default: "24"
+    editable: true
+  - { name: welcome, group: Server, label: Welcome message, default: "", editable: true }
+  - name: difficulty
+    group: Gameplay
+    type: select
+    label: Difficulty
+    default: Normal
+    editable: true
+    options:
+      - { value: Easy }
+      - { value: Normal }
+      - { value: Hard }
+  - name: perspective
+    group: Gameplay
+    type: select
+    label: Camera
+    default: Both
+    editable: true
+    options:
+      - { value: First }
+      - { value: Third }
+      - { value: Both }
+      - { value: Vehicle }
+  - name: pve
+    group: Gameplay
+    type: bool
+    label: PvE only
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: cheats
+    group: Gameplay
+    type: bool
+    label: Allow admin cheat commands
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: password
+    group: Access
+    type: password
+    label: Join password
+    description: Leave blank for none. Unturned only SHA1-hashes it, so do not reuse one from elsewhere.
+    default: ""
+    editable: true
+  - name: owner
+    group: Access
+    label: Owner Steam ID
+    description: A SteamID64 that may use admin commands in chat.
+    default: ""
+    editable: true
+  - name: gslt
+    group: Access
+    type: password
+    label: Game Server Login Token
+    description: >-
+      From steamcommunity.com/dev/managegameservers (app 304930). Without one
+      the server is not in the Internet list and players join by Server Code.
+    default: ""
+    editable: true

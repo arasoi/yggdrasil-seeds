@@ -51,7 +51,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
-(Project Zomboid) and `1169370` (Necesse) are already built and left off
+(Project Zomboid), `1169370` (Necesse) and `1963720` (Core Keeper) are already built and left off
 this table.
 
 | Game | AppID |
@@ -74,7 +74,6 @@ this table.
 | Chivalry: Medieval Warfare | 220070 |
 | Codename CURE | 383410 |
 | Colony Survival | 748090 |
-| Core Keeper | 1963720 |
 | Counter-Strike 1.6 | 90 |
 | Counter-Strike 2 | 730 |
 | Counter-Strike: Condition Zero | 90 |
@@ -154,11 +153,6 @@ this table.
 | Wurm Unlimited | 402370 |
 | Zombie Master: Reborn | 244310 |
 | Zombie Panic! Source | 17505 |
-
-**Core Keeper needs a virtual display.** Its Linux server is a Unity build that
-will not start without an X display (the Pelican egg wraps it in `xvfb-run`), and
-no base image here ships Xvfb. It needs that added to an image -- most likely an
-opt-in in `base-steamcmd`'s entrypoint -- before a seed can be written.
 
 **A shared AppID is not a typo.** `90` is the classic GoldSrc "Half-Life
 Dedicated Server" tool — a dozen mods above install through it and then need

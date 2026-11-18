@@ -5,7 +5,7 @@ description: >
   Smartly Dressed Games' free-to-play zombie survival sandbox. The dedicated
   server prints a Server Code players can enter under Connect Directly, so it
   can be joined without port forwarding.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 304930
@@ -44,9 +44,15 @@ containers:
     image: { base: steamcmd }
     # The depot ships its own steamclient.so under linux64/; ServerHelper.sh
     # adds that to LD_LIBRARY_PATH, and so does this.
+    #
+    # Run under `script` for a pseudo-terminal. Verified on inari: Unturned
+    # reads console commands only from a terminal, so with the container's
+    # plain-pipe stdin "shutdown" was ignored, the stop waited out its timeout,
+    # SIGTERM ended the process, and the world was never saved. Under script
+    # the same "shutdown" exits in seconds and the world is written.
     command: >-
-      /game/Unturned_Headless.x86_64 -batchmode -nographics -logfile -
-      +InternetServer/ygg
+      script -qfec '/game/Unturned_Headless.x86_64 -batchmode -nographics
+      -logfile - +InternetServer/ygg' /dev/null
     workdir: /game
     env:
       HOME: /home/steam

@@ -1,0 +1,181 @@
+id: the-front
+schema: 3
+name: The Front
+description: >
+  An open-world survival game of building, crafting and fighting across a
+  post-apocalyptic map, for PvP or PvE servers.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 2285150
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# "The Front Linux Dedicated Server" (2334200): one depot tagged windows,linux
+# that carries the native Linux binary at ProjectWar/Binaries/Linux. Launch
+# line cross-checked against the pelican-eggs/games-steamcmd The Front egg.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 2334200
+
+server:
+  writable_paths:
+    # Unreal's logs and engine config.
+    - { from: saved, to: /game/ProjectWar/Saved }
+    # -UserDir (the world and server config) lives under HOME, which is the
+    # writable path so the privilege drop inherits the agent's uid.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Unreal refuses root; YGG_DROP_PRIVS runs it as the agent's uid.
+    command: >-
+      /game/ProjectWar/Binaries/Linux/TheFrontServer
+      ProjectWar_Start?DedicatedServer -server -game -log
+      -Port={{.Ports.game}}
+      -BeaconPort={{.Ports.beacon}}
+      -QueryPort={{.Ports.query}}
+      -ShutDownServicePort={{.Ports.shutdown}}
+      {{if .NodeAddress}}-OutIPAddress={{.NodeAddress}}{{end}}
+      -UseSteamSocket={{.Vars.steam_socket}}
+      -ConfigServerName=ygg
+      -UserDir=/home/steam/TheFrontManager/ygg/
+      -ServerName={{shellquote .Vars.server_name}}
+      -MaxQueueSize=50 -QueueValidTime=120 -QueueThreshold={{.Vars.max_players}}
+      -ServerFightModeType={{.Vars.fight_mode}}
+      -IsCanSelfDamage={{.Vars.self_damage}}
+      -IsCanFriendDamage={{.Vars.friendly_fire}}
+      -SaveWorldInterval={{.Vars.save_interval}}
+      -GreenHand={{.Vars.green_hand}}
+      -UseACE={{.Vars.anti_cheat}}
+      {{if .Vars.admins}}-ServerAdminAccounts={{shellquote .Vars.admins}}{{end}}
+      {{if .Vars.password}}-ServerPassword={{shellquote .Vars.password}}{{end}}
+      -EnableParallelCharacterMovementTickFunction
+      -EnableParallelCharacterTickFunction
+      -UseDynamicPhysicsScene -Game.PhysicsVehicle=false -ansimalloc
+      -Game.MaxFrameRate=35
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/ProjectWar/Saved"
+    ports:
+      # Each passed on the command line, so allocated independently.
+      - { name: game, protocol: udp, default: 5001, kind: game }
+      - { name: beacon, protocol: udp, default: 15000, kind: other }
+      - { name: query, protocol: udp, default: 27015, kind: query }
+      - { name: shutdown, protocol: tcp, default: 6100, kind: other }
+
+ready:
+  mode: port
+  port: shutdown
+  timeout: 600s
+
+stop:
+  timeout: 120s
+  then: SIGINT
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]
+
+groups:
+  - name: Server
+  - name: Rules
+  - name: Access
+
+variables:
+  - { name: server_name, group: Server, label: Server name, default: Yggdrasil The Front, editable: true }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 200
+    step: 1
+    default: "60"
+    editable: true
+  - name: save_interval
+    group: Server
+    type: number
+    label: Save interval (seconds)
+    min: 60
+    max: 3600
+    step: 1
+    default: "300"
+    editable: true
+  - name: steam_socket
+    group: Server
+    type: bool
+    label: Use Steam's relay
+    description: For a host with no public IP. Players then reach it through Steam's servers.
+    true_value: "1"
+    false_value: "0"
+    default: "0"
+    editable: true
+  - name: fight_mode
+    group: Rules
+    type: select
+    label: Mode
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: PvP }
+      - { value: "1", label: PvE }
+  - name: self_damage
+    group: Rules
+    type: bool
+    label: Players can damage themselves
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: friendly_fire
+    group: Rules
+    type: bool
+    label: Squadmates can damage each other
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: green_hand
+    group: Rules
+    type: bool
+    label: Novice protection for new characters
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: anti_cheat
+    group: Access
+    type: bool
+    label: Anti-cheat
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: password
+    group: Access
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    editable: true
+  - name: admins
+    group: Access
+    label: Admin Steam IDs
+    description: SteamID64s, separated by semicolons.
+    default: ""
+    editable: true

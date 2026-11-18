@@ -1,0 +1,24 @@
+Port {{.Ports.game}}
+Name {{.Vars.server_name}}
+Map {{.Vars.map}}
+MaxPlayers {{.Vars.max_players}}
+Mode {{.Vars.difficulty}}
+Perspective {{.Vars.perspective}}
+{{- if .Vars.password}}
+Password {{.Vars.password}}
+{{- end}}
+{{- if .Vars.owner}}
+Owner {{.Vars.owner}}
+{{- end}}
+{{- if .Vars.gslt}}
+GSLT {{.Vars.gslt}}
+{{- end}}
+{{- if eq .Vars.pve "true"}}
+PvE
+{{- end}}
+{{- if eq .Vars.cheats "true"}}
+Cheats
+{{- end}}
+{{- if .Vars.welcome}}
+Welcome {{.Vars.welcome}}
+{{- end}}

@@ -1,0 +1,185 @@
+id: counter-strike-2
+schema: 3
+name: Counter-Strike 2
+description: >
+  Valve's tactical team shooter. A Game Server Login Token is needed for the
+  server to be reachable over the internet and listed; without one it is
+  LAN-only.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 730
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# CS2's dedicated server is the game's own app (730), installable anonymously.
+# It is about 67 GB, identical for every server, so it is shared: servers on a
+# node mount one read-only copy, the way ARK's maps do. Launch line
+# cross-checked against the pelican-eggs/games-steamcmd Counter-Strike 2 egg;
+# that egg uses Valve's Steam Runtime "sniper" image, but verified on inari the
+# binary runs on base-steamcmd as it is (Steam, VAC and the game coordinator
+# all connect).
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 730
+
+server:
+  writable_paths:
+    # Valve ships 28 files in csgo/cfg (server.cfg among them), so that
+    # directory cannot be replaced; a writable subdirectory inside it can, and
+    # cfg files there are exec-able by relative name -- verified live.
+    - { from: cfg, to: /game/game/csgo/cfg/ygg }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    command: >-
+      /game/game/bin/linuxsteamrt64/cs2 -dedicated
+      -ip 0.0.0.0 -port {{.Ports.game}} -tv_port {{.Ports.tv}}
+      -maxplayers {{.Vars.max_players}}
+      {{if eq .Vars.vac "false"}}-insecure{{end}}
+      {{if .Vars.rcon_password}}-usercon{{end}}
+      +game_type {{.Vars.game_type}} +game_mode {{.Vars.game_mode}}
+      +map {{.Vars.map}}
+      +hostname {{shellquote .Vars.hostname}}
+      {{if .Vars.password}}+sv_password {{shellquote .Vars.password}}{{end}}
+      {{if .Vars.rcon_password}}+rcon_password {{shellquote .Vars.rcon_password}}{{end}}
+      {{if .Vars.gslt}}+sv_setsteamaccount {{.Vars.gslt}}{{end}}
+      +exec ygg/server.cfg
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      LD_LIBRARY_PATH: /game/game/bin/linuxsteamrt64
+    ports:
+      # Verified live: the game port binds UDP and TCP (RCON) on one number.
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: rcon, protocol: tcp, offset_from: game, offset: 0, kind: rcon }
+      # SourceTV, used only if tv_enable is set in cfg/server.cfg.
+      - { name: tv, protocol: udp, default: 27020, kind: other }
+
+config:
+  files:
+    - path: cfg/server.cfg
+      source_path: configs/server.cfg.tmpl
+      manage: once
+
+# Copied from a real boot (inari, 2026-11-18).
+ready:
+  mode: log
+  pattern: "Connection to Steam servers successful"
+  timeout: 300s
+
+# Verified live: "quit" over the container's stdin shuts the server down
+# cleanly and exits 0.
+stop:
+  command: "quit"
+  timeout: 60s
+  then: SIGTERM
+
+connect:
+  label: "Connect"
+  uri: "steam://connect/{{.Endpoint.game}}"
+  copy: "connect {{.Endpoint.game}}"
+
+backup:
+  include: [cfg]
+
+groups:
+  - name: Server
+  - name: Game
+  - name: Access
+
+variables:
+  - { name: hostname, group: Server, label: Server name, default: Counter-Strike 2 Server, editable: true }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 2
+    max: 64
+    step: 1
+    default: "12"
+    editable: true
+  - name: gslt
+    group: Server
+    type: password
+    label: Game Server Login Token
+    description: >-
+      From steamcommunity.com/dev/managegameservers (app 730). Without one the
+      server only accepts LAN connections and is not listed.
+    default: ""
+    editable: true
+  - name: game_type
+    group: Game
+    type: select
+    label: Game type
+    description: With game mode below, picks the mode (Competitive is type 0, mode 1).
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Classic (0) }
+      - { value: "1", label: Gun game (1) }
+      - { value: "3", label: Custom (3) }
+  - name: game_mode
+    group: Game
+    type: select
+    label: Game mode
+    description: >-
+      Classic: 0 casual, 1 competitive, 2 wingman. Gun game: 0 arms race,
+      2 deathmatch.
+    default: "1"
+    editable: true
+    options:
+      - { value: "0" }
+      - { value: "1" }
+      - { value: "2" }
+  - name: map
+    group: Game
+    type: combo
+    label: Starting map
+    default: de_dust2
+    editable: true
+    options:
+      - { value: de_dust2 }
+      - { value: de_mirage }
+      - { value: de_inferno }
+      - { value: de_nuke }
+      - { value: de_overpass }
+      - { value: de_ancient }
+      - { value: de_anubis }
+      - { value: de_vertigo }
+      - { value: de_train }
+      - { value: cs_office }
+      - { value: cs_italy }
+  - name: vac
+    group: Access
+    type: bool
+    label: VAC
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: password
+    group: Access
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    editable: true
+  - name: rcon_password
+    group: Access
+    type: password
+    label: RCON password
+    description: RCON is enabled only while this is set.
+    default: ""
+    editable: true

@@ -9,6 +9,7 @@ release notes.
 
 ## 2026-11-18
 
+- **project-zomboid 1.0.0**: new seed. Native Linux dedicated server with a generated admin password.
 - **satisfactory 1.0.1**: new seed. Native Linux dedicated server; claim it and set the admin
   password from the game's Server Manager. Shows the running build on the server's card.
 - **runescape-dragonwilds 0.7.1**: now has its icon, logo and banner, so it no longer shows

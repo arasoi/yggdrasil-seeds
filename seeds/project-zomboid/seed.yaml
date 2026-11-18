@@ -1,0 +1,85 @@
+id: project-zomboid
+schema: 3
+name: Project Zomboid
+description: >
+  The Indie Stone's isometric zombie survival sandbox. The dedicated server
+  hosts one persistent world in Knox County for many players at once.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 108600
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# A native Linux depot (380873 plus the shared content depot 380871), no
+# Proton. Cross-checked against the pelican-eggs/games-steamcmd Project Zomboid
+# egg, which launches ProjectZomboid64 with the same arguments.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 380870
+
+server:
+  writable_paths:
+    # -cachedir: the world, the player database, Server/<name>.ini and logs.
+    - { from: zomboid, to: /home/steam/Zomboid }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # start-server.sh sets the bundled JRE's PATH/LD_LIBRARY_PATH and preloads
+    # libjsig before exec'ing ProjectZomboid64, which reads its JVM options
+    # from ProjectZomboid64.json beside it.
+    command: >-
+      /game/start-server.sh
+      -cachedir=/home/steam/Zomboid
+      -servername ygg
+      -port {{.Ports.game}}
+      -udpport {{.Ports.direct}}
+      -adminusername {{.Vars.admin_username}}
+      -adminpassword {{.Vars.admin_password}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      - { name: game, protocol: udp, default: 16261, kind: game }
+      - { name: direct, protocol: udp, default: 16262, kind: other }
+
+ready:
+  mode: log
+  pattern: "SERVER STARTED"
+  timeout: 600s
+
+stop:
+  command: "quit"
+  timeout: 120s
+  then: SIGTERM
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [zomboid]
+
+variables:
+  - name: admin_username
+    label: Admin username
+    description: >-
+      Created with the password below the first time the world starts. Changing
+      either afterwards does not change the existing account.
+    default: admin
+    editable: true
+  - name: admin_password
+    type: password
+    label: Admin password
+    generate: password
+    editable: true

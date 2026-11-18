@@ -9,7 +9,8 @@ release notes.
 
 ## 2026-11-18
 
-- **necesse 1.0.1**: new seed. Native Linux dedicated server on its bundled Java runtime.
+- **necesse 1.0.2**: new seed. Native Linux dedicated server on its bundled Java runtime;
+  shows the running game version.
 - **project-zomboid 1.2.0**: new seed. Native Linux dedicated server with a generated admin password
   and the common server.ini settings (listing, password, PvP, saving, Workshop mods, RCON).
 - **satisfactory 1.0.1**: new seed. Native Linux dedicated server; claim it and set the admin

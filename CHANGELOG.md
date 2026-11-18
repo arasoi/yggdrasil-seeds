@@ -9,7 +9,7 @@ release notes.
 
 ## 2026-11-18
 
-- **unturned 1.0.0**: new seed. Native Linux dedicated server; the Server Code players join with
+- **unturned 1.0.1**: new seed. Native Linux dedicated server; the Server Code players join with
   shows on the server's card.
 - **the-front 1.0.0**: new seed. Native Linux dedicated server.
 - **core-keeper 1.0.0**: new seed. Native Linux dedicated server on a virtual display; the Game ID

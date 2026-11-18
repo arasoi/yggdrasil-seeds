@@ -4,7 +4,7 @@ name: Project Zomboid
 description: >
   The Indie Stone's isometric zombie survival sandbox. The dedicated server
   hosts one persistent world in Knox County for many players at once.
-version: "1.0.0"
+version: "1.1.0"
 
 branding:
   steam_app_id: 108600
@@ -50,18 +50,45 @@ containers:
       HOME: /home/steam
       YGG_DROP_PRIVS: "1"
     ports:
+      # Verified live: "Server is listening on port N (for Steam connection)
+      # and port N+... (for UDPRakNet connection)" -- both UDP, both taken
+      # from the command line. Clients connect to the first.
       - { name: game, protocol: udp, default: 16261, kind: game }
       - { name: direct, protocol: udp, default: 16262, kind: other }
+      # Only bound once an RCON password is set.
+      - { name: rcon, protocol: tcp, default: 27015, kind: rcon }
 
+config:
+  files:
+    # Written by the game on first boot with every key; patched by key
+    # thereafter. The name is -servername's, fixed above.
+    - path: zomboid/Server/ygg.ini
+      parser: properties
+      manage: patch
+      importable: true
+      set:
+        DefaultPort: "{{.Ports.game}}"
+        UDPPort: "{{.Ports.direct}}"
+        RCONPort: "{{.Ports.rcon}}"
+        # A container cannot open ports on the router; the node's own
+        # forwarding is the operator's job.
+        UPnP: "false"
+
+# Copied from a real boot of build 42.22.2 on inari (2026-11-18): about 95
+# seconds on a first start, most of it loading tile definitions.
 ready:
   mode: log
-  pattern: "SERVER STARTED"
+  pattern: '\*\*\* SERVER STARTED'
   timeout: 600s
 
 stop:
   command: "quit"
   timeout: 120s
   then: SIGTERM
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: '> version=(\S+) ' }
 
 connect:
   label: "Join with IP"
@@ -83,3 +110,155 @@ variables:
     label: Admin password
     generate: password
     editable: true
+
+groups:
+  - name: Server
+    description: How the server is listed and who may join.
+  - name: Gameplay
+    description: Rules for the shared world.
+  - name: Saving
+  - name: Mods
+    description: >-
+      Workshop items are downloaded by the server itself at start. List the
+      Workshop IDs and the mod IDs they contain, separated by semicolons.
+    collapsed: true
+  - name: Remote access
+    collapsed: true
+
+settings:
+  - { name: public_name, group: Server, label: Server name, default: "My PZ Server", to: { file: zomboid/Server/ygg.ini, key: PublicName } }
+  - { name: public_description, group: Server, label: Description, default: "", to: { file: zomboid/Server/ygg.ini, key: PublicDescription } }
+  - name: public
+    group: Server
+    type: bool
+    label: List in the public server browser
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: zomboid/Server/ygg.ini, key: Public }
+  - name: password
+    group: Server
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: zomboid/Server/ygg.ini, key: Password }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 100
+    step: 1
+    default: "32"
+    to: { file: zomboid/Server/ygg.ini, key: MaxPlayers }
+  - name: open
+    group: Server
+    type: bool
+    label: Open to anyone
+    description: Off means only accounts already in the whitelist may join.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: Open }
+  - name: map
+    group: Server
+    label: Map
+    description: >-
+      Semicolon-separated map folders. The default is the whole base map;
+      modded maps go first.
+    default: "Muldraugh, KY"
+    to: { file: zomboid/Server/ygg.ini, key: Map }
+  - name: pvp
+    group: Gameplay
+    type: bool
+    label: PvP
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: PVP }
+  - name: safety_system
+    group: Gameplay
+    type: bool
+    label: Safety toggle
+    description: Players choose whether they can hurt others.
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: SafetySystem }
+  - name: pause_empty
+    group: Gameplay
+    type: bool
+    label: Pause when empty
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: PauseEmpty }
+  - name: sleep_allowed
+    group: Gameplay
+    type: bool
+    label: Sleeping allowed
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: zomboid/Server/ygg.ini, key: SleepAllowed }
+  - name: player_safehouse
+    group: Gameplay
+    type: bool
+    label: Players may claim safehouses
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: zomboid/Server/ygg.ini, key: PlayerSafehouse }
+  - name: global_chat
+    group: Gameplay
+    type: bool
+    label: Global chat
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: GlobalChat }
+  - name: announce_death
+    group: Gameplay
+    type: bool
+    label: Announce deaths
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: zomboid/Server/ygg.ini, key: AnnounceDeath }
+  - name: save_every_minutes
+    group: Saving
+    type: number
+    label: Save the world every (minutes)
+    description: 0 saves only on shutdown and when the game decides to.
+    min: 0
+    max: 1440
+    step: 1
+    default: "0"
+    to: { file: zomboid/Server/ygg.ini, key: SaveWorldEveryMinutes }
+  - name: backups_on_start
+    group: Saving
+    type: bool
+    label: Back up the world on every start
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: zomboid/Server/ygg.ini, key: BackupsOnStart }
+  - name: backups_count
+    group: Saving
+    type: number
+    label: Start backups kept
+    min: 1
+    max: 100
+    step: 1
+    default: "5"
+    to: { file: zomboid/Server/ygg.ini, key: BackupsCount }
+  - { name: workshop_items, group: Mods, label: Workshop item IDs, default: "", to: { file: zomboid/Server/ygg.ini, key: WorkshopItems } }
+  - { name: mods, group: Mods, label: Mod IDs, default: "", to: { file: zomboid/Server/ygg.ini, key: Mods } }
+  - name: rcon_password
+    group: Remote access
+    type: password
+    label: RCON password
+    description: RCON listens only while this is set.
+    default: ""
+    to: { file: zomboid/Server/ygg.ini, key: RCONPassword }

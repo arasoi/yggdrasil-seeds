@@ -5,7 +5,7 @@ description: >
   Coffee Stain's open-world factory-building game. The dedicated server hosts
   one persistent session for you and your friends; the first player to connect
   claims it and sets the admin password from the game's own Server Manager.
-version: "1.0.0"
+version: "1.0.1"
 
 # Art comes from the base game's own Steam listing (526870): the dedicated
 # server tool app (1690800) has no store page of its own.
@@ -35,7 +35,9 @@ server:
     # own FactoryGame/Saved, which is read-only without this overlay.
     - { from: saved, to: /game/FactoryGame/Saved }
     # The world itself lives under $HOME/.config/Epic/FactoryGame/Saved,
-    # along with the server's claim state and admin password hash.
+    # along with the server's claim state and admin password hash. That
+    # state file is named for the game port (ServerSettings.<port>.sav), so a
+    # server whose port changes comes up unclaimed again; its saves survive.
     - { from: home, to: /home/steam }
 
 containers:
@@ -73,15 +75,27 @@ config:
       manage: patch
       importable: true
 
+# Verified live 2026-11-18 on inari: the server API (TCP) and the game socket
+# (UDP) both bind on the allocated game port, and the reliable port on its
+# own, within about two seconds of launch. The API comes up a few hundred
+# milliseconds before the UDP socket, which is close enough for a port check.
 ready:
   mode: port
   port: api
   timeout: 300s
 
-# Ctrl-C is the documented clean shutdown: the server saves and exits.
+# Ctrl-C is the documented clean shutdown: the server saves and exits, in
+# under a second when verified live. It exits with code 130 (its own
+# "interrupted"), which the pod's container row shows as an exit code even
+# though the server itself reads offline, not crashed.
 stop:
   timeout: 60s
   then: SIGINT
+
+logs:
+  values:
+    # "Set ProjectVersion to ++FactoryGame+rel-main-multiplayer-patch-CL-517554"
+    - { name: game_version, label: "Build", version: true, pattern: 'Set ProjectVersion to \+\+FactoryGame\+\S*-CL-(\d+)' }
 
 connect:
   label: "Add server in the Server Manager"
@@ -93,8 +107,9 @@ backup:
 groups:
   - name: Server
     description: >-
-      Most of the server's configuration (name, admin password, session) is
-      done from the game client's Server Manager after claiming it, not here.
+      Most of the server's configuration (name, admin password, session,
+      autosave count) is done from the game client's Server Manager after
+      claiming it, not here.
   - name: Network
     description: Connection timeouts. Worth raising only for players on poor links.
     collapsed: true
@@ -112,15 +127,6 @@ settings:
     step: 1
     default: "4"
     to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Engine.GameSession/MaxPlayers }
-  - name: autosaves
-    group: Server
-    type: number
-    label: Rotating autosaves kept
-    min: 1
-    max: 100
-    step: 1
-    default: "3"
-    to: { file: saved/Config/LinuxServer/Engine.ini, key: /Script/FactoryGame.FGSaveSession/mNumRotatingAutosaves }
   - name: initial_connect_timeout
     group: Network
     type: number

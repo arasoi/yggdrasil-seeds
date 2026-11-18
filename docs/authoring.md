@@ -337,6 +337,22 @@ https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/logo.png              
 https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/library_hero.jpg      # -> banner (wide)
 ```
 
+Newer apps are not at those paths: Steam now serves their art under hashed
+`store_item_assets/...` paths, and the unhashed ones 404 (or, for
+`library_hero.jpg`, can return an older image). Ask the Store Browse API for the
+real filenames, then fetch them from
+`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/<appid>/<value>`:
+
+```
+curl -sG 'https://api.steampowered.com/IStoreBrowseService/GetItems/v1' \
+  --data-urlencode 'input_json={"ids":[{"appid":<appid>}],"context":{"language":"english","country_code":"US"},"data_request":{"include_assets":true}}'
+# response.store_items[0].assets: library_capsule -> icon, library_hero -> banner
+```
+
+That list carries no logo for some apps (RuneScape: Dragonwilds is one). Use the
+developer's own site for it, as for a non-Steam game below, and say so in a
+comment beside `branding:`.
+
 Try the **install step's own `app_id` first** — check with `curl -sI` before
 assuming it has nothing, since some dedicated-server tool apps genuinely do
 carry their own art (7 Days to Die's `294420` has a logo that reads "7 DAYS TO

@@ -5,7 +5,7 @@ description: >
   CampFire Studio's survival sandbox set in a primordial jungle: lead a tribe
   of followers, build, craft and fight, alone or on a server for up to 70
   players.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 2646460
@@ -74,7 +74,8 @@ ready:
   pattern: "Create Dungeon Successed"
   timeout: 600s
 
-# Verified live: SIGINT writes world.db and exits in about 15 seconds.
+# Verified live, by hand and through Yggdrasil: SIGINT writes world.db and
+# exits (code 130, Unreal's own "interrupted") in about 15 seconds.
 stop:
   timeout: 120s
   then: SIGINT
@@ -96,7 +97,15 @@ groups:
   - name: Access
 
 variables:
-  - { name: server_name, group: Server, label: Server name, default: Soulmask Server, editable: true }
+  - name: server_name
+    group: Server
+    label: Server name
+    description: >-
+      Spaces are fine; double quotes are not. Verified live: Unreal's
+      command-line parser ends the name at the first one, so the server
+      browser shows only what comes before it.
+    default: Soulmask Server
+    editable: true
   - name: map
     group: Server
     type: select

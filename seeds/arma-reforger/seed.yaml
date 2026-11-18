@@ -5,7 +5,7 @@ description: >
   Bohemia Interactive's military sandbox on the Enfusion engine. The dedicated
   server runs Conflict, Game Master and Combat Ops scenarios and prints a
   Direct Join Code players can use instead of an address.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 1874880
@@ -67,6 +67,10 @@ config:
       source_path: configs/config.json.tmpl
       manage: always
 
+# Verified through Yggdrasil on inari: config.json renders valid ("JSON is
+# Valid"), a server name containing double quotes is escaped correctly and
+# advertised intact over A2S, and a scenario change applies on rebuild.
+#
 # Copied from a real boot (1.9.0.37, inari, 2026-11-18): about 75 seconds on
 # Conflict - Everon, after "Starting RPL server" and backend registration.
 ready:
@@ -116,8 +120,15 @@ variables:
       mods) when the server starts.
     default: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
     editable: true
+    # The base game's own list, from -listScenarios on 1.9.0.37 (2026-11-18).
     options:
       - { value: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf", label: Conflict - Everon }
+      - { value: "{C700DB41F0C546E1}Missions/23_Campaign_NorthCentral.conf", label: Conflict - Northern Everon }
+      - { value: "{28802845ADA64D52}Missions/23_Campaign_SWCoast.conf", label: Conflict - Southern Everon }
+      - { value: "{59AD59368755F41A}Missions/21_GM_Eden.conf", label: Game Master - Everon }
+      - { value: "{2BBBE828037C6F4B}Missions/22_GM_Arland.conf", label: Game Master - Arland }
+      - { value: "{F45C6C15D31252E6}Missions/27_GM_Cain.conf", label: Game Master - Kolguyev }
+      - { value: "{002AF7323E0129AF}Missions/Tutorial.conf", label: Training }
   - name: max_players
     group: Server
     type: number

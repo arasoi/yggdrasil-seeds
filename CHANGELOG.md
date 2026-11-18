@@ -9,9 +9,10 @@ release notes.
 
 ## 2026-11-18
 
-- **unturned 1.0.1**: new seed. Native Linux dedicated server; the Server Code players join with
-  shows on the server's card.
-- **the-front 1.0.0**: new seed. Native Linux dedicated server.
+- **unturned 1.0.2**: new seed. Native Linux dedicated server; the Server Code players join with
+  shows on the server's card, and Stop saves the world.
+- **the-front 1.0.1**: new seed, KNOWN BROKEN: the published Linux server build crashes on start
+  ("Could not find SuperStruct BP_GameMode_Game_C"). Kept so it works once the developer fixes it.
 - **core-keeper 1.0.0**: new seed. Native Linux dedicated server on a virtual display; the Game ID
   players join with shows on the server's card. Needs Yggdrasil 0.75.3's base-steamcmd image.
 - **necesse 1.0.2**: new seed. Native Linux dedicated server on its bundled Java runtime;

@@ -5,7 +5,7 @@ description: >
   Smartly Dressed Games' free-to-play zombie survival sandbox. The dedicated
   server prints a Server Code players can enter under Connect Directly, so it
   can be joined without port forwarding.
-version: "1.0.1"
+version: "1.0.2"
 
 branding:
   steam_app_id: 304930
@@ -83,6 +83,9 @@ ready:
   pattern: "Loading level: 100%"
   timeout: 300s
 
+# Verified live through Yggdrasil: "shutdown" (read thanks to the script
+# wrapper above) exits 0 in about two seconds, and the world under
+# servers/ygg/Level is written.
 stop:
   command: "shutdown"
   timeout: 60s

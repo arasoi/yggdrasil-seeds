@@ -4,7 +4,7 @@ name: Necesse
 description: >
   A top-down sandbox of exploring, building settlements and fighting bosses,
   for up to 250 players on one dedicated server.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 1169040
@@ -35,8 +35,14 @@ containers:
   - role: game
     primary: true
     image: { base: steamcmd }
+    # -Duser.home is required, not tidiness: Java takes its home directory
+    # from getpwuid(), not $HOME, and the entrypoint's privilege drop runs the
+    # game as a numeric uid with no passwd entry. Found live: without it the
+    # JVM's user.home was "?", and the server wrote its whole data directory
+    # to the relative path ?/.config under the read-only /game and exited.
     command: >-
       /game/jre/bin/java -Xms128M -Xmx{{.Vars.memory_mb}}M
+      -Duser.home=/home/steam
       -Dterminal.jline=false -Dterminal.ansi=true
       -jar /game/Server.jar -nogui
       -world {{.Vars.world}}

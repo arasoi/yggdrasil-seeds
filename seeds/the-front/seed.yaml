@@ -3,8 +3,10 @@ schema: 3
 name: The Front
 description: >
   An open-world survival game of building, crafting and fighting across a
-  post-apocalyptic map, for PvP or PvE servers.
-version: "1.0.0"
+  post-apocalyptic map, for PvP or PvE servers. KNOWN BROKEN as of this
+  version -- the published Linux server crashes on start; see the comment
+  above install below.
+version: "1.0.1"
 
 branding:
   steam_app_id: 2285150
@@ -14,6 +16,20 @@ branding:
 
 architectures: [amd64]
 
+# KNOWN BROKEN (2026-11-18, inari). The public Linux server build (21612623,
+# published 2026-01-23 -- the game client has moved on to 22881025 since)
+# installs completely (3.37 GB, SteamCMD reports success) but every start dies
+# about two minutes in, streaming the Vehicle_Battlefield_A zone, with
+#   Fatal error: Could not find SuperStruct BP_GameMode_Game_C to create
+#   BP_Test_GameMode_Game_C
+# and SIGSEGV (exit 139). Tried, all identical: the launch line below; the
+# same with a leading "ProjectWar" project argument; a read-write install;
+# and a Windows-platform install, whose files differ from the Linux one only
+# in the Steam redistributables (the pelican egg forces that platform; it
+# changes nothing here). The egg's own README notes the Linux server has to be
+# reinstalled on every update "until the devs fix their linux server". The
+# seed is otherwise complete; it needs a Linux build that starts.
+#
 # "The Front Linux Dedicated Server" (2334200): one depot tagged windows,linux
 # that carries the native Linux binary at ProjectWar/Binaries/Linux. Launch
 # line cross-checked against the pelican-eggs/games-steamcmd The Front egg.

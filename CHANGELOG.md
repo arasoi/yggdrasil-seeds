@@ -9,6 +9,8 @@ release notes.
 
 ## 2026-11-18
 
+- **core-keeper 1.0.0**: new seed. Native Linux dedicated server on a virtual display; the Game ID
+  players join with shows on the server's card. Needs Yggdrasil 0.75.3's base-steamcmd image.
 - **necesse 1.0.2**: new seed. Native Linux dedicated server on its bundled Java runtime;
   shows the running game version.
 - **project-zomboid 1.2.0**: new seed. Native Linux dedicated server with a generated admin password

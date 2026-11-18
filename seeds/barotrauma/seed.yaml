@@ -1,0 +1,86 @@
+id: barotrauma
+schema: 3
+name: Barotrauma
+description: >
+  FakeFish and Undertow Games' co-op submarine survival game under the ice of
+  Europa. Most server settings are made in game by the host or an admin, or by
+  editing serversettings.xml from the Files tab while the server is stopped.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 602960
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# Native Linux depot (1026340), a self-contained .NET app. Cross-checked
+# against the pelican-eggs/games-steamcmd Barotrauma egg (./DedicatedServer).
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1026340
+
+server:
+  writable_paths:
+    # HOME holds the server directory below and, under
+    # ~/.local/share/Daedalic Entertainment GmbH/Barotrauma, the saves.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Barotrauma writes serversettings.xml, config_player.xml and Data/*.xml
+    # next to its own executable, which the read-only install cannot take.
+    # Verified on inari: it resolves that directory from the managed
+    # DedicatedServer.dll's real path, not the working directory, so a
+    # writable directory of symlinks is not enough on its own -- the launcher
+    # and its .dll/.deps.json/.runtimeconfig.json are copied in (about 2 MB),
+    # Data/ is seeded from the install without overwriting, and everything
+    # else is a symlink to /game.
+    #
+    # The ports live in serversettings.xml, which the game also rewrites
+    # with every setting changed in game, so the seed sets only its two port
+    # attributes in place on each start (numbers, so a plain sed is safe) and
+    # writes a stub with just those when the file does not exist yet. The
+    # rest of the file is left alone. (Yggdrasil's xml config parser is not
+    # implemented yet; this is the stand-in.)
+    command: >-
+      sh -c 'mkdir -p /home/steam/server && cd /home/steam/server &&
+      for f in /game/*; do n=${f##*/}; case $n in Data|LocalMods|steamapps|DedicatedServer|DedicatedServer.dll|DedicatedServer.deps.json|DedicatedServer.runtimeconfig.json) ;; *) [ -e "$n" ] || ln -s "$f" "$n";; esac; done &&
+      mkdir -p Data LocalMods && cp -rn /game/Data/. Data/ &&
+      cp -f /game/DedicatedServer /game/DedicatedServer.dll /game/DedicatedServer.deps.json /game/DedicatedServer.runtimeconfig.json . &&
+      if [ -f serversettings.xml ]; then sed -i -E "s/^([[:space:]]*)port=\"[0-9]*\"/\1port=\"{{.Ports.game}}\"/; s/^([[:space:]]*)queryport=\"[0-9]*\"/\1queryport=\"{{.Ports.query}}\"/" serversettings.xml;
+      else printf "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<serversettings\n  port=\"{{.Ports.game}}\"\n  queryport=\"{{.Ports.query}}\" />\n" > serversettings.xml; fi &&
+      exec ./DedicatedServer -batchmode'
+    workdir: /home/steam
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: query, protocol: udp, default: 27016, kind: query }
+
+# Copied from a real boot (inari, 2026-11-18): a few seconds.
+ready:
+  mode: log
+  pattern: "Server started"
+  timeout: 300s
+
+# Ctrl-C, as the Pelican egg does; verified to exit in about seven seconds.
+# Campaign progress is saved by the game between rounds, not at shutdown.
+stop:
+  timeout: 60s
+  then: SIGINT
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]

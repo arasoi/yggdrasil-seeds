@@ -1,0 +1,157 @@
+id: soulmask
+schema: 3
+name: Soulmask
+description: >
+  CampFire Studio's survival sandbox set in a primordial jungle: lead a tribe
+  of followers, build, craft and fight, alone or on a server for up to 70
+  players.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 2646460
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# "Soulmask Dedicated Server For Linux" (3017300), a native Linux UE4 build.
+# Launch line cross-checked against the pelican-eggs/games-steamcmd Soulmask
+# egg and the depot's own StartServer.sh / WSServer.sh.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 3017300
+
+server:
+  writable_paths:
+    # Everything the server keeps: Worlds/Dedicated/<map>/world.db, the
+    # ini config, GameplaySettings/GameXishu.json and logs.
+    - { from: saved, to: /game/WS/Saved }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Unreal refuses root; YGG_DROP_PRIVS runs it as the agent's uid.
+    # -EchoPort is the maintenance (telnet) port; verified live it binds on
+    # 127.0.0.1 inside the container only, so it is fixed rather than
+    # allocated and published.
+    command: >-
+      /game/WS/Binaries/Linux/WSServer-Linux-Shipping WS {{.Vars.map}}
+      -server -SILENT -log -UTF8Output -MULTIHOME=0.0.0.0 -forcepassthrough
+      -online=Steam
+      -SteamServerName={{shellquote .Vars.server_name}}
+      -Port={{.Ports.game}}
+      -QueryPort={{.Ports.query}}
+      -EchoPort=18888
+      -MaxPlayers={{.Vars.max_players}}
+      -saving={{.Vars.save_interval}}
+      -backup={{.Vars.backup_interval}}
+      {{if eq .Vars.pve "true"}}-pve{{end}}
+      -adminpsw={{shellquote .Vars.admin_password}}
+      {{if .Vars.password}}-PSW={{shellquote .Vars.password}}{{end}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/WS/Saved"
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      # Verified live: both UDP, both from the command line.
+      - { name: game, protocol: udp, default: 8777, kind: game }
+      - { name: query, protocol: udp, default: 27015, kind: query }
+
+# Copied from a real boot (1.1.9, inari, 2026-11-18): about 100 seconds on a
+# first start. Earlier "Create Dungeon Failed" lines for the same dungeon are
+# retries and normal.
+ready:
+  mode: log
+  pattern: "Create Dungeon Successed"
+  timeout: 600s
+
+# Verified live: SIGINT writes world.db and exits in about 15 seconds.
+stop:
+  timeout: 120s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Set ProjectVersion to ([0-9][0-9.]*[0-9])' }
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [saved]
+
+groups:
+  - name: Server
+  - name: Rules
+  - name: Access
+
+variables:
+  - { name: server_name, group: Server, label: Server name, default: Soulmask Server, editable: true }
+  - name: map
+    group: Server
+    type: select
+    label: Map
+    default: Level01_Main
+    editable: true
+    options:
+      - { value: Level01_Main, label: Cloud Mist Forest }
+      - { value: DLC_Level01_Main, label: Shifting Sands (needs the DLC) }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 70
+    step: 1
+    default: "50"
+    editable: true
+  - name: save_interval
+    group: Server
+    type: number
+    label: Save game objects every (seconds)
+    min: 60
+    max: 3600
+    step: 1
+    default: "600"
+    editable: true
+  - name: backup_interval
+    group: Server
+    type: number
+    label: Write the database to disk every (seconds)
+    min: 60
+    max: 7200
+    step: 1
+    default: "900"
+    editable: true
+  - name: pve
+    group: Rules
+    type: bool
+    label: PvE
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: password
+    group: Access
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    editable: true
+  - name: admin_password
+    group: Access
+    type: password
+    label: GM password
+    description: Opens the GM panel in game ("gm key" followed by this password).
+    generate: password
+    editable: true

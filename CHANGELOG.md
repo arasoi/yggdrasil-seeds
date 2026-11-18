@@ -9,6 +9,8 @@ release notes.
 
 ## 2026-11-18
 
+- **satisfactory 1.0.0**: new seed. Native Linux dedicated server; claim it and set the admin
+  password from the game's Server Manager.
 - **runescape-dragonwilds 0.7.1**: now has its icon, logo and banner, so it no longer shows
   as a placeholder card. Every other seed already had artwork.
 

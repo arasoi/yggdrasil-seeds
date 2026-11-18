@@ -1,0 +1,141 @@
+id: satisfactory
+schema: 3
+name: Satisfactory
+description: >
+  Coffee Stain's open-world factory-building game. The dedicated server hosts
+  one persistent session for you and your friends; the first player to connect
+  claims it and sets the admin password from the game's own Server Manager.
+version: "1.0.0"
+
+# Art comes from the base game's own Steam listing (526870): the dedicated
+# server tool app (1690800) has no store page of its own.
+branding:
+  steam_app_id: 526870
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+# The Linux depot (1690802) is x86_64 only.
+architectures: [amd64]
+
+# A native Linux depot, no Proton. Shape cross-checked against the
+# pelican-eggs/games-steamcmd Satisfactory egg (2024-09), which launches the
+# same *-Linux-Shipping binary with -Port and -ReliablePort.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1690800
+
+server:
+  writable_paths:
+    # Config (Game.ini, Engine.ini) and logs. Unreal writes under the install's
+    # own FactoryGame/Saved, which is read-only without this overlay.
+    - { from: saved, to: /game/FactoryGame/Saved }
+    # The world itself lives under $HOME/.config/Epic/FactoryGame/Saved,
+    # along with the server's claim state and admin password hash.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Unreal refuses to run as root, so the base image's entrypoint drops to
+    # the uid that owns HOME (YGG_DROP_PRIVS) before exec'ing this.
+    command: >-
+      /game/Engine/Binaries/Linux/FactoryServer-Linux-Shipping FactoryGame
+      -Port={{.Ports.game}}
+      -ReliablePort={{.Ports.reliable}}
+      -log -unattended
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/FactoryGame/Saved"
+    ports:
+      # The game port carries gameplay on UDP and the server's HTTPS API (which
+      # the client's Server Manager talks to) on TCP, on the same number.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      - { name: api, protocol: tcp, offset_from: game, offset: 0, kind: web }
+      # Added in 1.1: the initial client handshake, TCP.
+      - { name: reliable, protocol: tcp, default: 8888, kind: other }
+
+config:
+  files:
+    - path: saved/Config/LinuxServer/Game.ini
+      parser: ini
+      manage: patch
+      importable: true
+    - path: saved/Config/LinuxServer/Engine.ini
+      parser: ini
+      manage: patch
+      importable: true
+
+ready:
+  mode: port
+  port: api
+  timeout: 300s
+
+# Ctrl-C is the documented clean shutdown: the server saves and exits.
+stop:
+  timeout: 60s
+  then: SIGINT
+
+connect:
+  label: "Add server in the Server Manager"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home, saved]
+
+groups:
+  - name: Server
+    description: >-
+      Most of the server's configuration (name, admin password, session) is
+      done from the game client's Server Manager after claiming it, not here.
+  - name: Network
+    description: Connection timeouts. Worth raising only for players on poor links.
+    collapsed: true
+
+settings:
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    description: >-
+      The game is tuned for four; more works but is unsupported by the
+      developer.
+    min: 1
+    max: 128
+    step: 1
+    default: "4"
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Engine.GameSession/MaxPlayers }
+  - name: autosaves
+    group: Server
+    type: number
+    label: Rotating autosaves kept
+    min: 1
+    max: 100
+    step: 1
+    default: "3"
+    to: { file: saved/Config/LinuxServer/Engine.ini, key: /Script/FactoryGame.FGSaveSession/mNumRotatingAutosaves }
+  - name: initial_connect_timeout
+    group: Network
+    type: number
+    label: Initial connect timeout (seconds)
+    min: 1
+    max: 600
+    step: 1
+    default: "30"
+    to: { file: saved/Config/LinuxServer/Engine.ini, key: /Script/OnlineSubsystemUtils.IpNetDriver/InitialConnectTimeout }
+  - name: connection_timeout
+    group: Network
+    type: number
+    label: Connection timeout (seconds)
+    min: 1
+    max: 600
+    step: 1
+    default: "20"
+    to: { file: saved/Config/LinuxServer/Engine.ini, key: /Script/OnlineSubsystemUtils.IpNetDriver/ConnectionTimeout }

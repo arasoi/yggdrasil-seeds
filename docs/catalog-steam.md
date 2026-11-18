@@ -50,7 +50,8 @@ but since they are already built there is nothing left to track for them.
 No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (ARK: Survival Evolved), `2394010` (Palworld), `896660` (Valheim), `294420`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
-(Garry's Mod) and `222860` (Left 4 Dead 2) are already built and left off
+(Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
+(Project Zomboid) and `1169370` (Necesse) are already built and left off
 this table.
 
 | Game | AppID |
@@ -113,7 +114,6 @@ this table.
 | MORDHAU | 629800 |
 | Natural Selection | 90 |
 | Natural Selection 2 | 4940 |
-| Necesse | 1169370 |
 | No More Room in Hell | 317670 |
 | NS2: Combat | 313900 |
 | Nuclear Dawn | 111710 |
@@ -124,13 +124,11 @@ this table.
 | Pirates Vikings & Knights II | 17575 |
 | Project Cars | 332670 |
 | Project Cars 2 | 413770 |
-| Project Zomboid | 380870 |
 | Quake 4 | 2210 |
 | Quake Live | 349090 |
 | Red Orchestra: Ostfront 41-45 | 223250 |
 | Ricochet | 90 |
 | Rising World | 339010 |
-| Satisfactory | 1690800 |
 | SCP: Secret Laboratory | 996560 |
 | SCP: Secret Laboratory ServerMod | 786920 |
 | Soldat | 638500 |
@@ -156,6 +154,11 @@ this table.
 | Wurm Unlimited | 402370 |
 | Zombie Master: Reborn | 244310 |
 | Zombie Panic! Source | 17505 |
+
+**Core Keeper needs a virtual display.** Its Linux server is a Unity build that
+will not start without an X display (the Pelican egg wraps it in `xvfb-run`), and
+no base image here ships Xvfb. It needs that added to an image -- most likely an
+opt-in in `base-steamcmd`'s entrypoint -- before a seed can be written.
 
 **A shared AppID is not a typo.** `90` is the classic GoldSrc "Half-Life
 Dedicated Server" tool — a dozen mods above install through it and then need

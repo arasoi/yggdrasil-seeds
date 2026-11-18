@@ -1,0 +1,27 @@
+{
+  "bindAddress": "0.0.0.0",
+  "bindPort": {{.Ports.game}},
+  "publicAddress": {{printf "%q" .NodeAddress}},
+  "publicPort": {{.Ports.game}},
+  "a2s": {
+    "address": "0.0.0.0",
+    "port": {{.Ports.query}}
+  },
+  "game": {
+    "name": {{printf "%q" .Vars.server_name}},
+    "password": {{printf "%q" .Vars.password}},
+    "passwordAdmin": {{printf "%q" .Vars.admin_password}},
+    "scenarioId": {{printf "%q" .Vars.scenario}},
+    "maxPlayers": {{.Vars.max_players}},
+    "visible": {{.Vars.visible}},
+    "crossPlatform": {{.Vars.cross_platform}},
+    "gameProperties": {
+      "serverMaxViewDistance": {{.Vars.view_distance}},
+      "networkViewDistance": {{.Vars.network_view_distance}},
+      "disableThirdPerson": {{.Vars.disable_third_person}},
+      "fastValidation": true,
+      "battlEye": {{.Vars.battleye}}
+    },
+    "mods": {{.Vars.mods}}
+  }
+}

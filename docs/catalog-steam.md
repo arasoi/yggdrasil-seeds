@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned) and `2334200` (The Front -- known broken, its Linux server crashes on
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger) and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
 
@@ -62,7 +62,6 @@ this table.
 | Action: Source | 985050 |
 | American Truck Simulator | 2239530 |
 | ARMA 3 | 233780 |
-| Arma Reforger | 1874900 |
 | Assetto Corsa | 302550 |
 | Avorion | 565060 |
 | Ballistic Overkill | 416880 |
@@ -133,7 +132,6 @@ this table.
 | SCP: Secret Laboratory | 996560 |
 | SCP: Secret Laboratory ServerMod | 786920 |
 | Soldat | 638500 |
-| Soulmask | 3017300 |
 | SourceForts Classic | 244310 |
 | Squad | 403240 |
 | Squad 44 (formerly Post Scriptum, same AppID) | 746200 |

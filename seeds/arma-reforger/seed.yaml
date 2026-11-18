@@ -1,0 +1,212 @@
+id: arma-reforger
+schema: 3
+name: Arma Reforger
+description: >
+  Bohemia Interactive's military sandbox on the Enfusion engine. The dedicated
+  server runs Conflict, Game Master and Combat Ops scenarios and prints a
+  Direct Join Code players can use instead of an address.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 1874880
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# "Arma Reforger Server" (1874900): native Linux binary in depot 1874902 plus
+# the shared content depot 1874901 (about 12 GB). Cross-checked against the
+# pelican-eggs/games-steamcmd Arma Reforger egg. SteamCMD failed this app
+# once with a transient "Missing configuration" on inari before succeeding on
+# the retry; the installer's own retry covers it.
+install:
+  shared: false
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1874900
+
+server:
+  writable_paths:
+    # config.json, the profile (saves, logs, downloaded Workshop mods) and
+    # the addon temp directory all live under HOME.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # -listScenarios prints every scenario id the installed game and mods
+    # offer near the top of the console, for the Scenario field below.
+    command: >-
+      /game/ArmaReforgerServer
+      -config /home/steam/config.json
+      -profile /home/steam/profile
+      -addonTempDir /home/steam/tmp
+      -maxFPS {{.Vars.max_fps}}
+      -backendlog -nothrow -listScenarios
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      # Verified live: bindPort and the A2S port are both UDP.
+      - { name: game, protocol: udp, default: 2001, kind: game }
+      - { name: query, protocol: udp, default: 17777, kind: query }
+
+config:
+  files:
+    # The seed owns config.json: its numbers and booleans must stay JSON
+    # numbers and booleans, which key patching would write as strings, and
+    # its ports and public address follow the allocation. Hand edits are
+    # replaced on every rebuild; use the fields here, and "Mods" for the
+    # mod list.
+    - path: home/config.json
+      source_path: configs/config.json.tmpl
+      manage: always
+
+# Copied from a real boot (1.9.0.37, inari, 2026-11-18): about 75 seconds on
+# Conflict - Everon, after "Starting RPL server" and backend registration.
+ready:
+  mode: log
+  pattern: "Entered online game state"
+  timeout: 600s
+
+# Verified live: SIGINT runs a shutdown save ("Save completed successfully")
+# and exits 0 in about six seconds.
+stop:
+  timeout: 120s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: join_code, label: "Direct Join Code", fleet: true, pattern: 'Direct Join Code: (\d+)' }
+    - { name: game_version, label: "Game version", version: true, pattern: 'Creating game instance\(\w+\), version (\S+)' }
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]
+
+groups:
+  - name: Server
+  - name: Gameplay
+  - name: Access
+  - name: Mods
+    collapsed: true
+  - name: Performance
+    collapsed: true
+
+variables:
+  - name: server_name
+    group: Server
+    label: Server name
+    default: Arma Reforger Server
+    editable: true
+  - name: scenario
+    group: Server
+    type: combo
+    label: Scenario
+    description: >-
+      A scenario id. The console lists every one available (including from
+      mods) when the server starts.
+    default: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
+    editable: true
+    options:
+      - { value: "{ECC61978EDCC2B5A}Missions/23_Campaign.conf", label: Conflict - Everon }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 128
+    step: 1
+    default: "64"
+    editable: true
+  - name: visible
+    group: Server
+    type: bool
+    label: Listed in the server browser
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: cross_platform
+    group: Server
+    type: bool
+    label: Crossplay with consoles
+    description: Console players cannot use mods, so a modded server should leave this off.
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: disable_third_person
+    group: Gameplay
+    type: bool
+    label: First person only
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    editable: true
+  - name: view_distance
+    group: Gameplay
+    type: number
+    label: Max view distance (m)
+    min: 500
+    max: 10000
+    step: 1
+    default: "1600"
+    editable: true
+  - name: network_view_distance
+    group: Gameplay
+    type: number
+    label: Network view distance (m)
+    min: 500
+    max: 5000
+    step: 1
+    default: "1500"
+    editable: true
+  - name: battleye
+    group: Access
+    type: bool
+    label: BattlEye anti-cheat
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: password
+    group: Access
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    editable: true
+  - name: admin_password
+    group: Access
+    type: password
+    label: Admin password
+    description: Players type "#login" followed by this in chat to become admin.
+    generate: password
+    editable: true
+  - name: mods
+    group: Mods
+    label: Mods (JSON)
+    description: >-
+      The config's mods array, written as-is. Example:
+      [{"modId": "59727DAE364DEADB", "name": "WeaponSwitching"}]. The server
+      downloads them at start. Invalid JSON stops it from starting.
+    default: "[]"
+    editable: true
+  - name: max_fps
+    group: Performance
+    type: number
+    label: Server frame cap
+    min: 10
+    max: 240
+    step: 1
+    default: "60"
+    editable: true

@@ -11,7 +11,7 @@ release notes.
 
 - **barotrauma 1.0.0**: new seed. Native Linux dedicated server; settings are made in game or in
   serversettings.xml.
-- **counter-strike-2 1.0.0**: new seed. One shared install per node; your own cfg/server.cfg runs on
+- **counter-strike-2 1.0.1**: new seed. One shared install per node; your own cfg/server.cfg runs on
   every start.
 - **soulmask 1.0.1**: new seed. Native Linux dedicated server with a generated GM password.
 - **arma-reforger 1.0.1**: new seed. Native Linux dedicated server; the Direct Join Code shows on the

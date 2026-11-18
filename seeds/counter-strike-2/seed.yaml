@@ -5,7 +5,7 @@ description: >
   Valve's tactical team shooter. A Game Server Login Token is needed for the
   server to be reachable over the internet and listed; without one it is
   LAN-only.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 730
@@ -42,8 +42,13 @@ containers:
   - role: game
     primary: true
     image: { base: steamcmd }
+    # stdbuf: with stdout a pipe rather than a terminal, cs2 block-buffers
+    # its output. Verified live: through Yggdrasil the console sat at the same
+    # 224 lines for minutes and "Connection to Steam servers successful" only
+    # appeared when the server exited, so readiness never matched. Line
+    # buffering brings it out within seconds.
     command: >-
-      /game/game/bin/linuxsteamrt64/cs2 -dedicated
+      stdbuf -oL -eL /game/game/bin/linuxsteamrt64/cs2 -dedicated
       -ip 0.0.0.0 -port {{.Ports.game}} -tv_port {{.Ports.tv}}
       -maxplayers {{.Vars.max_players}}
       {{if eq .Vars.vac "false"}}-insecure{{end}}
@@ -73,14 +78,16 @@ config:
       source_path: configs/server.cfg.tmpl
       manage: once
 
-# Copied from a real boot (inari, 2026-11-18).
+# Copied from a real boot (inari, 2026-11-18): about ten seconds after start.
+# Printed without a Game Server Login Token too (a LAN-only server still logs
+# into Steam anonymously).
 ready:
   mode: log
   pattern: "Connection to Steam servers successful"
   timeout: 300s
 
-# Verified live: "quit" over the container's stdin shuts the server down
-# cleanly and exits 0.
+# Verified live, by hand and through Yggdrasil's Stop: "quit" over the
+# container's stdin shuts the server down at once and exits 0.
 stop:
   command: "quit"
   timeout: 60s

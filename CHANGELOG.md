@@ -9,6 +9,8 @@ release notes.
 
 ## 2026-11-20
 
+- **humanitz 1.0.0**: new seed. Native Linux dedicated server; server.ini settings from the UI.
+- **mordhau 1.0.0**: new seed. Native Linux dedicated server (not the Wine build).
 - **killing-floor-2 1.0.1**: new seed. Native Linux dedicated server on one shared install per node.
 
 ## 2026-11-18

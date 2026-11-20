@@ -1,0 +1,139 @@
+id: mordhau
+schema: 3
+name: MORDHAU
+description: >
+  Triternion's medieval melee combat game: frontline battles, skirmish, team
+  and free-for-all modes for up to 64 players.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 629760
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# MORDHAU's dedicated server (629800) has a native Linux depot (629802,
+# MordhauServer-Linux-Shipping). The pelican-eggs/games-steamcmd egg runs the
+# Windows build under Wine instead; the native build was verified on inari to
+# load a map and reach WaitingToStart, so this seed uses it.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 629800
+
+server:
+  writable_paths:
+    # Config (Game.ini, Engine.ini), logs and bans.
+    - { from: saved, to: /game/Mordhau/Saved }
+    # The asset registry cache; without it Unreal logs read-only warnings.
+    - { from: intermediate, to: /game/Mordhau/Intermediate }
+    # mod.io's .modio directory falls back to HOME.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Unreal refuses root; YGG_DROP_PRIVS runs it as the agent's uid.
+    # -QueryPort is accepted but unused: the server lists through PlayFab, not
+    # Steam's query protocol. It also opens a UDP socket on 14001 inside the
+    # container that nothing publishes; two servers on one node were run side
+    # by side without conflict.
+    command: >-
+      /game/Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping Mordhau
+      {{.Vars.map}} -log
+      -Port={{.Ports.game}} -BeaconPort={{.Ports.beacon}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/Mordhau/Saved /game/Mordhau/Intermediate"
+    ports:
+      # Verified live: both UDP, both from the command line.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      - { name: beacon, protocol: udp, default: 15000, kind: other }
+      # Bound only while an RCON password is set.
+      - { name: rcon, protocol: tcp, default: 27020, kind: rcon }
+
+config:
+  files:
+    - path: saved/Config/LinuxServer/Game.ini
+      parser: ini
+      manage: patch
+      importable: true
+      set:
+        /Script/Mordhau.MordhauGameSession/RconPort: "{{.Ports.rcon}}"
+
+# Copied from a real boot (1.25635, inari, 2026-11-20): about ten seconds.
+ready:
+  mode: log
+  pattern: "Match State Changed from EnteringMap to WaitingToStart"
+  timeout: 300s
+
+# Verified live: SIGINT exits within a second; there is no world to save.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Set ProjectVersion to ([0-9][0-9.]*[0-9])' }
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [saved]
+
+groups:
+  - name: Server
+  - name: Remote access
+    collapsed: true
+
+variables:
+  - name: map
+    group: Server
+    label: Starting map
+    description: >-
+      A full map path. The rotation that follows is MapRotation in
+      saved/Config/LinuxServer/Game.ini (Files tab).
+    default: /Game/Mordhau/Maps/Contraband/FFA_Contraband
+    editable: true
+
+settings:
+  - { name: server_name, group: Server, label: Server name, default: Mordhau Server, to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Mordhau.MordhauGameSession/ServerName } }
+  - name: max_slots
+    group: Server
+    type: number
+    label: Max players
+    min: 2
+    max: 64
+    step: 1
+    default: "16"
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Mordhau.MordhauGameSession/MaxSlots }
+  - name: password
+    group: Server
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Mordhau.MordhauGameSession/ServerPassword }
+  - name: admin_password
+    group: Server
+    type: password
+    label: Admin password
+    default: ""
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Mordhau.MordhauGameSession/AdminPassword }
+  - name: rcon_password
+    group: Remote access
+    type: password
+    label: RCON password
+    description: RCON listens only while this is set.
+    default: ""
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Mordhau.MordhauGameSession/RconPassword }

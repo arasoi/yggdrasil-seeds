@@ -4,7 +4,7 @@ name: Killing Floor 2
 description: >
   Tripwire's co-op survival shooter: up to six players fight waves of Zeds
   across a map, with a boss at the end.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 232090
@@ -42,9 +42,16 @@ containers:
   - role: game
     primary: true
     image: { base: steamcmd }
+    # No max-players control: verified through Yggdrasil, ?MaxPlayers=4 is
+    # written to [KFGameContent.KFGameInfo_Survival] but the server still
+    # advertises 6 slots over Steam's query, before and after a restart, and
+    # whether it turns a fifth player away is unverified without a client.
+    # Survival is a six-player mode, so the control is left out rather than
+    # shipped doing nothing. Difficulty, length, name and password were all
+    # verified to apply.
     command: >-
       /game/Binaries/Win64/KFGameSteamServer.bin.x86_64
-      {{.Vars.map}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?Difficulty={{.Vars.difficulty}}?GameLength={{.Vars.game_length}}?MaxPlayers={{.Vars.max_players}}
+      {{.Vars.map}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?Difficulty={{.Vars.difficulty}}?GameLength={{.Vars.game_length}}
       -ConfigSubDir=ygg
     workdir: /game
     env:
@@ -131,15 +138,6 @@ variables:
       - { value: "0", label: Short (4 waves) }
       - { value: "1", label: Medium (7 waves) }
       - { value: "2", label: Long (10 waves) }
-  - name: max_players
-    group: Match
-    type: number
-    label: Max players
-    min: 1
-    max: 6
-    step: 1
-    default: "6"
-    editable: true
 
 settings:
   - name: server_name

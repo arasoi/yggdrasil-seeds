@@ -9,7 +9,7 @@ release notes.
 
 ## 2026-11-20
 
-- **killing-floor-2 1.0.0**: new seed. Native Linux dedicated server on one shared install per node.
+- **killing-floor-2 1.0.1**: new seed. Native Linux dedicated server on one shared install per node.
 
 ## 2026-11-18
 

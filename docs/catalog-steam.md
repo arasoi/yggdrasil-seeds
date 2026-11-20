@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2)
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ)
 and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
@@ -96,7 +96,6 @@ this table.
 | Half-Life 2: Deathmatch | 232370 |
 | Half-Life Deathmatch: Source | 255470 |
 | Half-Life: Deathmatch | 90 |
-| HumanitZ | 2728330 |
 | Hurtworld | 405100 |
 | HYPERCHARGE: Unboxed | 1045940 |
 | Insurgency | 237410 |
@@ -109,7 +108,6 @@ this table.
 | Killing Floor | 215360 |
 | Left 4 Dead | 222840 |
 | Military Conflict: Vietnam | 1136190 |
-| MORDHAU | 629800 |
 | Natural Selection | 90 |
 | Natural Selection 2 | 4940 |
 | No More Room in Hell | 317670 |
@@ -166,6 +164,9 @@ usable server; each needs another look before a seed is worth writing:
   `-loadlatest` is gone); it also writes `modconfig.xml` beside the executable. Even read-write
   and with `-batchmode -nographics`, it idles at about 4% CPU after scene setup and never
   binds its ports or loads a world.
+- **Eco (739590)** -- SteamCMD answers "Missing configuration" for an anonymous login every
+  time, with and without the platform and bitness pins (not the transient kind, which a retry
+  clears). The depot is most likely not available anonymously; it needs checking with an account.
 
 **A shared AppID is not a typo.** `90` is the classic GoldSrc "Half-Life
 Dedicated Server" tool — a dozen mods above install through it and then need

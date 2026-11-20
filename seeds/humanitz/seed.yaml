@@ -1,0 +1,188 @@
+id: humanitz
+schema: 3
+name: HumanitZ
+description: >
+  Yodubzz Studios' open-world zombie survival game: scavenge, build, drive
+  and survive alone or with friends on a shared persistent map.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 1766060
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# The dedicated server (2728330) carries one content depot for both systems
+# and picks the platform by branch; "linuxbranch" is the native Linux build
+# (UE4, HumanitZServer-Linux-Shipping). The pelican-eggs/games-steamcmd egg
+# uses the same branch but an older project name (TSSGame) that this build no
+# longer has.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 2728330
+      beta: linuxbranch
+
+server:
+  writable_paths:
+    # HOME holds the server directory below: GameServerSettings.ini, the
+    # ban/admin/player text files and Saved/ (the world) all live there.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # HumanitZ writes GameServerSettings.ini, its player lists and Saved/ into
+    # its project directory, which Unreal finds from the executable's real
+    # path -- inside the read-only install. Verified on inari: running from a
+    # writable copy of the layout works, where everything large is a symlink
+    # to the install and only the binaries (about 160 MB, copied when they
+    # change) are real files. Engine/ is a directory of symlinks rather than
+    # one symlink so Unreal can create Engine/Saved in it.
+    command: >-
+      sh -c 'S=/home/steam/server; P=$S/HumanitZServer;
+      mkdir -p $P/Binaries/Linux $S/Engine &&
+      for f in /game/Engine/*; do [ -e "$S/Engine/${f##*/}" ] || ln -s "$f" "$S/Engine/${f##*/}"; done &&
+      ln -sfn /game/HumanitZServer/Content $P/Content &&
+      cp -u /game/HumanitZServer/Binaries/Linux/* $P/Binaries/Linux/ &&
+      cp -u /game/HumanitZServer/REF_GameServerSettings.ini /game/HumanitZServer/REF_WelcomeMessage.txt $P/ &&
+      exec $P/Binaries/Linux/HumanitZServer-Linux-Shipping HumanitZServer -log
+      -port={{.Ports.game}} -queryport={{.Ports.query}}'
+    workdir: /home/steam
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      # Verified live: both UDP, both from the command line.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      - { name: query, protocol: udp, default: 27015, kind: query }
+      # Bound only while RCON is enabled below.
+      - { name: rcon, protocol: tcp, default: 8888, kind: rcon }
+
+config:
+  files:
+    - path: home/server/HumanitZServer/GameServerSettings.ini
+      parser: ini
+      manage: patch
+      importable: true
+      set:
+        Host Settings/RConPort: "{{.Ports.rcon}}"
+
+# Copied from a real boot (inari, 2026-11-20): about 20 seconds, once the map
+# has loaded and the game's own session reports its port.
+ready:
+  mode: log
+  pattern: "LogKaiHelper: Session port"
+  timeout: 300s
+
+# Verified live: SIGINT shuts the server down in about two seconds, and the
+# world under Saved/SaveGames is kept.
+stop:
+  timeout: 60s
+  then: SIGINT
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]
+
+groups:
+  - name: Server
+  - name: Rules
+  - name: Remote access
+    collapsed: true
+
+settings:
+  - { name: server_name, group: Server, label: Server name, description: 'Avoid the word "Official", or the server may not be listed.', default: "HumanitZ Server", to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/ServerName } }
+  - name: password
+    group: Server
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/Password }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 64
+    step: 1
+    default: "16"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/MaxPlayers }
+  - { name: save_name, group: Server, label: Save name, description: A new name starts a new world., default: DedicatedSaveMP, to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/SaveName } }
+  - name: admin_password
+    group: Server
+    type: password
+    label: Admin password
+    description: Players type /AdminAccess followed by this in chat.
+    default: ""
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/AdminPass }
+  - name: pvp
+    group: Rules
+    type: bool
+    label: PvP
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: World Settings/PVP }
+  - name: perma_death
+    group: Rules
+    type: bool
+    label: Permadeath
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: World Settings/PermaDeath }
+  - name: on_death
+    group: Rules
+    type: select
+    label: Lost on death
+    default: "2"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: World Settings/OnDeath }
+    options:
+      - { value: "0", label: Nothing }
+      - { value: "1", label: Backpack and weapon in hand }
+      - { value: "2", label: Also pockets }
+      - { value: "3", label: Also equipment }
+  - name: xp_multiplier
+    group: Rules
+    type: number
+    label: XP multiplier
+    min: 0
+    max: 100
+    step: 0.1
+    default: "1"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: World Settings/XpMultiplier }
+  - name: save_interval
+    group: Rules
+    type: number
+    label: Autosave every (seconds)
+    description: 0 turns autosave off.
+    min: 0
+    max: 3600
+    step: 1
+    default: "300"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: World Settings/SaveIntervalSec }
+  - name: rcon_enabled
+    group: Remote access
+    type: bool
+    label: RCON
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/RCONEnabled }
+  - name: rcon_password
+    group: Remote access
+    type: password
+    label: RCON password
+    default: ""
+    to: { file: home/server/HumanitZServer/GameServerSettings.ini, key: Host Settings/RCONPass }

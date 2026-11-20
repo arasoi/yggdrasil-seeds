@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2)
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2)
 and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
@@ -107,7 +107,6 @@ this table.
 | Just Cause 2 | 261140 |
 | Just Cause 3 | 619960 |
 | Killing Floor | 215360 |
-| Killing Floor 2 | 232130 |
 | Left 4 Dead | 222840 |
 | Military Conflict: Vietnam | 1136190 |
 | MORDHAU | 629800 |
@@ -150,6 +149,23 @@ this table.
 | Wurm Unlimited | 402370 |
 | Zombie Master: Reborn | 244310 |
 | Zombie Panic! Source | 17505 |
+
+**Tried and parked (2026-11-20, inari).** These installed and ran but did not reach a
+usable server; each needs another look before a seed is worth writing:
+
+- **Counter-Strike: Source (232330)** -- only a 32-bit `srcds_linux` ships (no 64-bit build,
+  unlike Team Fortress 2). It starts and binds its ports but always logs "Unable to load Steam
+  support library" and drops to LAN-only mode. Unchanged by the staged `~/.steam/sdk32`
+  steamclient first on the library path, extra i386 libraries, `srcds_run`, or dropping `-ip`.
+- **Insurgency: Sandstorm (581330)** -- the Linux depot (581333, build of 2026-10-14) ships
+  `pakchunk0` and `pakchunk10`-`28` but no `pakchunk1`-`9`, and every scenario, from the
+  server's own rotation list, fails with "Unable to load scenario asset" (state `LoadError`),
+  read-only or read-write.
+- **Stationeers (600760)** -- needs `-settingspath` (the settings file and save path otherwise
+  sit beside the read-only executable) and `-file start <name> <world>` (the egg's
+  `-loadlatest` is gone); it also writes `modconfig.xml` beside the executable. Even read-write
+  and with `-batchmode -nographics`, it idles at about 4% CPU after scene setup and never
+  binds its ports or loads a world.
 
 **A shared AppID is not a typo.** `90` is the classic GoldSrc "Half-Life
 Dedicated Server" tool — a dozen mods above install through it and then need

@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-20
+
+- **killing-floor-2 1.0.0**: new seed. Native Linux dedicated server on one shared install per node.
+
 ## 2026-11-18
 
 - **barotrauma 1.0.0**: new seed. Native Linux dedicated server; settings are made in game or in

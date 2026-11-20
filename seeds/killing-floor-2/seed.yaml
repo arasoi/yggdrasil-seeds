@@ -1,0 +1,163 @@
+id: killing-floor-2
+schema: 3
+name: Killing Floor 2
+description: >
+  Tripwire's co-op survival shooter: up to six players fight waves of Zeds
+  across a map, with a boss at the end.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 232090
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# Native Linux UE3 server (232130), about 30 GB. Launch line cross-checked
+# against the pelican-eggs/games-steamcmd Killing Floor 2 egg; the binary
+# really does live under Binaries/Win64 on Linux.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 232130
+
+server:
+  writable_paths:
+    # KF2 writes its generated configs (LinuxServer-KFGame.ini and friends)
+    # into KFGame/Config, which also holds the shipped Default*.ini, so that
+    # directory cannot be replaced. -ConfigSubDir=ygg sends them to a
+    # subdirectory instead, which can. Verified on inari: the server copies
+    # the Default*.ini there and writes its own files beside them, and a
+    # LinuxServer-KFGame.ini holding only a few keys before first boot is
+    # merged into the full file, keeping those keys.
+    - { from: config, to: /game/KFGame/Config/ygg }
+    - { from: logs, to: /game/KFGame/Logs }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    command: >-
+      /game/Binaries/Win64/KFGameSteamServer.bin.x86_64
+      {{.Vars.map}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?Difficulty={{.Vars.difficulty}}?GameLength={{.Vars.game_length}}?MaxPlayers={{.Vars.max_players}}
+      -ConfigSubDir=ygg
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      # Verified live: both UDP, both from the URL options.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      - { name: query, protocol: udp, default: 27015, kind: query }
+
+config:
+  files:
+    - path: config/LinuxServer-KFGame.ini
+      parser: ini
+      manage: patch
+      importable: true
+
+# Copied from a real boot (KF2 version 1150, inari, 2026-11-20): a few seconds
+# after start, once the level is up and the server is advertising. The
+# Pelican egg's "Playfab server registered" line does not print on Steam.
+ready:
+  mode: log
+  pattern: "DevOnline: Advertising: NumPublicConnections"
+  timeout: 300s
+
+# Verified live: SIGINT exits within a second. Nothing persists between
+# matches except the configs, so there is no save to protect.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'GKFGameVersion: (\d+)' }
+
+connect:
+  label: "Connect"
+  uri: "steam://connect/{{.Endpoint.game}}"
+  copy: "open {{.Endpoint.game}}"
+
+backup:
+  include: [config]
+
+groups:
+  - name: Match
+  - name: Server
+
+variables:
+  - name: map
+    group: Match
+    type: combo
+    label: Starting map
+    default: KF-BioticsLab
+    editable: true
+    options:
+      - { value: KF-BioticsLab }
+      - { value: KF-BurningParis }
+      - { value: KF-Outpost }
+      - { value: KF-Farmhouse }
+      - { value: KF-Prison }
+      - { value: KF-ContainmentStation }
+      - { value: KF-HostileGrounds }
+      - { value: KF-EvacuationPoint }
+      - { value: KF-Catacombs }
+      - { value: KF-BlackForest }
+  - name: difficulty
+    group: Match
+    type: select
+    label: Difficulty
+    default: "0"
+    editable: true
+    options:
+      - { value: "0", label: Normal }
+      - { value: "1", label: Hard }
+      - { value: "2", label: Suicidal }
+      - { value: "3", label: Hell on Earth }
+  - name: game_length
+    group: Match
+    type: select
+    label: Length
+    default: "1"
+    editable: true
+    options:
+      - { value: "0", label: Short (4 waves) }
+      - { value: "1", label: Medium (7 waves) }
+      - { value: "2", label: Long (10 waves) }
+  - name: max_players
+    group: Match
+    type: number
+    label: Max players
+    min: 1
+    max: 6
+    step: 1
+    default: "6"
+    editable: true
+
+settings:
+  - name: server_name
+    group: Server
+    label: Server name
+    default: Killing Floor 2 Server
+    to: { file: config/LinuxServer-KFGame.ini, key: Engine.GameReplicationInfo/ServerName }
+  - name: password
+    group: Server
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: config/LinuxServer-KFGame.ini, key: Engine.AccessControl/GamePassword }
+  - name: admin_password
+    group: Server
+    type: password
+    label: Admin password
+    description: For "adminlogin" in the in-game console.
+    default: ""
+    to: { file: config/LinuxServer-KFGame.ini, key: Engine.AccessControl/AdminPassword }

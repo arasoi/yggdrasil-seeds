@@ -64,7 +64,6 @@ this table.
 | American Truck Simulator | 2239530 |
 | ARMA 3 | 233780 |
 | Assetto Corsa | 302550 |
-| Avorion | 565060 |
 | Ballistic Overkill | 416880 |
 | Base Defense | 817300 |
 | BATTALION: Legacy | 805140 |

@@ -4,7 +4,7 @@ name: "SCP: Secret Laboratory"
 description: >
   Northwood's multiplayer horror shooter set in the SCP Foundation: staff,
   D-Class and SCPs in randomly generated facility rounds.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 700330
@@ -37,12 +37,14 @@ containers:
     primary: true
     image: { base: steamcmd }
     # LocalAdmin starts and supervises the game. --acceptEULA accepts the
-    # EULA; its first-run wizard keeps its defaults with no terminal to ask.
+    # EULA and --useDefault skips the first-run configuration wizard, which
+    # otherwise waits on the open stdin forever (found on the first live run).
     # The game would otherwise keep its configuration under a directory named
     # after the port; -configpath (passed through after --) fixes it at
     # /data/config. Verified on inari, with the install read-only.
     command: >-
-      /game/LocalAdmin {{.Ports.game}} --acceptEULA -- -configpath /data/config
+      /game/LocalAdmin {{.Ports.game}} --acceptEULA --useDefault --noTerminalTitle
+      -- -configpath /data/config
     workdir: /game
     env:
       HOME: /home/steam

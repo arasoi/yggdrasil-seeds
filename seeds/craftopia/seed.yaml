@@ -4,7 +4,7 @@ name: Craftopia
 description: >
   Pocketpair's open-world survival crafting game: hunting, farming, dungeons,
   building and automation, for up to 127 players on a dedicated server.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 1307550
@@ -89,6 +89,10 @@ ready:
 stop:
   timeout: 60s
   then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'ApplicationVersion = (\S+)' }
 
 connect:
   label: "Join by IP"

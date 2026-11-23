@@ -9,9 +9,9 @@ release notes.
 
 ## 2026-11-23
 
-- **dont-starve-together 1.0.0**: new seed. Master and Caves shards in one container; needs a Klei cluster token.
+- **dont-starve-together 1.0.1**: new seed. Master and Caves shards in one container; needs a Klei cluster token.
 - **scp-secret-laboratory 1.0.1**: new seed. Native Linux server under LocalAdmin.
-- **craftopia 1.0.0**: new seed. Native Linux dedicated server; ServerSetting.ini settings from the UI.
+- **craftopia 1.0.1**: new seed. Native Linux dedicated server; ServerSetting.ini settings from the UI.
 - **avorion 1.0.0**: new seed. Native Linux dedicated server; needs Yggdrasil 0.76.1's base-steamcmd.
 - **mordhau 1.0.1**: ready now waits for the real map, and the console no longer stops after startup.
 

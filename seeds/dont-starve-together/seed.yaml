@@ -1,0 +1,200 @@
+id: dont-starve-together
+schema: 3
+name: Don't Starve Together
+description: >
+  Klei's co-op wilderness survival game. Runs the surface (Master) and the
+  Caves as two shards of one cluster in a single container.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 322330
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 343050 (Don't Starve Together Dedicated Server) has a native Linux depot;
+# installs anonymously.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 343050
+
+server:
+  writable_paths:
+    # -persistent_storage_root: the cluster's configuration, both shards'
+    # saves, and downloaded mods (-ugc_directory).
+    - { from: data, to: /data }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Two processes, as the pelican-eggs egg runs them: the Caves shard in the
+    # background with its stdin on a FIFO and its lines prefixed "[Caves]",
+    # the Master shard in the foreground on the container's own stdin, so the
+    # console and the stop command reach the Master. Verified on inari:
+    # c_shutdown(true) on the Master saves and stops both shards within ten
+    # seconds; the FIFO write afterwards covers a Caves shard that is left.
+    command: >-
+      sh -c 'cd /game/bin64 && rm -f /tmp/caves.in && mkfifo /tmp/caves.in && exec 3<>/tmp/caves.in;
+      D=./dontstarve_dedicated_server_nullrenderer_x64;
+      A="-persistent_storage_root /data -conf_dir DoNotStarveTogether -cluster Cluster_1 -ugc_directory /data/ugc";
+      $D $A -shard Caves </tmp/caves.in 2>&1 | sed -u "s/^/[Caves] /" &
+      $D $A -shard Master;
+      echo "c_shutdown(true)" >&3; wait'
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      # Players connect to the Master and are handed to the Caves shard
+      # directly, so both server ports must be reachable. The Caves shard's
+      # own Steam ports stay inside the container.
+      - { name: game, protocol: udp, default: 10999, kind: game }
+      - { name: caves, protocol: udp, default: 10998, kind: other }
+      - { name: steam, protocol: udp, default: 27016, kind: query }
+      - { name: auth, protocol: udp, default: 8766, kind: other }
+
+config:
+  files:
+    # Without a valid token the server stops at E_INVALID_TOKEN and never
+    # starts (verified); offline_cluster would run it, but LAN mode forces the
+    # ports into 10998-11018, which an allocated port is not.
+    - path: data/DoNotStarveTogether/Cluster_1/cluster_token.txt
+      template: "{{.Vars.cluster_token}}"
+      manage: always
+    - path: data/DoNotStarveTogether/Cluster_1/cluster.ini
+      parser: ini
+      manage: patch
+      importable: true
+      set:
+        NETWORK/offline_cluster: "false"
+        MISC/console_enabled: "true"
+        SHARD/shard_enabled: "true"
+        SHARD/bind_ip: "127.0.0.1"
+        SHARD/master_ip: "127.0.0.1"
+        SHARD/master_port: "10888"
+        SHARD/cluster_key: "{{.ServerID}}"
+    - path: data/DoNotStarveTogether/Cluster_1/Master/server.ini
+      parser: ini
+      manage: patch
+      set:
+        NETWORK/server_port: "{{.Ports.game}}"
+        SHARD/is_master: "true"
+        STEAM/master_server_port: "{{.Ports.steam}}"
+        STEAM/authentication_port: "{{.Ports.auth}}"
+    - path: data/DoNotStarveTogether/Cluster_1/Caves/server.ini
+      parser: ini
+      manage: patch
+      set:
+        NETWORK/server_port: "{{.Ports.caves}}"
+        SHARD/is_master: "false"
+        SHARD/name: Caves
+        STEAM/master_server_port: "27018"
+        STEAM/authentication_port: "8768"
+    # Without it the Caves shard generates a second surface world.
+    - path: data/DoNotStarveTogether/Cluster_1/Caves/worldgenoverride.lua
+      template: |
+        return {
+          override_enabled = true,
+          preset = "DST_CAVE",
+        }
+      manage: once
+
+# Copied from a real boot (inari, 2026-11-23): the Master reports the Caves
+# shard ready once both worlds are up. A first boot generates both worlds,
+# about a minute.
+ready:
+  mode: log
+  pattern: 'Secondary Caves\(\d+\) ready!'
+  timeout: 600s
+
+stop:
+  command: "c_shutdown(true)"
+  timeout: 60s
+  then: SIGTERM
+
+connect:
+  label: "Connect with c_connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [data]
+
+groups:
+  - name: Cluster
+  - name: Gameplay
+
+variables:
+  - name: cluster_token
+    group: Cluster
+    type: password
+    label: Cluster token
+    description: >-
+      Generate one at accounts.klei.com (Games → Game Servers → Add New
+      Server). The server does not start without it.
+    required: true
+    editable: true
+
+settings:
+  - { name: cluster_name, group: Cluster, label: Server name, default: Yggdrasil DST, to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: NETWORK/cluster_name } }
+  - { name: cluster_description, group: Cluster, label: Description, default: "", to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: NETWORK/cluster_description } }
+  - name: cluster_password
+    group: Cluster
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: NETWORK/cluster_password }
+  - name: cluster_intention
+    group: Cluster
+    type: select
+    label: Play style
+    options:
+      - { value: cooperative, label: Cooperative }
+      - { value: social, label: Social }
+      - { value: competitive, label: Competitive }
+      - { value: madness, label: Madness }
+    default: cooperative
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: NETWORK/cluster_intention }
+  - name: game_mode
+    group: Gameplay
+    type: select
+    label: Game mode
+    description: Applies to a newly generated world.
+    options:
+      - { value: survival, label: Survival }
+      - { value: endless, label: Endless }
+      - { value: wilderness, label: Wilderness }
+    default: survival
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: GAMEPLAY/game_mode }
+  - name: max_players
+    group: Gameplay
+    type: number
+    label: Max players
+    min: 1
+    max: 64
+    step: 1
+    default: "6"
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: GAMEPLAY/max_players }
+  - name: pvp
+    group: Gameplay
+    type: bool
+    label: PvP
+    true_value: "true"
+    false_value: "false"
+    default: "false"
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: GAMEPLAY/pvp }
+  - name: pause_when_empty
+    group: Gameplay
+    type: bool
+    label: Pause when empty
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    to: { file: data/DoNotStarveTogether/Cluster_1/cluster.ini, key: GAMEPLAY/pause_when_empty }

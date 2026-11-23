@@ -1,0 +1,162 @@
+id: craftopia
+schema: 3
+name: Craftopia
+description: >
+  Pocketpair's open-world survival crafting game: hunting, farming, dungeons,
+  building and automation, for up to 127 players on a dedicated server.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 1307550
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 1670340 (Craftopia Dedicated Server) has a native Linux depot (osarch 64);
+# installs anonymously. Its first attempt on inari answered SteamCMD's
+# transient "Missing configuration", which the agent's retry absorbs.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 1670340
+
+server:
+  writable_paths:
+    # The server directory: ServerSetting.ini, the world (save/) and a log of
+    # the engine's own output (unity.log).
+    - { from: data, to: /data }
+    # ~/.config/unity3d/PocketPair/Craftopia: player prefs and the game's log.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Craftopia runs as a dedicated server only when ServerSetting.ini sits
+    # beside the executable's real path (not the working directory), so the
+    # server runs from /data: a copy of the 15 KB launcher, symlinks to the
+    # rest of the install, and the real ini. Verified on inari.
+    #
+    # The game's own messages ("World is loaded!") go only to a UTF-16 file in
+    # Logs_DS; the engine's stdout is thousands of shader warnings. So the
+    # engine's output goes to /data/unity.log, and the newest Logs_DS file is
+    # streamed to the console with its NUL bytes removed.
+    command: >-
+      sh -c 'cd /data || exit 1;
+      for f in /game/*; do n=${f##*/};
+      case $n in Craftopia.x86_64|ServerSetting.ini|DefaultServerSetting.ini|save) continue;; esac;
+      ln -sfn "$f" "$n"; done;
+      cp -f /game/Craftopia.x86_64 ./Craftopia.x86_64;
+      L=$HOME/.config/unity3d/PocketPair/Craftopia/Logs_DS; mkdir -p "$L"; : > /tmp/start;
+      ./Craftopia.x86_64 -batchmode -nographics >unity.log 2>&1 & P=$!;
+      trap "kill -INT $P" INT TERM;
+      ( until F=$(find "$L" -name "*.log" -newer /tmp/start | head -n 1); [ -n "$F" ]; do sleep 1; done;
+      tail -n +1 -F "$F" | stdbuf -oL tr -d "\000" ) & T=$!;
+      while kill -0 $P 2>/dev/null; do wait $P; done; kill $T 2>/dev/null; exit 0'
+    workdir: /data
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+    ports:
+      # Verified live: one UDP port, Host/port in ServerSetting.ini.
+      - { name: game, protocol: udp, default: 6587, kind: game }
+
+config:
+  files:
+    - path: data/ServerSetting.ini
+      parser: ini
+      manage: patch
+      importable: true
+      set:
+        Host/port: "{{.Ports.game}}"
+        Host/bindAddress: 0.0.0.0
+        Save/savePath: /data/save/
+
+# Copied from a real boot (inari, 2026-11-23). Generating a new world took
+# six minutes there.
+ready:
+  mode: log
+  pattern: "World is loaded!"
+  timeout: 1200s
+
+# The egg stops it with ^C. Verified live: SIGINT shuts down cleanly in about
+# 15 seconds; the world autosaves while players are on.
+stop:
+  timeout: 60s
+  then: SIGINT
+
+connect:
+  label: "Join by IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [data]
+
+groups:
+  - name: World
+  - name: Server
+  - name: Saving
+    collapsed: true
+
+settings:
+  - { name: world_name, group: World, label: World name, default: Yggdrasil, to: { file: data/ServerSetting.ini, key: GameWorld/name } }
+  - name: difficulty
+    group: World
+    type: select
+    label: Difficulty
+    options:
+      - { value: "0", label: Easy }
+      - { value: "1", label: Normal }
+      - { value: "2", label: Hard }
+      - { value: "3", label: Very hard }
+    default: "1"
+    to: { file: data/ServerSetting.ini, key: GameWorld/difficulty }
+  - name: game_mode
+    group: World
+    type: select
+    label: Game mode
+    options:
+      - { value: "1", label: Normal }
+      - { value: "2", label: "Creative (build)" }
+      - { value: "3", label: "Creative (play)" }
+    default: "1"
+    to: { file: data/ServerSetting.ini, key: GameWorld/gameMode }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 127
+    step: 1
+    default: "7"
+    to: { file: data/ServerSetting.ini, key: Host/maxPlayerNumber }
+  - name: use_password
+    group: Server
+    type: bool
+    label: Require a password
+    true_value: "1"
+    false_value: "0"
+    default: "0"
+    to: { file: data/ServerSetting.ini, key: Host/usePassword }
+  - name: password
+    group: Server
+    type: password
+    label: Password
+    description: A PIN of up to eight digits.
+    default: "00000000"
+    to: { file: data/ServerSetting.ini, key: Host/serverPassword }
+  - name: autosave_seconds
+    group: Saving
+    type: number
+    label: Autosave interval (seconds)
+    description: -1 turns autosave off.
+    min: -1
+    max: 86400
+    step: 1
+    default: "300"
+    to: { file: data/ServerSetting.ini, key: Save/autoSaveSec }

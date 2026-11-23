@@ -1,0 +1,119 @@
+id: scp-secret-laboratory
+schema: 3
+name: "SCP: Secret Laboratory"
+description: >
+  Northwood's multiplayer horror shooter set in the SCP Foundation: staff,
+  D-Class and SCPs in randomly generated facility rounds.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 700330
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 996560 (SCP: Secret Laboratory Dedicated Server) has a native Linux depot;
+# installs anonymously.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 996560
+
+server:
+  writable_paths:
+    # The game's configuration (-configpath below).
+    - { from: config, to: /data/config }
+    # ~/.config/SCP Secret Laboratory: LocalAdmin's own config and logs,
+    # LabAPI plugins, and the central-server key cache.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # LocalAdmin starts and supervises the game. --acceptEULA accepts the
+    # EULA; its first-run wizard keeps its defaults with no terminal to ask.
+    # The game would otherwise keep its configuration under a directory named
+    # after the port; -configpath (passed through after --) fixes it at
+    # /data/config. Verified on inari, with the install read-only.
+    command: >-
+      /game/LocalAdmin {{.Ports.game}} --acceptEULA -- -configpath /data/config
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      # LocalAdmin is a .NET program and the image has no ICU.
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
+    ports:
+      # Verified live: UDP only (the query port is off by default).
+      - { name: game, protocol: udp, default: 7777, kind: game }
+
+config:
+  files:
+    # The game writes this file in full on first start and adds any key it is
+    # missing, so patching the few keys below into an absent file is safe
+    # (verified: three keys in, the full 235-line file out).
+    - path: config/config_gameplay.txt
+      parser: yaml
+      manage: patch
+      importable: true
+
+# Copied from a real boot (game 14.2.9, 2026-11-23): about ten seconds, once
+# the facility is generated and the round lobby is open.
+ready:
+  mode: log
+  pattern: "Waiting for players"
+  timeout: 300s
+
+# LocalAdmin's own command: stops the game and exits.
+stop:
+  command: "exit"
+  timeout: 30s
+  then: SIGTERM
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Game version: (\S+)' }
+
+connect:
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [config, home]
+
+groups:
+  - name: Server
+  - name: Public listing
+    description: >-
+      Northwood lists a server only once it has a contact email and has been
+      verified (see the server-hosting guide on the SCP:SL wiki).
+
+settings:
+  - { name: server_name, group: Server, label: Server name, default: Yggdrasil SCP:SL, to: { file: config/config_gameplay.txt, key: server_name } }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 100
+    step: 1
+    default: "20"
+    to: { file: config/config_gameplay.txt, key: max_players }
+  - name: contact_email
+    group: Public listing
+    label: Contact email
+    description: Required before the server can be made public.
+    default: default
+    to: { file: config/config_gameplay.txt, key: contact_email }
+  - name: server_ip
+    group: Public listing
+    label: Public address
+    description: '"auto" asks a central server for this node''s external address.'
+    default: auto
+    to: { file: config/config_gameplay.txt, key: server_ip }

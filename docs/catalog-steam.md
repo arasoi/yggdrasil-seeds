@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ)
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ), `343050` (Don't Starve Together), `996560` (SCP: Secret Laboratory), `1670340` (Craftopia)
 and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
@@ -78,14 +78,12 @@ this table.
 | Counter-Strike: Condition Zero | 90 |
 | Counter-Strike: Global Offensive | 740 |
 | Counter-Strike: Source | 232330 |
-| Craftopia | 1670340 |
 | Day of Defeat | 90 |
 | Day of Defeat: Source | 232290 |
 | Day of Dragons | 1088320 |
 | Day of Infamy | 462310 |
 | DayZ | 223350 |
 | Deathmatch Classic | 90 |
-| Don't Starve Together | 343050 |
 | Double Action: Boogaloo | 317800 |
 | Dystopia | 17585 |
 | Eco | 739590 |
@@ -124,7 +122,6 @@ this table.
 | Red Orchestra: Ostfront 41-45 | 223250 |
 | Ricochet | 90 |
 | Rising World | 339010 |
-| SCP: Secret Laboratory | 996560 |
 | SCP: Secret Laboratory ServerMod | 786920 |
 | Soldat | 638500 |
 | SourceForts Classic | 244310 |

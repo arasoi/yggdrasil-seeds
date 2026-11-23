@@ -4,7 +4,7 @@ name: Don't Starve Together
 description: >
   Klei's co-op wilderness survival game. Runs the surface (Master) and the
   Caves as two shards of one cluster in a single container.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 322330
@@ -118,6 +118,10 @@ stop:
   command: "c_shutdown(true)"
   timeout: 60s
   then: SIGTERM
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: '^\[[0-9:]+\]: Version: ([0-9]+)' }
 
 connect:
   label: "Connect with c_connect"

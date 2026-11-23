@@ -1,0 +1,149 @@
+id: avorion
+schema: 3
+name: Avorion
+description: >
+  Boxelware's procedural space sandbox: build ships block by block, mine,
+  trade and fight your way to the centre of the galaxy, alone or together.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 445220
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# Native Linux depot 565063 (with the shared content depot 565061), about
+# 185 MB. Launch arguments cross-checked against the pelican-eggs/games-steamcmd
+# Avorion egg and the depot's own server.sh.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 565060
+
+server:
+  writable_paths:
+    # --datapath puts every galaxy under HOME/galaxies.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Needs Yggdrasil 0.76.1's base-steamcmd (ADR-205): the server asks
+    # getpwuid() for its home directory, and before that release the dropped
+    # uid had no passwd entry, so it exited with "Could not find a suitable
+    # directory for saving files" right after connecting to Steam.
+    command: >-
+      /game/bin/AvorionServer
+      --galaxy-name {{shellquote .Vars.galaxy_name}}
+      --datapath /home/steam/galaxies
+      --port {{.Ports.game}}
+      --query-port {{.Ports.query}}
+      --steam-master-port {{.Ports.steam_master}}
+      --steam-query-port {{.Ports.steam_query}}
+      --server-name {{shellquote .Vars.server_name}}
+      --max-players {{.Vars.max_players}}
+      --difficulty {{.Vars.difficulty}}
+      --save-interval {{.Vars.save_interval}}
+      --listed {{.Vars.listed}}
+      {{if .Vars.admin}}--admin {{shellquote .Vars.admin}}{{end}}
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      - { name: game, protocol: udp, default: 27000, kind: game }
+      - { name: game_tcp, protocol: tcp, offset_from: game, offset: 0, kind: other }
+      - { name: query, protocol: udp, default: 27003, kind: query }
+      - { name: steam_master, protocol: udp, default: 27021, kind: other }
+      - { name: steam_query, protocol: udp, default: 27020, kind: other }
+
+# Copied from a real boot (2.5.13, inari, 2026-11-20): a few seconds for a new
+# galaxy.
+ready:
+  mode: log
+  pattern: "Server startup complete"
+  timeout: 300s
+
+# Verified live: "/stop" on stdin saves the galaxy ("Saving sectors...") and
+# shuts down.
+stop:
+  command: "/stop"
+  timeout: 120s
+  then: SIGTERM
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Avorion server (\S+)' }
+
+connect:
+  label: "Join with IP"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [home]
+
+groups:
+  - name: Server
+  - name: Galaxy
+
+variables:
+  - { name: server_name, group: Server, label: Server name, default: Avorion Server, editable: true }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 100
+    step: 1
+    default: "10"
+    editable: true
+  - name: listed
+    group: Server
+    type: bool
+    label: Listed in the server browser
+    true_value: "true"
+    false_value: "false"
+    default: "true"
+    editable: true
+  - name: admin
+    group: Server
+    label: Admin Steam ID
+    description: A SteamID64 made server admin.
+    default: ""
+    editable: true
+  - name: galaxy_name
+    group: Galaxy
+    label: Galaxy name
+    description: The save under HOME/galaxies. A new name starts a new galaxy.
+    default: avorion_galaxy
+    editable: true
+  - name: difficulty
+    group: Galaxy
+    type: select
+    label: Difficulty
+    default: "0"
+    editable: true
+    options:
+      - { value: "-3", label: Beginner }
+      - { value: "-2", label: Easy }
+      - { value: "-1", label: Normal }
+      - { value: "0", label: Veteran }
+      - { value: "1", label: Difficult }
+      - { value: "2", label: Hardcore }
+      - { value: "3", label: Insane }
+  - name: save_interval
+    group: Galaxy
+    type: number
+    label: Autosave every (seconds)
+    min: 60
+    max: 3600
+    step: 1
+    default: "300"
+    editable: true

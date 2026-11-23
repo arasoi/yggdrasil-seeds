@@ -7,6 +7,11 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-23
+
+- **avorion 1.0.0**: new seed. Native Linux dedicated server; needs Yggdrasil 0.76.1's base-steamcmd.
+- **mordhau 1.0.1**: ready now waits for the real map, and the console no longer stops after startup.
+
 ## 2026-11-20
 
 - **humanitz 1.0.0**: new seed. Native Linux dedicated server; server.ini settings from the UI.

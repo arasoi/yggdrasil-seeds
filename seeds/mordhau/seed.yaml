@@ -4,7 +4,7 @@ name: MORDHAU
 description: >
   Triternion's medieval melee combat game: frontline battles, skirmish, team
   and free-for-all modes for up to 64 players.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 629760
@@ -44,8 +44,12 @@ containers:
     # Steam's query protocol. It also opens a UDP socket on 14001 inside the
     # container that nothing publishes; two servers on one node were run side
     # by side without conflict.
+    #
+    # stdbuf: with stdout a pipe, the server block-buffers its log after the
+    # first few hundred lines, so the console (and the ready rule) stopped at
+    # the mod-initialisation map. Verified on inari that -oL keeps it flowing.
     command: >-
-      /game/Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping Mordhau
+      stdbuf -oL -eL /game/Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping Mordhau
       {{.Vars.map}} -log
       -Port={{.Ports.game}} -BeaconPort={{.Ports.beacon}}
     workdir: /game
@@ -69,10 +73,13 @@ config:
       set:
         /Script/Mordhau.MordhauGameSession/RconPort: "{{.Ports.rcon}}"
 
-# Copied from a real boot (1.25635, inari, 2026-11-20): about ten seconds.
+# Copied from a real boot (inari, 2026-11-23): about ten seconds. Not the
+# WaitingToStart match-state line, which the server also prints on the
+# ModInitialization map it loads before the real one; the game session is
+# created only once the real map is up.
 ready:
   mode: log
-  pattern: "Match State Changed from EnteringMap to WaitingToStart"
+  pattern: "Session GameSession successfully created"
   timeout: 300s
 
 # Verified live: SIGINT exits within a second; there is no world to save.

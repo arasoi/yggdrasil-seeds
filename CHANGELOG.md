@@ -9,6 +9,7 @@ release notes.
 
 ## 2026-11-24
 
+- **pavlov-vr 1.0.1**: the API key is optional; without one the server runs unlisted, for direct connections.
 - **rising-world 1.0.0**: new seed. Native Linux (Unity) server; server.properties settings from the UI.
 - **the-isle 1.0.0**: new seed. The Isle Evrima's native Linux server; Game.ini settings from the UI.
 - **pavlov-vr 1.0.0**: new seed. Native Linux server; needs Yggdrasil 0.76.4's base-steamcmd and a Pavlov API key.

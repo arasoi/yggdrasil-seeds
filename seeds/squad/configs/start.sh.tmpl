@@ -1,0 +1,34 @@
+#!/bin/sh
+# Written by the seed on every rebuild; edits here are replaced.
+#
+# SquadGame/ServerConfig is this server's own writable directory, mounted over
+# the install's copy, so it starts empty. Fill in every file the server has
+# not got yet from the defaults the install step kept.
+C=/game/SquadGame/ServerConfig
+D=/game/SquadGame/ServerConfig.default
+for f in "$D"/*; do
+  n=${f##*/}
+  [ -e "$C/$n" ] || cp "$f" "$C/$n"
+done
+
+# The first rebuild writes Server.cfg with only the keys the seed manages, so
+# once, rebuild it from the default file with those values in place: every
+# other default key and comment is kept, and a later rebuild patches the full
+# file.
+if [ ! -e "$C/.ygg-merged" ]; then
+  awk '
+    function key(line) {
+      if (line ~ /^[ \t]*\/\// || index(line, "=") == 0) return ""
+      return substr(line, 1, index(line, "=") - 1)
+    }
+    NR == FNR { k = key($0); if (k != "") { v[k] = $0; order[++n] = k } next }
+    { k = key($0); if (k != "" && (k in v)) { print v[k]; seen[k] = 1; next } print }
+    END { for (i = 1; i <= n; i++) if (!(order[i] in seen)) print v[order[i]] }
+  ' "$C/Server.cfg" "$D/Server.cfg" > "$C/Server.cfg.tmp" &&
+    mv "$C/Server.cfg.tmp" "$C/Server.cfg" && touch "$C/.ygg-merged"
+fi
+
+exec stdbuf -oL -eL /game/SquadGame/Binaries/Linux/SquadGameServer SquadGame \
+  Port={{.Ports.game}} QueryPort={{.Ports.query}} -beaconport={{.Ports.beacon}} \
+  RCONPORT={{.Ports.rcon}}{{if .Vars.rcon_password}} RCONPASSWORD={{shellquote .Vars.rcon_password}}{{end}} \
+  -log

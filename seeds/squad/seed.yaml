@@ -1,0 +1,167 @@
+id: squad
+schema: 3
+name: Squad
+description: >
+  Offworld Industries' large-scale combined-arms shooter: up to 100 players in
+  two teams, with squads, vehicles and logistics.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 393380
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 403240 (Squad Dedicated Server) has a native Linux depot; installs
+# anonymously (about 14 GB). The copy keeps the shipped ServerConfig, which
+# the server's own writable directory hides at runtime, for the start script
+# to fill that directory from.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 403240
+    - op: copy
+      from: SquadGame/ServerConfig
+      to: SquadGame/ServerConfig.default
+
+server:
+  writable_paths:
+    # Server.cfg, Admins.cfg, the layer rotation, MOTD and the rest: the
+    # server reads them only from here.
+    - { from: config, to: /game/SquadGame/ServerConfig }
+    # Logs and the engine's saved config.
+    - { from: saved, to: /game/SquadGame/Saved }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # The start script (rendered below) prepares ServerConfig and runs the
+    # server under stdbuf, as Unreal servers here buffer stdout otherwise.
+    # Unreal refuses root; YGG_DROP_PRIVS runs it as the agent's uid.
+    command: sh /home/steam/ygg-start.sh
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: "/game/SquadGame/ServerConfig /game/SquadGame/Saved"
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      # Verified live: all three UDP, all from the command line.
+      - { name: game, protocol: udp, default: 7787, kind: game }
+      - { name: query, protocol: udp, default: 27165, kind: query }
+      - { name: beacon, protocol: udp, default: 15000, kind: other }
+      # Bound only while an RCON password is set.
+      - { name: rcon, protocol: tcp, default: 21114, kind: rcon }
+
+config:
+  files:
+    - path: home/ygg-start.sh
+      source_path: configs/start.sh.tmpl
+      manage: always
+    - path: config/Server.cfg
+      parser: properties
+      manage: patch
+      importable: true
+
+# Copied from a real boot (v10.6.3, inari, 2026-11-24): about nine seconds,
+# once the first layer is up and waiting for players.
+ready:
+  mode: log
+  pattern: "Match State Changed from EnteringMap to WaitingToStart"
+  timeout: 300s
+
+# The egg stops it with ^C. Verified live: SIGINT exits in about three
+# seconds; matches are not persisted.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: 'Initializing Squad version (v\S+)' }
+    - { name: layer, label: "Layer", fleet: true, pattern: 'Success to Determine Startup Level : (.+?) *$' }
+
+connect:
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [config]
+
+groups:
+  - name: Server
+  - name: Rotation
+  - name: Remote access
+    collapsed: true
+
+variables:
+  - name: rcon_password
+    group: Remote access
+    type: password
+    label: RCON password
+    description: RCON listens only while this is set.
+    default: ""
+    editable: true
+
+settings:
+  - name: server_name
+    group: Server
+    label: Server name
+    default: '"Squad Dedicated Server"'
+    description: Keep the double quotes around the name.
+    to: { file: config/Server.cfg, key: ServerName }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 100
+    step: 1
+    default: "100"
+    to: { file: config/Server.cfg, key: MaxPlayers }
+  - name: reserved_slots
+    group: Server
+    type: number
+    label: Reserved slots
+    min: 0
+    max: 100
+    step: 1
+    default: "0"
+    to: { file: config/Server.cfg, key: NumReservedSlots }
+  - name: queue_limit
+    group: Server
+    type: number
+    label: Public queue size
+    min: 0
+    max: 100
+    step: 1
+    default: "25"
+    to: { file: config/Server.cfg, key: PublicQueueLimit }
+  - { name: advertise, group: Server, type: bool, label: Show in the server browser, true_value: "true", false_value: "false", default: "true", to: { file: config/Server.cfg, key: ShouldAdvertise } }
+  - name: tags
+    group: Server
+    label: Tags
+    description: Space-separated browser tags, such as language_en mode_aas playstyle_relaxed.
+    default: ""
+    to: { file: config/Server.cfg, key: Tags }
+  - name: rotation_mode
+    group: Rotation
+    type: select
+    label: Rotation mode
+    description: The layer list is LayerRotation.cfg (Files tab).
+    options:
+      - { value: LayerList_Vote, label: "Layer list, voted" }
+      - { value: LayerList, label: "Layer list, in order" }
+      - { value: LayerList_Randomized, label: "Layer list, randomized" }
+      - { value: LevelList, label: "Level list, in order" }
+      - { value: LevelList_Randomized, label: "Level list, randomized" }
+    default: LayerList_Vote
+    to: { file: config/Server.cfg, key: MapRotationMode }
+  - { name: allow_team_changes, group: Rotation, type: bool, label: Allow team changes, true_value: "true", false_value: "false", default: "true", to: { file: config/Server.cfg, key: AllowTeamChanges } }

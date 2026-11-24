@@ -7,6 +7,12 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-24
+
+- **euro-truck-simulator-2 1.0.0**: new seed. Native Linux convoy server; starts with default server_packages until you upload your own.
+- **american-truck-simulator 1.0.0**: new seed. Same shape as Euro Truck Simulator 2.
+- **squad 1.0.0**: new seed. Native Linux server; Server.cfg settings from the UI, the rest of ServerConfig in Files.
+
 ## 2026-11-23
 
 - **dont-starve-together 1.0.1**: new seed. Master and Caves shards in one container; needs a Klei cluster token.

@@ -1,0 +1,134 @@
+id: american-truck-simulator
+schema: 3
+name: American Truck Simulator
+description: >
+  SCS Software's trucking simulator across North America. The dedicated server hosts a convoy session of up to eight players.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 270880
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 2239530 (American Truck Simulator Dedicated Server) has a native Linux depot; installs
+# anonymously.
+#
+# The server refuses to start without server_packages.sii/.dat, which only the
+# game itself can write (the export_server_packages console command): they
+# name the map, DLC and mods the server runs. The two downloads below are the
+# set the pelican-eggs egg ships, pinned by commit and digest, and are used
+# only until an operator uploads their own pair (Files tab,
+# home/.local/share/American Truck Simulator/). They were exported from the
+# base game in December 2022; verified on inari that the 1.62 server starts
+# and opens its session with them. It logs unit errors about two DLC the ATS
+# set names, and runs.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 2239530
+    - op: download
+      name: Default server_packages.sii
+      url: https://raw.githubusercontent.com/pelican-eggs/games-steamcmd/7ca4f0fccc9f32f198ef5a39ceabba49bab9b30f/truck-simulator/american-truck-simulator/ats-files/server_packages.sii
+      into: ygg-server-packages/server_packages.sii
+      sha256: a4f6d740629ac196c57f1037e6f8d06d21e7a3abe7a2b0b9b5c0613756a61b50
+    - op: download
+      name: Default server_packages.dat
+      url: https://raw.githubusercontent.com/pelican-eggs/games-steamcmd/7ca4f0fccc9f32f198ef5a39ceabba49bab9b30f/truck-simulator/american-truck-simulator/ats-files/server_packages.dat
+      into: ygg-server-packages/server_packages.dat
+      sha256: 08ce75d97d33e23f30f5286fba094392a59fcce28e5e752d0eb46a32e2683931
+
+server:
+  writable_paths:
+    # ~/.local/share/American Truck Simulator: server_config.sii, server_packages,
+    # server.log.txt and the ban list.
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # stdbuf: with stdout a pipe the server buffers its log, so the session
+    # lines ("[MP] Session running.") never reached the console until exit.
+    command: >-
+      sh -c 'D="$HOME/.local/share/American Truck Simulator"; mkdir -p "$D";
+      for f in server_packages.sii server_packages.dat; do
+      [ -e "$D/$f" ] || cp /game/ygg-server-packages/$f "$D/$f"; done;
+      cd /game/bin/linux_x64 && exec stdbuf -oL -eL ./amtrucks_server'
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      # Verified live: the query port is UDP. Players join through Steam's
+      # relay to the session's virtual ports; the connection port is the
+      # direct path.
+      - { name: game, protocol: udp, default: 27015, kind: game }
+      - { name: query, protocol: udp, default: 27016, kind: query }
+
+config:
+  files:
+    # SII has no parser here, so the seed owns this file whole; the variables
+    # below are its controls.
+    - path: home/.local/share/American Truck Simulator/server_config.sii
+      source_path: configs/server_config.sii.tmpl
+      manage: always
+
+# Copied from a real boot (1.62, inari, 2026-11-24): about a second.
+ready:
+  mode: log
+  pattern: '\[MP\] Session running\.'
+  timeout: 300s
+
+# The egg stops it with ^C. Verified live: SIGINT exits in about two seconds;
+# a convoy server keeps no world to save.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+logs:
+  values:
+    - { name: game_version, label: "Game version", version: true, pattern: '\[MP\] Game version: (\S+)' }
+    - { name: map, label: "Map", pattern: '\[MP\] Map name: (\S+)' }
+
+backup:
+  include: [home]
+
+groups:
+  - name: Server
+  - name: Gameplay
+
+variables:
+  - { name: lobby_name, group: Server, label: Server name, description: 'No double quotes.', default: "American Truck Simulator server", editable: true }
+  - { name: description, group: Server, label: Description, description: 'No double quotes.', default: "", editable: true }
+  - { name: welcome_message, group: Server, label: Welcome message, description: 'No double quotes.', default: "", editable: true }
+  - { name: password, group: Server, type: password, label: Join password, description: 'Leave blank for none.', default: "", editable: true }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 8
+    step: 1
+    default: "8"
+    editable: true
+  - name: logon_token
+    group: Server
+    type: password
+    label: Game Server Login Token
+    description: >-
+      Optional, from steamcommunity.com/dev/managegameservers (app 270880).
+      Keeps the server's Steam ID, and so its search ID, across restarts.
+    default: ""
+    editable: true
+  - { name: show_server, group: Server, type: bool, label: Show in the server browser, true_value: "true", false_value: "false", default: "true", editable: true }
+  - { name: friends_only, group: Server, type: bool, label: Friends only, true_value: "true", false_value: "false", default: "false", editable: true }
+  - { name: player_damage, group: Gameplay, type: bool, label: Damage from players, true_value: "true", false_value: "false", default: "true", editable: true }
+  - { name: traffic, group: Gameplay, type: bool, label: AI traffic, true_value: "true", false_value: "false", default: "true", editable: true }
+  - { name: hide_colliding, group: Gameplay, type: bool, label: Hide colliding players, true_value: "true", false_value: "false", default: "true", editable: true }
+  - { name: force_speed_limiter, group: Gameplay, type: bool, label: Force speed limiter, true_value: "true", false_value: "false", default: "false", editable: true }

@@ -4,7 +4,7 @@ name: Pavlov VR
 description: >
   Vankrupt Games' multiplayer VR shooter: search and destroy, team deathmatch,
   gun game and community maps from mod.io. Runs the PC (Steam) server.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 555160
@@ -93,9 +93,10 @@ settings:
     type: password
     label: API key
     description: >-
-      Required to list the server. Generate one at
-      pavlov-ms.vankrupt.com/servers/v1/key while signed in to Steam.
-    required: true
+      Needed only to appear in the server list; without one the server runs
+      and takes direct connections. Get a code in the game (Settings, General)
+      and redeem it at pavlov-ms.vankrupt.com/servers/v1/key.
+    default: ""
     to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/ApiKey }
   - { name: server_name, group: Server, label: Server name, default: Pavlov Server, to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/ServerName } }
   - name: max_players

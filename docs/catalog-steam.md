@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ), `343050` (Don't Starve Together), `996560` (SCP: Secret Laboratory), `1670340` (Craftopia), `1948160` (Euro Truck Simulator 2), `2239530` (American Truck Simulator), `403240` (Squad)
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ), `343050` (Don't Starve Together), `996560` (SCP: Secret Laboratory), `1670340` (Craftopia), `1948160` (Euro Truck Simulator 2), `2239530` (American Truck Simulator), `403240` (Squad), `339010` (Rising World), `412680` (The Isle), `622970` (Pavlov VR)
 and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
@@ -111,7 +111,6 @@ this table.
 | Onset | 1204170 |
 | Operation: Harsh Doorstop | 950900 |
 | Opposing Force | 90 |
-| Pavlov VR | 622970 |
 | Pirates Vikings & Knights II | 17575 |
 | Project Cars | 332670 |
 | Project Cars 2 | 413770 |
@@ -119,7 +118,6 @@ this table.
 | Quake Live | 349090 |
 | Red Orchestra: Ostfront 41-45 | 223250 |
 | Ricochet | 90 |
-| Rising World | 339010 |
 | SCP: Secret Laboratory ServerMod | 786920 |
 | Soldat | 638500 |
 | SourceForts Classic | 244310 |
@@ -132,7 +130,6 @@ this table.
 | Team Fortress Classic | 90 |
 | Teeworlds | 380840 |
 | Terraria | 105600 |
-| The Isle | 412680 |
 | The Specialists | 90 |
 | Tower Unite | 439660 |
 | Vampire Slayer | 90 |

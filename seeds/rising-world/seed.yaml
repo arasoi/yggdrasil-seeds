@@ -1,0 +1,134 @@
+id: rising-world
+schema: 3
+name: Rising World
+description: >
+  JIW-Games' open-world sandbox: survive, mine, farm and build in a voxel
+  world, with a Java plugin API on the server.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 324080
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 339010 (Rising World Dedicated Server) has a native Linux depot; installs
+# anonymously. The default branch is the Unity version (0.9.x); the old Java
+# version is the "legacy" branch.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 339010
+
+server:
+  writable_paths:
+    # The server directory: server.properties, Worlds/, Logs/, Plugins/ and
+    # Cache/, which the server keeps beside its executable.
+    - { from: data, to: /data }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # The server writes server.properties, its worlds and logs next to the
+    # executable, so it runs from /data: a copy of the 5 KB launcher and
+    # symlinks to the rest of the install (Unity resolves its data from the
+    # executable's real path). Verified on inari. +Server_Port wins over the
+    # value in server.properties.
+    command: >-
+      sh -c 'cd /data || exit 1;
+      for f in /game/*; do n=${f##*/};
+      case $n in RisingWorldServer.x64|server.properties) continue;; esac;
+      ln -sfn "$f" "$n"; done;
+      cp -f /game/RisingWorldServer.x64 ./RisingWorldServer.x64;
+      exec stdbuf -oL -eL ./RisingWorldServer.x64 -batchmode -nographics +Server_Port={{.Ports.game}}'
+    workdir: /data
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      # Verified live with Server_Port=P: the server listens on P-1, UDP for
+      # Steam queries and TCP for its built-in webserver (the server list and
+      # the RCON tool use it), and advertises P as its game port.
+      - { name: query, protocol: udp, default: 4254, kind: query }
+      - { name: web, protocol: tcp, offset_from: query, offset: 0, kind: web }
+      - { name: game, protocol: udp, offset_from: query, offset: 1, kind: game }
+
+config:
+  files:
+    # The server rewrites this file in full, with comments, every start.
+    - path: data/server.properties
+      parser: properties
+      manage: patch
+      importable: true
+      set:
+        Server_Port: "{{.Ports.game}}"
+
+# Copied from a real boot (0.9.3.2, inari, 2026-11-24): about six seconds on a
+# new world.
+ready:
+  mode: log
+  pattern: "Dedicated server is ready!"
+  timeout: 600s
+
+# The egg stops it with ^C. Verified live: SIGINT exits in about two seconds;
+# the world is kept in SQLite databases the server writes as it goes.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+connect:
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [data]
+
+groups:
+  - name: Server
+  - name: World
+    description: The world settings apply when a world of this name is first created.
+
+settings:
+  - { name: server_name, group: Server, label: Server name, default: Rising World Server, to: { file: data/server.properties, key: Server_Name } }
+  - { name: server_description, group: Server, label: Description, default: "", to: { file: data/server.properties, key: Server_Description } }
+  - name: server_password
+    group: Server
+    type: password
+    label: Join password
+    description: Leave blank for none.
+    default: ""
+    to: { file: data/server.properties, key: Server_Password }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    min: 1
+    max: 256
+    step: 1
+    default: "64"
+    to: { file: data/server.properties, key: Settings_MaxPlayers }
+  - { name: visible, group: Server, type: bool, label: Show in the server list, true_value: "True", false_value: "False", default: "True", to: { file: data/server.properties, key: Server_Visible } }
+  - { name: world_name, group: World, label: World name, default: New World, to: { file: data/server.properties, key: World_Name } }
+  - name: game_mode
+    group: World
+    type: select
+    label: Game mode
+    options:
+      - { value: Survival, label: Survival }
+      - { value: Creative, label: Creative }
+    default: Survival
+    to: { file: data/server.properties, key: World_GameMode }
+  - name: world_seed
+    group: World
+    label: World seed
+    description: Leave blank for a random one.
+    default: ""
+    to: { file: data/server.properties, key: World_Seed }

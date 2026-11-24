@@ -1,0 +1,119 @@
+id: pavlov-vr
+schema: 3
+name: Pavlov VR
+description: >
+  Vankrupt Games' multiplayer VR shooter: search and destroy, team deathmatch,
+  gun game and community maps from mod.io. Runs the PC (Steam) server.
+version: "1.0.0"
+
+branding:
+  steam_app_id: 555160
+  icon: icon.jpg
+  logo: logo.png
+  banner: banner.jpg
+
+architectures: [amd64]
+
+# 622970 (Pavlov VR Dedicated Server) has a native Linux depot; installs
+# anonymously. Its Unreal server is built against LLVM's libc++, which
+# base-steamcmd carries from Yggdrasil 0.76.4.
+install:
+  shared: true
+  mount: { path: /game, mode: ro }
+  image: { base: steamcmd }
+  steps:
+    - op: steamcmd
+      app_id: 622970
+
+server:
+  writable_paths:
+    # Game.ini, RconSettings.txt (both Files tab), logs and downloaded maps.
+    - { from: saved, to: /game/Pavlov/Saved }
+    - { from: home, to: /home/steam }
+
+containers:
+  - role: game
+    primary: true
+    image: { base: steamcmd }
+    # Game.ini's MapRotation is a repeated key the ini patch cannot write, so
+    # a server with none gets two stock maps once; edit them in Game.ini
+    # (Files tab) after that. Unreal refuses root; YGG_DROP_PRIVS runs it as
+    # the agent's uid.
+    command: >-
+      sh -c 'F=/game/Pavlov/Saved/Config/LinuxServer/Game.ini; mkdir -p "${F%/*}";
+      grep -q "^MapRotation=" "$F" 2>/dev/null ||
+      printf "MapRotation=(MapId=\"datacenter\", GameMode=\"SND\")\nMapRotation=(MapId=\"sand\", GameMode=\"DM\")\n" >> "$F";
+      exec stdbuf -oL -eL /game/Pavlov/Binaries/Linux/PavlovServer-Linux-Shipping Pavlov -PORT={{.Ports.game}}'
+    workdir: /game
+    env:
+      HOME: /home/steam
+      YGG_DROP_PRIVS: "1"
+      YGG_CHOWN_DIRS: /game/Pavlov/Saved
+      LD_LIBRARY_PATH: /game/linux64
+    ports:
+      # Verified live: -PORT=N binds UDP N, and UDP N+400 for the server
+      # status helper the server list queries.
+      - { name: game, protocol: udp, default: 7777, kind: game }
+      - { name: status, protocol: udp, offset_from: game, offset: 400, kind: query }
+
+config:
+  files:
+    - path: saved/Config/LinuxServer/Game.ini
+      parser: ini
+      manage: patch
+      importable: true
+      set:
+        /Script/Pavlov.DedicatedServer/bEnabled: "true"
+
+# The egg's ready line; verified on inari that the server prints it once its
+# listen port is up (about five seconds).
+ready:
+  mode: log
+  pattern: "Starting Server Status Helper on Port"
+  timeout: 300s
+
+# The egg stops it with ^C. A round is not persisted.
+stop:
+  timeout: 30s
+  then: SIGINT
+
+connect:
+  label: "Direct connect"
+  copy: "{{.Endpoint.game}}"
+
+backup:
+  include: [saved]
+
+groups:
+  - name: Server
+
+settings:
+  - name: api_key
+    group: Server
+    type: password
+    label: API key
+    description: >-
+      Required to list the server. Generate one at
+      pavlov-ms.vankrupt.com/servers/v1/key while signed in to Steam.
+    required: true
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/ApiKey }
+  - { name: server_name, group: Server, label: Server name, default: Pavlov Server, to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/ServerName } }
+  - name: max_players
+    group: Server
+    type: number
+    label: Max players
+    description: 24 is the most the PC client joins.
+    min: 2
+    max: 24
+    step: 1
+    default: "10"
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/MaxPlayers }
+  - name: password
+    group: Server
+    type: password
+    label: Join PIN
+    description: Four digits, or blank for none.
+    default: ""
+    to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/Password }
+  - { name: secured, group: Server, type: bool, label: Anti-cheat (bSecured), true_value: "true", false_value: "false", default: "true", to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/bSecured } }
+  - { name: custom, group: Server, type: bool, label: Custom server, description: Lists the server as custom (modded maps and rules)., true_value: "true", false_value: "false", default: "true", to: { file: saved/Config/LinuxServer/Game.ini, key: /Script/Pavlov.DedicatedServer/bCustomServer } }

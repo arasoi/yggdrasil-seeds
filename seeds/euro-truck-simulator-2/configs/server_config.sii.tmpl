@@ -1,0 +1,32 @@
+SiiNunit
+{
+server_config : _nameless.ygg.0001 {
+ lobby_name: "{{.Vars.lobby_name}}"
+ description: "{{.Vars.description}}"
+ welcome_message: "{{.Vars.welcome_message}}"
+ password: "{{.Vars.password}}"
+ max_players: {{.Vars.max_players}}
+ max_vehicles_total: 100
+ max_ai_vehicles_player: 50
+ max_ai_vehicles_player_spawn: 50
+ connection_virtual_port: 100
+ query_virtual_port: 101
+ connection_dedicated_port: {{.Ports.game}}
+ query_dedicated_port: {{.Ports.query}}
+ server_logon_token: "{{.Vars.logon_token}}"
+ player_damage: {{.Vars.player_damage}}
+ traffic: {{.Vars.traffic}}
+ hide_in_company: false
+ hide_colliding: {{.Vars.hide_colliding}}
+ force_speed_limiter: {{.Vars.force_speed_limiter}}
+ mods_optioning: false
+ timezones: 0
+ service_no_collision: false
+ in_menu_ghosting: false
+ name_tags: true
+ friends_only: {{.Vars.friends_only}}
+ show_server: {{.Vars.show_server}}
+ moderator_list: 0
+}
+
+}

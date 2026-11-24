@@ -52,7 +52,7 @@ No Proton/Wine required for any of these. Sorted alphabetically; `376030`
 (7 Days to Die), `258550` (Rust), `232250` (Team Fortress 2), `4020`
 (Garry's Mod), `222860` (Left 4 Dead 2), `1690800` (Satisfactory), `380870`
 (Project Zomboid), `1169370` (Necesse), `1963720` (Core Keeper), `1110390`
-(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ), `343050` (Don't Starve Together), `996560` (SCP: Secret Laboratory), `1670340` (Craftopia)
+(Unturned), `3017300` (Soulmask), `1874900` (Arma Reforger), `1026340` (Barotrauma), `730` (Counter-Strike 2), `232130` (Killing Floor 2), `629800` (MORDHAU), `2728330` (HumanitZ), `343050` (Don't Starve Together), `996560` (SCP: Secret Laboratory), `1670340` (Craftopia), `1948160` (Euro Truck Simulator 2), `2239530` (American Truck Simulator), `403240` (Squad)
 and `2334200` (The Front -- known broken, its Linux server crashes on
 start) are already built and left off
 this table.
@@ -61,7 +61,6 @@ this table.
 |---|---|
 | Action Half-Life | 90 |
 | Action: Source | 985050 |
-| American Truck Simulator | 2239530 |
 | ARMA 3 | 233780 |
 | Assetto Corsa | 302550 |
 | Ballistic Overkill | 416880 |
@@ -88,7 +87,6 @@ this table.
 | Dystopia | 17585 |
 | Eco | 739590 |
 | Empires Mod | 460040 |
-| Euro Truck Simulator 2 | 1948160 |
 | Fistful of Frags | 295230 |
 | Half-Life 2: Deathmatch | 232370 |
 | Half-Life Deathmatch: Source | 255470 |
@@ -125,7 +123,6 @@ this table.
 | SCP: Secret Laboratory ServerMod | 786920 |
 | Soldat | 638500 |
 | SourceForts Classic | 244310 |
-| Squad | 403240 |
 | Squad 44 (formerly Post Scriptum, same AppID) | 746200 |
 | Starbound | 211820 |
 | Stationeers | 600760 |

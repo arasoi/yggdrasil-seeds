@@ -4,7 +4,7 @@ name: Squad
 description: >
   Offworld Industries' large-scale combined-arms shooter: up to 100 players in
   two teams, with squads, vehicles and logistics.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 393380
@@ -15,9 +15,7 @@ branding:
 architectures: [amd64]
 
 # 403240 (Squad Dedicated Server) has a native Linux depot; installs
-# anonymously (about 14 GB). The copy keeps the shipped ServerConfig, which
-# the server's own writable directory hides at runtime, for the start script
-# to fill that directory from.
+# anonymously (about 14 GB).
 install:
   shared: true
   mount: { path: /game, mode: ro }
@@ -25,32 +23,31 @@ install:
   steps:
     - op: steamcmd
       app_id: 403240
-    - op: copy
-      from: SquadGame/ServerConfig
-      to: SquadGame/ServerConfig.default
 
 server:
   writable_paths:
-    # Server.cfg, Admins.cfg, the layer rotation, MOTD and the rest: the
-    # server reads them only from here.
-    - { from: config, to: /game/SquadGame/ServerConfig }
-    # Logs and the engine's saved config.
-    - { from: saved, to: /game/SquadGame/Saved }
+    # The server's copy of the game layout (see configs/start.sh.tmpl), its
+    # logs (server/SquadGame/Saved) and the start script.
     - { from: home, to: /home/steam }
+    # Server.cfg, Admins.cfg, the layer rotation, MOTD and the rest; kept
+    # apart from home so a backup is the configuration, not the 220 MB
+    # executable copy.
+    - { from: config, to: /home/steam/server/SquadGame/ServerConfig }
 
 containers:
   - role: game
     primary: true
     image: { base: steamcmd }
-    # The start script (rendered below) prepares ServerConfig and runs the
-    # server under stdbuf, as Unreal servers here buffer stdout otherwise.
-    # Unreal refuses root; YGG_DROP_PRIVS runs it as the agent's uid.
+    # The start script (rendered below) builds the layout, prepares
+    # ServerConfig and runs the server under stdbuf, as Unreal servers here
+    # buffer stdout otherwise. Unreal refuses root; YGG_DROP_PRIVS runs it as
+    # the agent's uid.
     command: sh /home/steam/ygg-start.sh
     workdir: /game
     env:
       HOME: /home/steam
       YGG_DROP_PRIVS: "1"
-      YGG_CHOWN_DIRS: "/game/SquadGame/ServerConfig /game/SquadGame/Saved"
+      YGG_CHOWN_DIRS: /home/steam/server/SquadGame/ServerConfig
       LD_LIBRARY_PATH: /game/linux64
     ports:
       # Verified live: all three UDP, all from the command line.

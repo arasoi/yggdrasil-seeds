@@ -1,11 +1,29 @@
 #!/bin/sh
 # Written by the seed on every rebuild; edits here are replaced.
 #
-# SquadGame/ServerConfig is this server's own writable directory, mounted over
-# the install's copy, so it starts empty. Fill in every file the server has
-# not got yet from the defaults the install step kept.
-C=/game/SquadGame/ServerConfig
-D=/game/SquadGame/ServerConfig.default
+# Squad reads ServerConfig/ and writes Saved/ in its project directory, which
+# Unreal finds from the executable's real path -- inside the read-only
+# install. So the server runs from a copy of the layout under HOME: the
+# executable itself is a real file (220 MB, copied again only when it
+# changes), Content, Plugins and the engine are symlinks into the install,
+# and ServerConfig is this server's own directory. Verified on inari.
+S=$HOME/server
+G=$S/SquadGame
+B=$G/Binaries/Linux
+mkdir -p "$B" "$S/Engine" "$G/ServerConfig" "$G/Saved"
+for f in /game/Engine/*; do
+  [ -e "$S/Engine/${f##*/}" ] || ln -s "$f" "$S/Engine/${f##*/}"
+done
+for d in Content Plugins; do ln -sfn "/game/SquadGame/$d" "$G/$d"; done
+for f in /game/SquadGame/Binaries/Linux/*; do
+  n=${f##*/}
+  [ "$n" = SquadGameServer ] || ln -sfn "$f" "$B/$n"
+done
+cp -u /game/SquadGame/Binaries/Linux/SquadGameServer "$B/SquadGameServer"
+
+# Fill in every config file the server has not got yet from the shipped ones.
+C=$G/ServerConfig
+D=/game/SquadGame/ServerConfig
 for f in "$D"/*; do
   n=${f##*/}
   [ -e "$C/$n" ] || cp "$f" "$C/$n"
@@ -28,7 +46,7 @@ if [ ! -e "$C/.ygg-merged" ]; then
     mv "$C/Server.cfg.tmp" "$C/Server.cfg" && touch "$C/.ygg-merged"
 fi
 
-exec stdbuf -oL -eL /game/SquadGame/Binaries/Linux/SquadGameServer SquadGame \
+exec stdbuf -oL -eL "$B/SquadGameServer" SquadGame \
   Port={{.Ports.game}} QueryPort={{.Ports.query}} -beaconport={{.Ports.beacon}} \
   RCONPORT={{.Ports.rcon}}{{if .Vars.rcon_password}} RCONPASSWORD={{shellquote .Vars.rcon_password}}{{end}} \
   -log

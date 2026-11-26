@@ -4,7 +4,7 @@ name: Minecraft Java (Paper)
 description: >
   Vanilla-compatible Minecraft Java Edition server running Paper, with
   plugin support. Runs on any architecture with a JRE.
-version: "3.1.0"
+version: "3.1.1"
 
 # Not on Steam. The logo is PaperMC's own project mark (papermc.io); the
 # banner is Mojang's 2024 key art, mirrored on the Minecraft Wiki -- this
@@ -700,6 +700,12 @@ stop:
 # `copy` only. The Minecraft client's own join flow is pasting an address into
 # "Add Server", which takes exactly this `host:port` — verifiable from the game's
 # documented UI. Minecraft registers no URI scheme, so there is no `uri` to give.
+backup:
+  # The whole writable root: world folders, server.properties, plugins and
+  # their data all live under /data. Without a backup block at all, "Back up
+  # now" and every scheduled backup were refused as having nothing to back up.
+  include_root: true
+
 connect:
   label: "Add this server"
   copy: "{{.Endpoint.game}}"

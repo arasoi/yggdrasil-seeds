@@ -7,6 +7,15 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-26
+
+- **ark-survival-ascended 5.9.1**: the admin/RCON password is generated per new server instead of defaulting to "changeme". A cluster member that was only inheriting the old default now has no admin password (RCON off) until you set one.
+- **ark-survival-evolved 1.5.1**: same change as ASA, and the admin password field is now masked.
+- **valheim 2.4.1**: the server password is generated per new server instead of defaulting to "changeme123". Existing servers keep theirs.
+- **fivem 1.4.1**: backups work again. The database dump now goes into the database volume, and the password is passed safely.
+- **minecraft-java-paper 3.1.1**: backups work. The seed declares what to back up (the whole server directory).
+- **minecraft-bedrock 4.1.1**: backups work, as for Paper. Archives include the server binaries that live beside the worlds.
+
 ## 2026-11-24
 
 - **pavlov-vr 1.0.1**: the API key is optional; without one the server runs unlisted, for direct connections.

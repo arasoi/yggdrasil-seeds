@@ -5,7 +5,7 @@ description: >
   Dedicated server for Minecraft Bedrock Edition — the version played on
   consoles, phones and Windows. The server downloads itself when it first
   starts, so there is no separate install step.
-version: "4.1.0"
+version: "4.1.1"
 
 # Minecraft is not sold on Steam, so there is no steam_app_id here -- all
 # three images are Mojang's own official franchise assets (minecraft.net's
@@ -492,6 +492,14 @@ stop:
 # Java — Bedrock is UDP 19132 by convention and a seed-driven server takes
 # whatever the node's range gives it (ADR-061), so an operator who does not pass
 # the port on gets a client that cannot find the server at all.
+backup:
+  # The whole writable root. The image installs the Bedrock server binaries
+  # into /data beside worlds/ and the properties files, so an archive carries
+  # them too -- larger than the world alone, but nothing here separates the
+  # two. Without a backup block at all, "Back up now" and every scheduled
+  # backup were refused as having nothing to back up.
+  include_root: true
+
 connect:
   label: "Add this server"
   copy: "{{.Endpoint.game}}"

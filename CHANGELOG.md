@@ -7,6 +7,11 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-26 (3)
+
+- **ark-survival-ascended 5.10.0**: stopping, restarting or updating a server now saves the world first (over RCON), instead of losing play since the last autosave. Needs a server admin password and agents on yggdrasil 0.77.0.
+- **ark-survival-evolved 1.6.0**: the same RCON save-and-exit on stop.
+
 ## 2026-11-26 (2)
 
 - **core-keeper 1.0.1**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.

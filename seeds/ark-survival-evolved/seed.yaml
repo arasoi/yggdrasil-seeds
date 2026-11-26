@@ -5,7 +5,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.5.1"
+version: "1.6.0"
 
 # icon is the store's own portrait capsule (library_600x900.jpg) for the same
 # base-game app id above; the top-level icon: emoji is gone, since a seed may
@@ -2079,6 +2079,18 @@ ready:
   mode: port
   port: rcon
   timeout: 300s
+
+# Stop over RCON (ADR-211), the same SaveWorld then DoExit ARK Survival
+# Ascended needs. Not verified live for this native Linux build, but these are
+# ARK's own admin commands and the stop falls back to SIGTERM if RCON is off
+# (empty admin_password) or refuses. Needs agents on protocol 19.
+stop:
+  rcon:
+    port: rcon
+    password: "{{.Vars.admin_password}}"
+    commands: [SaveWorld, DoExit]
+  timeout: 120s
+  then: SIGTERM
 
 # No crash block, for the same reason ASA's own seed leaves one commented out
 # rather than declared: a wrong crash pattern stops a healthy server, which is

@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.4.0"
+version: "1.4.1"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -88,9 +88,17 @@ containers:
       command: "healthcheck.sh --connect --innodb_initialized"
       interval: 5s
       retries: 20
+    # The dump goes inside the data volume, because sidecar volumes are what
+    # the archive carries -- the hook used to write /backup/fivem.sql, a
+    # directory this image does not have, so the redirect failed, the hook
+    # exited non-zero and every backup (txData included) was aborted. The
+    # live InnoDB files are archived too, but they are tarred mid-write; the
+    # --single-transaction dump beside them is the consistent copy to restore
+    # from. The password travels in MYSQL_PWD, shell-quoted, rather than as
+    # -p<pw> on a command line where a quote in it would break the hook.
     backup:
-      pre: "mariadb-dump -u root -p{{.Vars.db_password}} fivem > /backup/fivem.sql"
-      post: "rm -f /backup/fivem.sql"
+      pre: "MYSQL_PWD={{shellquote .Vars.db_password}} mariadb-dump -u root --single-transaction fivem > /var/lib/mysql/ygg-backup-fivem.sql"
+      post: "rm -f /var/lib/mysql/ygg-backup-fivem.sql"
 
   - role: dbadmin
     name: Database Admin

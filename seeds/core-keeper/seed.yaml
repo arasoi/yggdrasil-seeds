@@ -5,7 +5,7 @@ description: >
   Pugstorm's underground mining, crafting and exploration sandbox for up to 100
   players. Steam players join by Game ID; everyone else connects directly by
   address and password.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 1621690
@@ -52,7 +52,7 @@ containers:
       -worldmode {{.Vars.world_mode}}
       -maxplayers {{.Vars.max_players}}
       {{if .Vars.world_seed}}-worldseed {{shellquote .Vars.world_seed}}{{end}}
-      {{if .Vars.game_id}}-gameid {{.Vars.game_id}}{{end}}
+      {{if .Vars.game_id}}-gameid {{shellquote .Vars.game_id}}{{end}}
       {{if .Vars.password}}-password {{shellquote .Vars.password}}{{end}}
     workdir: /home/steam
     env:

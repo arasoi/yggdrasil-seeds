@@ -4,7 +4,7 @@ name: Necesse
 description: >
   A top-down sandbox of exploring, building settlements and fighting bosses,
   for up to 250 players on one dedicated server.
-version: "1.0.2"
+version: "1.0.3"
 
 branding:
   steam_app_id: 1169040
@@ -49,10 +49,10 @@ containers:
       -Duser.home=/home/steam
       -Dterminal.jline=false -Dterminal.ansi=true
       -jar /game/Server.jar -nogui
-      -world {{.Vars.world}}
+      -world {{shellquote .Vars.world}}
       -port {{.Ports.game}}
       -slots {{.Vars.slots}}
-      {{if .Vars.password}}-password {{.Vars.password}}{{end}}
+      {{if .Vars.password}}-password {{shellquote .Vars.password}}{{end}}
     workdir: /game
     env:
       HOME: /home/steam

@@ -4,7 +4,7 @@ name: MORDHAU
 description: >
   Triternion's medieval melee combat game: frontline battles, skirmish, team
   and free-for-all modes for up to 64 players.
-version: "1.0.1"
+version: "1.0.2"
 
 branding:
   steam_app_id: 629760
@@ -50,7 +50,7 @@ containers:
     # the mod-initialisation map. Verified on inari that -oL keeps it flowing.
     command: >-
       stdbuf -oL -eL /game/Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping Mordhau
-      {{.Vars.map}} -log
+      {{shellquote .Vars.map}} -log
       -Port={{.Ports.game}} -BeaconPort={{.Ports.beacon}}
     workdir: /game
     env:

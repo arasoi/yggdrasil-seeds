@@ -4,7 +4,7 @@ name: Project Zomboid
 description: >
   The Indie Stone's isometric zombie survival sandbox. The dedicated server
   hosts one persistent world in Knox County for many players at once.
-version: "1.2.0"
+version: "1.2.1"
 
 branding:
   steam_app_id: 108600
@@ -49,8 +49,8 @@ containers:
       -servername ygg
       -port {{.Ports.game}}
       -udpport {{.Ports.direct}}
-      -adminusername {{.Vars.admin_username}}
-      -adminpassword {{.Vars.admin_password}}
+      -adminusername {{shellquote .Vars.admin_username}}
+      -adminpassword {{shellquote .Vars.admin_password}}
     workdir: /game
     env:
       HOME: /home/steam

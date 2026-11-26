@@ -6,7 +6,7 @@ description: >
   and defend it from raiders. This seed runs the dedicated server, not the
   game. KNOWN BROKEN as of this version -- see the comment below before
   installing.
-version: "1.0.4"
+version: "1.0.5"
 
 # The base game's own Steam listing (252490) -- 258550, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -129,20 +129,20 @@ containers:
       +server.ip 0.0.0.0 +server.port {{.Ports.game}}
       +server.queryport {{.Ports.query}}
       +server.tickrate {{.Vars.tickrate}}
-      +server.hostname "{{.Vars.server_name}}"
+      +server.hostname {{shellquote .Vars.server_name}}
       +server.identity "data"
       +server.gamemode {{.Vars.game_mode}}
       +server.level "{{.Vars.map_type}}"
-      +server.seed {{.Vars.world_seed}}
-      +server.salt {{.Vars.world_salt}}
+      +server.seed {{shellquote .Vars.world_seed}}
+      +server.salt {{shellquote .Vars.world_salt}}
       +server.maxplayers {{.Vars.max_players}}
       +server.worldsize {{.Vars.world_size}}
       +server.saveinterval {{.Vars.save_interval}}
-      {{if .Vars.server_tags}}+server.tags "{{.Vars.server_tags}}"{{end}}
-      {{if .Vars.level_url}}+server.levelurl "{{.Vars.level_url}}"{{end}}
+      {{if .Vars.server_tags}}+server.tags {{shellquote .Vars.server_tags}}{{end}}
+      {{if .Vars.level_url}}+server.levelurl {{shellquote .Vars.level_url}}{{end}}
       +rcon.web {{.Vars.rcon_web}}
       +rcon.ip 0.0.0.0 +rcon.port {{.Ports.rcon}}
-      +rcon.password "{{.Vars.rcon_password}}"
+      +rcon.password {{shellquote .Vars.rcon_password}}
     env:
       LD_LIBRARY_PATH: ".:RustDedicated_Data/Plugins/x86_64"
     workdir: /game

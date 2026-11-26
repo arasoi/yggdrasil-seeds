@@ -4,7 +4,7 @@ name: Team Fortress 2
 description: >
   Class-based multiplayer shooter. Nine classes, objective-based game
   modes, and two decades of community maps and mods.
-version: "1.0.6"
+version: "1.0.7"
 
 # The base game's own Steam listing (440) -- 232250, the dedicated-server
 # tool app id installed below, has no store page and so no artwork of its
@@ -135,11 +135,11 @@ containers:
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -unrestricted_maxplayers
       +map {{.Vars.map}}
-      +hostname "{{.Vars.server_name}}"
+      +hostname {{shellquote .Vars.server_name}}
       +servercfgfile server.cfg
-      +rcon_password "{{.Vars.rcon_password}}"
-      +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
+      +rcon_password {{shellquote .Vars.rcon_password}}
+      +sv_setsteamaccount {{shellquote .Vars.gslt}}
+      {{if .Vars.sv_password}}+sv_password {{shellquote .Vars.sv_password}}{{end}}
     workdir: /game
     env:
       LD_LIBRARY_PATH: "./bin/linux64:./bin:.:/opt/steamcmd/linux64"

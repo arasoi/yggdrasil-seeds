@@ -5,7 +5,7 @@ description: >
   A Source-engine sandbox for building, physics experiments, and community
   game modes. This seed installs the base Sandbox game only, with no
   Workshop content -- see the map/gamemode fields below for what that means.
-version: "1.0.1"
+version: "1.0.2"
 
 # The base game's own Steam listing (4000) is a fully-covered store page --
 # header, hero, and portrait art all confirmed present -- unlike the
@@ -140,13 +140,13 @@ containers:
       -ip 0.0.0.0 -port {{.Ports.game}}
       -clientport {{.Ports.clientport}}
       -maxplayers {{.Vars.max_players}} -tickrate {{.Vars.tickrate}}
-      +gamemode {{.Vars.gamemode}}
-      +map {{.Vars.map}}
-      +hostname "{{.Vars.server_name}}"
+      +gamemode {{shellquote .Vars.gamemode}}
+      +map {{shellquote .Vars.map}}
+      +hostname {{shellquote .Vars.server_name}}
       +servercfgfile server.cfg
-      +rcon_password "{{.Vars.rcon_password}}"
-      +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
+      +rcon_password {{shellquote .Vars.rcon_password}}
+      +sv_setsteamaccount {{shellquote .Vars.gslt}}
+      {{if .Vars.sv_password}}+sv_password {{shellquote .Vars.sv_password}}{{end}}
     workdir: /game
     ports:
       # Same shape as team-fortress-2's: Source's query protocol answers on

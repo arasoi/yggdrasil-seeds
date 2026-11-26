@@ -4,7 +4,7 @@ name: 7 Days to Die
 description: >
   Open-world zombie survival: scavenge, build a base, and defend it through
   recurring horde nights. This seed runs the dedicated server, not the game.
-version: "1.3.0"
+version: "1.3.1"
 
 # All three images come straight from this same app id's own Steam CDN
 # assets (icon: library_600x900.jpg, logo: logo.png, banner: library_hero.jpg)

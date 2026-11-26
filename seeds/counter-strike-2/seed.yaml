@@ -5,7 +5,7 @@ description: >
   Valve's tactical team shooter. A Game Server Login Token is needed for the
   server to be reachable over the internet and listed; without one it is
   LAN-only.
-version: "1.0.1"
+version: "1.0.2"
 
 branding:
   steam_app_id: 730
@@ -54,11 +54,11 @@ containers:
       {{if eq .Vars.vac "false"}}-insecure{{end}}
       {{if .Vars.rcon_password}}-usercon{{end}}
       +game_type {{.Vars.game_type}} +game_mode {{.Vars.game_mode}}
-      +map {{.Vars.map}}
+      +map {{shellquote .Vars.map}}
       +hostname {{shellquote .Vars.hostname}}
       {{if .Vars.password}}+sv_password {{shellquote .Vars.password}}{{end}}
       {{if .Vars.rcon_password}}+rcon_password {{shellquote .Vars.rcon_password}}{{end}}
-      {{if .Vars.gslt}}+sv_setsteamaccount {{.Vars.gslt}}{{end}}
+      {{if .Vars.gslt}}+sv_setsteamaccount {{shellquote .Vars.gslt}}{{end}}
       +exec ygg/server.cfg
     workdir: /game
     env:

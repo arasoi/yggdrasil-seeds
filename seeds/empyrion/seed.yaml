@@ -4,7 +4,7 @@ name: Empyrion - Galactic Survival
 description: >
   Space survival sandbox. Build ships and bases, mine planets and fight through
   a persistent galaxy, alone or with others on one server.
-version: "1.1.1"
+version: "1.1.2"
 
 # The base game's own Steam listing — distinct from 530870, the dedicated
 # server tool app installed below. icon is the store's own portrait capsule

@@ -9,7 +9,7 @@ description: >
   (see the install block below for why) but does not reach a confirmed
   boot; see the primary container's own comment for the full live account
   of what was tried.
-version: "1.2.2"
+version: "1.2.3"
 
 # The base game's own Steam listing (550) is fully covered -- header,
 # capsule and hero art all confirmed present -- unlike the dedicated-server
@@ -270,11 +270,11 @@ containers:
       -maxplayers {{.Vars.max_players}}
       +map {{.Vars.map}}
       +mp_gamemode {{.Vars.gamemode}}
-      +hostname "{{.Vars.server_name}}"
+      +hostname {{shellquote .Vars.server_name}}
       +servercfgfile server.cfg
-      +rcon_password "{{.Vars.rcon_password}}"
-      +sv_setsteamaccount "{{.Vars.gslt}}"
-      {{if .Vars.sv_password}}+sv_password "{{.Vars.sv_password}}"{{end}}
+      +rcon_password {{shellquote .Vars.rcon_password}}
+      +sv_setsteamaccount {{shellquote .Vars.gslt}}
+      {{if .Vars.sv_password}}+sv_password {{shellquote .Vars.sv_password}}{{end}}
     workdir: /game
     env:
       HOME: /home/steam

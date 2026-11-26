@@ -7,6 +7,23 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-26 (2)
+
+- **core-keeper 1.0.1**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **counter-strike-2 1.0.2**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **garrys-mod 1.0.2**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **killing-floor-2 1.0.2**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **left-4-dead-2 1.2.3**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **mordhau 1.0.2**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **necesse 1.0.3**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **project-zomboid 1.2.1**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **rust 1.0.5**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **team-fortress-2 1.0.7**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **valheim 2.4.2**: names, passwords and other free-text values with spaces or quotes no longer break the launch command.
+- **dune-awakening 0.3.2**: the same launch-command fix, and backups now include a pg_dump of the database beside the live files.
+- **7-days-to-die 1.3.1**: a name, password or description containing `&`, `<` or quotes no longer produces an invalid serverconfig.xml.
+- **empyrion 1.1.2**: a name, password or description containing quotes no longer produces an invalid dedicated.yaml.
+
 ## 2026-11-26
 
 - **ark-survival-ascended 5.9.1**: the admin/RCON password is generated per new server instead of defaulting to "changeme". A cluster member that was only inheriting the old default now has no admin password (RCON off) until you set one.

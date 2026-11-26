@@ -4,7 +4,7 @@ name: Killing Floor 2
 description: >
   Tripwire's co-op survival shooter: up to six players fight waves of Zeds
   across a map, with a boss at the end.
-version: "1.0.1"
+version: "1.0.2"
 
 branding:
   steam_app_id: 232090
@@ -51,7 +51,7 @@ containers:
     # verified to apply.
     command: >-
       /game/Binaries/Win64/KFGameSteamServer.bin.x86_64
-      {{.Vars.map}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?Difficulty={{.Vars.difficulty}}?GameLength={{.Vars.game_length}}
+      {{shellquote .Vars.map}}?Port={{.Ports.game}}?QueryPort={{.Ports.query}}?Difficulty={{.Vars.difficulty}}?GameLength={{.Vars.game_length}}
       -ConfigSubDir=ygg
     workdir: /game
     env:

@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.3.1"
+version: "0.3.2"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -172,6 +172,14 @@ containers:
       interval: 10s
       timeout: 5s
       retries: 12
+    # The data directory is archived while Postgres runs, so its files are
+    # tarred mid-write; this dump beside them is the consistent copy to
+    # restore from. It goes inside the volume because volumes are what the
+    # archive carries, and over the local socket, which the stock entrypoint
+    # trusts. Not yet run against a provisioned server.
+    backup:
+      pre: "pg_dump -U dune -Fc dune > /var/lib/postgresql/data/ygg-backup-dune.dump"
+      post: "rm -f /var/lib/postgresql/data/ygg-backup-dune.dump"
 
   - role: admin-rmq
     name: Admin RabbitMQ
@@ -243,12 +251,12 @@ containers:
     command: >-
       updatedb.py --unattended
       --host postgres:5432
-      --project-database {{.Vars.db_name}}
+      --project-database {{shellquote .Vars.db_name}}
       --project-user dune
-      --project-password {{.Vars.db_password}}
+      --project-password {{shellquote .Vars.db_password}}
       --admin-user dune
-      --admin-password {{.Vars.db_password}}
-      --admin-database {{.Vars.db_name}}
+      --admin-password {{shellquote .Vars.db_password}}
+      --admin-database {{shellquote .Vars.db_name}}
 
   # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
 
@@ -366,15 +374,15 @@ containers:
     # optional map-slot containers below for those.
     command: >-
       ./run_server.sh
-      -FarmRegion={{.Vars.region}}
-      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -FarmRegion={{shellquote .Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
-      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
-      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
-      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
@@ -415,15 +423,15 @@ containers:
       - { role: game, condition: started }
     command: >-
       ./run_server.sh
-      -FarmRegion={{.Vars.region}}
-      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -FarmRegion={{shellquote .Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
-      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
-      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
-      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
@@ -445,15 +453,15 @@ containers:
       - { role: game, condition: started }
     command: >-
       ./run_server.sh
-      -FarmRegion={{.Vars.region}}
-      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{.Vars.fls_token}}
+      -FarmRegion={{shellquote .Vars.region}}
+      -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{.Vars.world_unique_name}}
-      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{.Vars.server_login_password}}
-      -ini:engine:[OnlineSubsystem]:DatacenterId={{.Vars.datacenter_id}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
+      -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
-      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{.Vars.db_password}}
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672

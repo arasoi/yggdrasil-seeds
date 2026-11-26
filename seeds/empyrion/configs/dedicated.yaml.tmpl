@@ -5,15 +5,15 @@
 # spaces per level throughout, and no tabs anywhere.
 ServerConfig:
   Srv_Port: {{.Ports.game}}
-  Srv_Name: "{{.Vars.server_name}}"
-  Srv_Password: "{{.Vars.server_password}}"
+  Srv_Name: {{printf "%q" .Vars.server_name}}
+  Srv_Password: {{printf "%q" .Vars.server_password}}
   Srv_MaxPlayers: {{.Vars.max_players}}
-  Srv_Description: "{{.Vars.server_description}}"
+  Srv_Description: {{printf "%q" .Vars.server_description}}
   Srv_Public: {{.Vars.public}}
   Srv_StopPeriod: 0
   Tel_Enabled: {{.Vars.telnet_enabled}}
   Tel_Port: {{.Ports.telnet}}
-  Tel_Pwd: "{{.Vars.telnet_password}}"
+  Tel_Pwd: {{printf "%q" .Vars.telnet_password}}
   EACActive: {{.Vars.eac}}
   DecayTime: {{.Vars.decay_time}}
   MaxStructures: {{.Vars.max_structures}}
@@ -23,8 +23,8 @@ ServerConfig:
   SaveDirectory: Saves
 
 GameConfig:
-  GameName: "{{.Vars.game_name}}"
+  GameName: {{printf "%q" .Vars.game_name}}
   Mode: {{.Vars.mode}}
   Seed: {{.Vars.seed}}
-{{if .Vars.custom_scenario}}  CustomScenario: "{{.Vars.custom_scenario}}"
+{{if .Vars.custom_scenario}}  CustomScenario: {{printf "%q" .Vars.custom_scenario}}
 {{end}}

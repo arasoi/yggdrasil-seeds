@@ -5,7 +5,7 @@ description: >
   Dedicated server for the original ARK: Survival Evolved. Several maps can
   share one copy of the game files and a cluster volume, so players keep
   their characters and items when they travel between maps.
-version: "1.5.0"
+version: "1.5.1"
 
 # icon is the store's own portrait capsule (library_600x900.jpg) for the same
 # base-game app id above; the top-level icon: emoji is gone, since a seed may
@@ -154,7 +154,15 @@ variables:
   # not independently re-verified against ASE, but it is the same engine
   # option (ServerAdminPassword) on both games. Change it before exposing a
   # server; it is also the in-game EnableCheats password.
-  - { name: admin_password, default: changeme, editable: true }
+  #
+  # No default: it used to be "changeme", and RCON is always enabled on the
+  # command line with its port published, so every server nobody edited
+  # accepted full admin over RCON with a password anyone could guess.
+  # generate: password gives each new server its own. A server that stored
+  # its own value keeps it; a cluster member that was only inheriting the
+  # old default now resolves to empty, which per the note above means RCON
+  # does not bind and admin is off until an operator sets one.
+  - { name: admin_password, type: password, generate: password, editable: true }
   # Default is BattlEye ON (empty true_value -- no flag needed), matching
   # both Pelican's BATTLE_EYE=1 default and AMP's "Disable BattlEye"
   # defaulting unchecked for this game. Not independently verified end to

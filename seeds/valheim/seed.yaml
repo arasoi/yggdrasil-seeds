@@ -5,7 +5,7 @@ description: >
   Dedicated server for Valheim, a Norse survival and exploration game.
   Crossplay is on by default, so the server prints a join code players can
   use instead of an address.
-version: "2.4.0"
+version: "2.4.1"
 
 # The base game's own Steam listing (896660, the dedicated-server tool app
 # id installed below, has no store page and so no artwork of its own). icon
@@ -139,7 +139,12 @@ variables:
     # the schema has no length or cross-field constraint to express them, and
     # inventing one would be a second place to keep in sync with Iron Gate.
     description: At least 5 characters, and must not appear anywhere in the server name — the server refuses to start otherwise.
-    default: "changeme123"
+    # Generated per server rather than defaulting to "changeme123": with
+    # Visibility defaulting to listed, every unedited server sat in the public
+    # browser behind the same guessable password. A generated one is letters
+    # and digits, well past 5 characters, so it satisfies the game's own rule.
+    # Existing servers stored their own value at creation and keep it.
+    generate: password
     editable: true
   - name: public
     group: Server

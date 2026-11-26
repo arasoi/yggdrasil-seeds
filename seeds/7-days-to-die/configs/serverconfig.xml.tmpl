@@ -1,35 +1,35 @@
 <?xml version="1.0"?>
 <ServerSettings>
   <property name="ServerPort" value="{{.Ports.game}}"/>
-  <property name="ServerVisibility" value="{{.Vars.server_visibility}}"/>
-  <property name="ServerName" value="{{.Vars.server_name}}"/>
-  <property name="ServerPassword" value="{{.Vars.server_password}}"/>
-  <property name="ServerMaxPlayerCount" value="{{.Vars.max_players}}"/>
+  <property name="ServerVisibility" value="{{html .Vars.server_visibility}}"/>
+  <property name="ServerName" value="{{html .Vars.server_name}}"/>
+  <property name="ServerPassword" value="{{html .Vars.server_password}}"/>
+  <property name="ServerMaxPlayerCount" value="{{html .Vars.max_players}}"/>
   <property name="ServerReservedSlots" value="0"/>
   <property name="ServerReservedSlotsPermission" value="100"/>
   <property name="ServerAdminSlots" value="0"/>
   <property name="ServerAdminSlotsPermission" value="0"/>
 
-  <property name="ServerDescription" value="{{.Vars.server_description}}"/>
-  <property name="ServerWebsiteURL" value="{{.Vars.server_website_url}}"/>
-  <property name="ServerLoginConfirmationText" value="{{.Vars.server_login_confirmation_text}}"/>
+  <property name="ServerDescription" value="{{html .Vars.server_description}}"/>
+  <property name="ServerWebsiteURL" value="{{html .Vars.server_website_url}}"/>
+  <property name="ServerLoginConfirmationText" value="{{html .Vars.server_login_confirmation_text}}"/>
   <!-- Added following a review against the Valve Developer Wiki's own
        serverconfig.xml reference: this file previously declared neither of
        these, so every server ran under the game's own internal defaults
        (NorthAmericaEast / English) with no way for an operator to say
        otherwise, and a player's server browser can filter on both. -->
-  <property name="Region" value="{{.Vars.region}}"/>
-  <property name="Language" value="{{.Vars.language}}"/>
+  <property name="Region" value="{{html .Vars.region}}"/>
+  <property name="Language" value="{{html .Vars.language}}"/>
   <!-- A dedicated server with correctly forwarded ports doesn't need Steam's
        own P2P relay layer; the reference config this is built from
        disables it for exactly that reason. -->
   <property name="ServerDisabledNetworkProtocols" value="SteamNetworking"/>
-  <property name="ServerMaxWorldTransferSpeedKiBs" value="{{.Vars.server_max_world_transfer_speed_kibs}}"/>
+  <property name="ServerMaxWorldTransferSpeedKiBs" value="{{html .Vars.server_max_world_transfer_speed_kibs}}"/>
 
-  <property name="GameWorld" value="{{.Vars.game_world}}"/>
-  <property name="WorldGenSeed" value="{{.Vars.world_gen_seed}}"/>
-  <property name="WorldGenSize" value="{{.Vars.world_gen_size}}"/>
-  <property name="GameName" value="{{.Vars.game_name}}"/>
+  <property name="GameWorld" value="{{html .Vars.game_world}}"/>
+  <property name="WorldGenSeed" value="{{html .Vars.world_gen_seed}}"/>
+  <property name="WorldGenSize" value="{{html .Vars.world_gen_size}}"/>
+  <property name="GameName" value="{{html .Vars.game_name}}"/>
   <property name="GameMode" value="GameModeSurvival"/>
 
   <!-- V3.0 ("Dead Hot Summer", stable 2026-06-29) removed thirty separate
@@ -41,9 +41,9 @@
        one now aborts boot with "Unknown config option" rather than being
        ignored, not merely deprecated). See the seed comment above
        sandbox_code for where to generate one. -->
-  <property name="SandboxCode" value="{{.Vars.sandbox_code}}"/>
+  <property name="SandboxCode" value="{{html .Vars.sandbox_code}}"/>
   <property name="BuildCreate" value="false"/>
-  <property name="PlayerKillingMode" value="{{.Vars.player_killing_mode}}"/>
+  <property name="PlayerKillingMode" value="{{html .Vars.player_killing_mode}}"/>
   <property name="PersistentPlayerProfiles" value="false"/>
 
   <property name="PlayerSafeZoneLevel" value="5"/>
@@ -70,12 +70,12 @@
   <property name="WebDashboardEnabled" value="true"/>
   <property name="WebDashboardPort" value="{{.Ports.webdash}}"/>
   <property name="WebDashboardUrl" value=""/>
-  <property name="EnableMapRendering" value="{{.Vars.enable_map_rendering}}"/>
+  <property name="EnableMapRendering" value="{{html .Vars.enable_map_rendering}}"/>
   {{end}}
 
-  <property name="TelnetEnabled" value="{{.Vars.telnet_enabled}}"/>
+  <property name="TelnetEnabled" value="{{html .Vars.telnet_enabled}}"/>
   <property name="TelnetPort" value="{{.Ports.telnet}}"/>
-  <property name="TelnetPassword" value="{{.Vars.telnet_password}}"/>
+  <property name="TelnetPassword" value="{{html .Vars.telnet_password}}"/>
   <property name="TelnetFailedLoginLimit" value="10"/>
   <property name="TelnetFailedLoginsBlocktime" value="10"/>
 
@@ -91,18 +91,18 @@
 
   <property name="LandClaimSize" value="41"/>
   <property name="LandClaimDeadZone" value="30"/>
-  <property name="LandClaimExpiryTime" value="{{.Vars.land_claim_expiry_time}}"/>
+  <property name="LandClaimExpiryTime" value="{{html .Vars.land_claim_expiry_time}}"/>
   <property name="LandClaimDecayMode" value="0"/>
   <property name="LandClaimOnlineDurabilityModifier" value="4"/>
   <property name="LandClaimOfflineDurabilityModifier" value="4"/>
 
   <property name="PartySharedKillRange" value="100"/>
-  <property name="MaxSpawnedZombies" value="{{.Vars.max_spawned_zombies}}"/>
-  <property name="MaxSpawnedAnimals" value="{{.Vars.max_spawned_animals}}"/>
+  <property name="MaxSpawnedZombies" value="{{html .Vars.max_spawned_zombies}}"/>
+  <property name="MaxSpawnedAnimals" value="{{html .Vars.max_spawned_animals}}"/>
 
-  <property name="ServerAllowCrossplay" value="{{.Vars.server_allow_crossplay}}"/>
-  <property name="EACEnabled" value="{{.Vars.eac_enabled}}"/>
-  <property name="IgnoreEOSSanctions" value="{{.Vars.ignore_eos_sanctions}}"/>
+  <property name="ServerAllowCrossplay" value="{{html .Vars.server_allow_crossplay}}"/>
+  <property name="EACEnabled" value="{{html .Vars.eac_enabled}}"/>
+  <property name="IgnoreEOSSanctions" value="{{html .Vars.ignore_eos_sanctions}}"/>
   <property name="HideCommandExecutionLog" value="0"/>
   <property name="MaxUncoveredMapChunksPerPlayer" value="131072"/>
   <property name="BedrollDeadZoneSize" value="15"/>

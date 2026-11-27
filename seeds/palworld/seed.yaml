@@ -4,7 +4,7 @@ name: Palworld
 description: >
   Open-world survival and creature collection. Players catch and deploy Pals to
   fight, build and automate, alone or with up to 31 others on one server.
-version: "1.3.0"
+version: "1.3.1"
 
 # The base game's own Steam listing — distinct from 2394010, the dedicated
 # server tool app installed below. icon is the store's own portrait capsule
@@ -1366,6 +1366,7 @@ variables:
       What appears in the community server list. Config key: ServerName.
     default: "Default Palworld Server"
     editable: true
+    forbidden_chars: '"\'
   - name: server_description
     group: Server
     label: Server description
@@ -1374,6 +1375,7 @@ variables:
       ServerDescription.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - name: admin_password
     group: Server
     type: password
@@ -1383,6 +1385,7 @@ variables:
       password RCON authenticates with. Config key: AdminPassword.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - name: server_password
     group: Server
     type: password
@@ -1392,6 +1395,7 @@ variables:
       key: ServerPassword.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - name: allow_client_mod
     group: Server
     type: bool
@@ -1410,6 +1414,7 @@ variables:
       the server work it out, which is usually right. Config key: PublicIP.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - name: region
     group: Server
     label: Region
@@ -1417,6 +1422,7 @@ variables:
       Region code advertised to the community server list. Config key: Region.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - name: use_auth
     group: Server
     type: bool
@@ -1435,6 +1441,7 @@ variables:
       Where the server fetches its ban list from. Config key: BanListURL.
     default: "https://b.palworldgame.com/api/banlist.txt"
     editable: true
+    forbidden_chars: '"\'
   - name: show_player_list
     group: Server
     type: bool

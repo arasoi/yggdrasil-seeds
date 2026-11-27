@@ -7,6 +7,12 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-26 (4)
+
+- **palworld 1.3.1**: server name, description, passwords, advertised IP, region and ban-list URL now refuse a double quote or backslash on save, instead of writing a PalWorldSettings.ini the game cannot parse. Needs yggdrasil 0.78.0.
+- **euro-truck-simulator-2 1.0.1**: server name, description, welcome message, join password and login token refuse a double quote or backslash, which would break server_config.sii.
+- **american-truck-simulator 1.0.1**: the same.
+
 ## 2026-11-26 (3)
 
 - **ark-survival-ascended 5.10.0**: stopping, restarting or updating a server now saves the world first (over RCON), instead of losing play since the last autosave. Needs a server admin password and agents on yggdrasil 0.77.0.

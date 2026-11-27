@@ -3,7 +3,7 @@ schema: 3
 name: Euro Truck Simulator 2
 description: >
   SCS Software's trucking simulator across Europe. The dedicated server hosts a convoy session of up to eight players.
-version: "1.0.0"
+version: "1.0.1"
 
 branding:
   steam_app_id: 227300
@@ -103,10 +103,10 @@ groups:
   - name: Gameplay
 
 variables:
-  - { name: lobby_name, group: Server, label: Server name, description: 'No double quotes.', default: "Euro Truck Simulator 2 server", editable: true }
-  - { name: description, group: Server, label: Description, description: 'No double quotes.', default: "", editable: true }
-  - { name: welcome_message, group: Server, label: Welcome message, description: 'No double quotes.', default: "", editable: true }
-  - { name: password, group: Server, type: password, label: Join password, description: 'Leave blank for none.', default: "", editable: true }
+  - { name: lobby_name, group: Server, label: Server name, description: 'No double quotes or backslashes.', default: "Euro Truck Simulator 2 server", editable: true, forbidden_chars: '"\' }
+  - { name: description, group: Server, label: Description, description: 'No double quotes or backslashes.', default: "", editable: true, forbidden_chars: '"\' }
+  - { name: welcome_message, group: Server, label: Welcome message, description: 'No double quotes or backslashes.', default: "", editable: true, forbidden_chars: '"\' }
+  - { name: password, group: Server, type: password, label: Join password, description: 'Leave blank for none.', default: "", editable: true, forbidden_chars: '"\' }
   - name: max_players
     group: Server
     type: number
@@ -125,6 +125,7 @@ variables:
       Keeps the server's Steam ID, and so its search ID, across restarts.
     default: ""
     editable: true
+    forbidden_chars: '"\'
   - { name: show_server, group: Server, type: bool, label: Show in the server browser, true_value: "true", false_value: "false", default: "true", editable: true }
   - { name: friends_only, group: Server, type: bool, label: Friends only, true_value: "true", false_value: "false", default: "false", editable: true }
   - { name: player_damage, group: Gameplay, type: bool, label: Damage from players, true_value: "true", false_value: "false", default: "true", editable: true }

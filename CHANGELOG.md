@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-27 (3)
+
+- **fivem 1.6.0**: txAdmin gets a tab on the server's page, reached through Yggdrasil rather than the node's address. It needs yggdrasil 0.81.0 with a wildcard addon origin (`addon_public_url: https://*.<domain>`); without one the tab explains what to set up.
+
 ## 2026-11-27 (2)
 
 - **fivem 1.5.0**: the Adminer add-on is gone; the bundled MariaDB is browsed from Yggdrasil's own Database tab instead, which never publishes the database. Needs yggdrasil 0.80.0, without which the server has no database tab at all.

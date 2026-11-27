@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, browsable from Yggdrasil's own
   Database tab.
-version: "1.5.0"
+version: "1.6.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -154,6 +154,18 @@ containers:
       - { name: game, protocol: tcp, default: 30120, kind: game }
       - { name: game-udp, protocol: udp, offset_from: game, offset: 0 }
       - { name: txadmin, protocol: tcp, default: 40120, kind: web }
+    # txAdmin's panel, as a tab on the server's page. Its port is a web port,
+    # so Yggdrasil publishes it on the node's loopback only and reaches it
+    # through the node's agent; nothing on the network can open it. root:
+    # true because the panel only works at the root of a host -- it calls
+    # /api/... and /login and builds its redirects from / -- so the tab is
+    # shown only when the control plane's addon origin is a wildcard, giving
+    # every session a host of its own; otherwise the tab explains that. Not
+    # yet opened through a real wildcard addon origin.
+    ui:
+      tab: txAdmin
+      port: txadmin
+      root: true
 
 variables:
   - name: db_password
@@ -299,8 +311,5 @@ backup:
 #     signal, now that there is real boot output from inside a real pod to
 #     check it against
 #   - the built-in Database tab against this seed's real MariaDB
-#   - txAdmin's web panel: its port is a web port, so Yggdrasil publishes it
-#     on the node's loopback only and it is not reachable from the network.
-#     It needs serving at the root of a host, which Yggdrasil's add-on
-#     proxy does not do yet; until it does, reach it over an SSH tunnel to
-#     the node's loopback
+#   - the txAdmin tab through a real wildcard addon origin: its login,
+#     its websocket console and its deployer

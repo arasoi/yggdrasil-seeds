@@ -7,7 +7,7 @@ description: >
   server-config management; a bundled MariaDB gives ESX/QBCore-style
   frameworks somewhere to store their data, with an optional Adminer tab
   for managing it.
-version: "1.4.1"
+version: "1.4.2"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -260,9 +260,13 @@ connect:
   copy: "{{.Endpoint.game}}"
 
 stop:
-  # FXServer's ordinary admin console command for a clean shutdown.
-  command: "quit"
-  timeout: 30s
+  # No console command: the container's stdin belongs to txAdmin, which reads
+  # none, so "quit" only ever waited out the timeout (verified live 2026-11-27).
+  # txAdmin handles SIGTERM itself ("Got SIGTERM, shutting down..."), tells
+  # FXServer to quit ("Quitting: host shutting down") and gives itself 5s.
+  # FXServer b35245 then exits with SIGSEGV (code 139) on Linux after quitting;
+  # that is its own exit path, not a stop this seed can make cleaner.
+  timeout: 15s
   then: SIGTERM
 
 backup:

@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-27
+
+- **fivem 1.4.2**: stopping, restarting or rebuilding a server no longer waits 30 seconds for a console command txAdmin ignores; it signals txAdmin straight away, which shuts FXServer down itself.
+
 ## 2026-11-26 (4)
 
 - **palworld 1.3.1**: server name, description, passwords, advertised IP, region and ban-list URL now refuse a double quote or backslash on save, instead of writing a PalWorldSettings.ini the game cannot parse. Needs yggdrasil 0.78.0.

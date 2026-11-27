@@ -7,6 +7,11 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-27 (2)
+
+- **fivem 1.5.0**: the Adminer add-on is gone; the bundled MariaDB is browsed from Yggdrasil's own Database tab instead, which never publishes the database. Needs yggdrasil 0.80.0, without which the server has no database tab at all.
+- **dune-awakening 0.4.0**: the CloudBeaver add-on is gone, replaced the same way for its PostgreSQL. Needs yggdrasil 0.80.0.
+
 ## 2026-11-27
 
 - **fivem 1.4.2**: stopping, restarting or rebuilding a server no longer waits 30 seconds for a console command txAdmin ignores; it signals txAdmin straight away, which shuts FXServer down itself.

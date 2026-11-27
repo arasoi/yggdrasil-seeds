@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.3.2"
+version: "0.4.0"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -180,6 +180,17 @@ containers:
     backup:
       pre: "pg_dump -U dune -Fc dune > /var/lib/postgresql/data/ygg-backup-dune.dump"
       post: "rm -f /var/lib/postgresql/data/ygg-backup-dune.dump"
+    # Yggdrasil's built-in database tool signs in with this, through the
+    # node's agent, giving the server a Database tab with no admin add-on and
+    # no published database port. The dune role is the stock entrypoint's
+    # one role and already a superuser (see above). Replaces the CloudBeaver
+    # add-on this seed shipped until 0.4.0. Not yet run against a real
+    # provision of this seed.
+    database:
+      engine: postgres
+      user: dune
+      password: "{{.Vars.db_password}}"
+      name: dune
 
   - role: admin-rmq
     name: Admin RabbitMQ
@@ -475,33 +486,6 @@ containers:
       - { name: arrakeen-igw, protocol: udp, default: 7890, kind: other }
 
   # --- Operator UI addons --------------------------------------------------
-
-  - role: dbadmin
-    name: Database Admin
-    description: >-
-      CloudBeaver, a web SQL client. This catalog's standard database
-      interface across every seed that bundles one, not Dune-specific --
-      chosen precisely because it is not tied to one database engine.
-    optional: true
-    image: { ref: "dbeaver/cloudbeaver:latest" }
-    depends_on:
-      - { role: postgres, condition: healthy }
-    env:
-      # Skips CloudBeaver's own first-run setup wizard by provisioning its
-      # admin account directly -- the same shape FiveM's Adminer addon uses
-      # its own env var for, though CloudBeaver's own login form still needs
-      # to be filled in per session; no ui.login block yet below since its
-      # exact field names have not been read off a real running instance.
-      CB_ADMIN_NAME: dune
-      CB_ADMIN_PASSWORD: "{{.Vars.db_password}}"
-      CB_SERVER_NAME: "Dune Awakening"
-    volumes:
-      - { from: workspace, to: /opt/cloudbeaver/workspace }
-    ports:
-      - { name: dbadmin-web, protocol: tcp, default: 8978, kind: web }
-    ui:
-      tab: Database
-      port: dbadmin-web
 
   - role: director-panel
     name: Director

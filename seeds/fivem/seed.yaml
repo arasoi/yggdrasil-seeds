@@ -5,9 +5,9 @@ description: >
   FXServer, the dedicated-server runtime for FiveM (a GTA V multiplayer
   modification framework). Runs with txAdmin enabled for resource and
   server-config management; a bundled MariaDB gives ESX/QBCore-style
-  frameworks somewhere to store their data, with an optional Adminer tab
-  for managing it.
-version: "1.4.2"
+  frameworks somewhere to store their data, browsable from Yggdrasil's own
+  Database tab.
+version: "1.5.0"
 
 # Not on Steam and not GTA V's own art -- FiveM is a fan-made multiplayer
 # framework Rockstar does not publish, so using GTA V's key art here would
@@ -99,49 +99,17 @@ containers:
     backup:
       pre: "MYSQL_PWD={{shellquote .Vars.db_password}} mariadb-dump -u root --single-transaction fivem > /var/lib/mysql/ygg-backup-fivem.sql"
       post: "rm -f /var/lib/mysql/ygg-backup-fivem.sql"
-
-  - role: dbadmin
-    name: Database Admin
-    description: Adminer, a lightweight web UI for the bundled MariaDB database.
-    optional: true
-    # The official image: a single PHP file, no bundled static assets to
-    # break under a reverse proxy the way a heavier admin tool's own
-    # absolute asset paths would (docs/decisions.md's ADR-147, the operator
-    # UI's own addon-tab mechanism this is the first real seed to use).
-    image: adminer:4
-    depends_on:
-      - { role: db, condition: healthy }
-    env:
-      # Already Adminer's own default host, since its example usage assumes
-      # a container literally named "db" -- set explicitly anyway rather
-      # than relying on an upstream default matching this seed's own
-      # container name by coincidence.
-      ADMINER_DEFAULT_SERVER: db
-    ports:
-      # container_port is required here: Adminer's official standalone
-      # server always binds 8080 internally with no command flag or env var
-      # to change it, so the allocated host port cannot simply be published
-      # to itself the way an ordinary game port is (yggdrasil's own
-      # docs/decisions.md ADR-150 -- found live, the first real seed to need
-      # it, when this exact addon booted fine but refused every connection
-      # through the Database tab because nothing was listening on the
-      # number that had been published).
-      - { name: web, protocol: tcp, default: 8080, kind: web, container_port: 8080 }
-    # Auto-login (yggdrasil's own docs/decisions.md ADR-152): Adminer's
-    # official image has no plugin bundled that would read credentials from
-    # its own environment, so this fills and submits its real login form
-    # from the operator's own browser instead, with the exact values the
-    # database was created with -- no separate credential to remember or
-    # paste in.
-    ui:
-      tab: Database
-      port: web
-      login:
-        fields:
-          "auth[username]": fivem
-          "auth[password]": "{{.Vars.db_password}}"
-          "auth[db]": fivem
-          "auth[permanent]": "1"
+    # Yggdrasil's built-in database tool signs in with this, through the
+    # node's agent, so the server gets a Database tab with no admin add-on
+    # and no published database port. Root rather than the fivem user so
+    # every database on the server is visible, with the same generated
+    # password root was created with above. Replaces the Adminer add-on this
+    # seed shipped until 1.5.0.
+    database:
+      engine: mariadb
+      user: root
+      password: "{{.Vars.db_password}}"
+      name: fivem
 
   - role: game
     primary: true
@@ -295,15 +263,10 @@ backup:
 # from portal.cfx.re, the server boots clean.
 #
 # Confirmed on the real boot: no relocation errors (the symlink-preservation
-# fix this artifact needed, docs/decisions.md's ADR-148, holds), and the
-# dbadmin addon (Adminer) is reachable end to end through the Database tab
-# -- confirmed rendering its real login screen after two more yggd-side
-# fixes this same addon needed (ADR-150's container_port, for Adminer's own
-# fixed internal 8080; ADR-151, stripping the `X-Frame-Options: deny`
-# Adminer sends by default, which blocked the tab's own iframe from
-# rendering it at all). This seed's `ui.login` block (ADR-152) now
-# auto-submits that login form from the operator's own generated database
-# credentials.
+# fix this artifact needed holds). The Adminer add-on that boot also
+# confirmed is gone since 1.5.0, replaced by Yggdrasil's built-in database
+# tool (the `database:` block on the db container), which has not yet been
+# run against this seed's real MariaDB.
 #
 # A second real boot then found a second, larger bug -- not in this seed at
 # all, but in yggdrasil itself. The MariaDB sidecar crashed on every fresh
@@ -335,5 +298,9 @@ backup:
 #   - whether ready: {mode: port, port: txadmin} is actually the right
 #     signal, now that there is real boot output from inside a real pod to
 #     check it against
-#   - the dbadmin addon's auto-login (ui.login) itself, live, once the pod
-#     actually reaches a running state
+#   - the built-in Database tab against this seed's real MariaDB
+#   - txAdmin's web panel: its port is a web port, so Yggdrasil publishes it
+#     on the node's loopback only and it is not reachable from the network.
+#     It needs serving at the root of a host, which Yggdrasil's add-on
+#     proxy does not do yet; until it does, reach it over an SSH tunnel to
+#     the node's loopback

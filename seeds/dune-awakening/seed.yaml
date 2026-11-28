@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.2"
+version: "0.4.3"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -395,6 +395,13 @@ containers:
     # directly anyway: game is the service actually writing player data, and
     # a reader should not have to trace three hops of transitivity to see
     # that it needs a migrated schema before it starts.
+    # The launcher is the image's own /home/dune/run.sh (its default command
+    # since build 2181988, which dropped ./run_server.sh). It sets up the
+    # UserSettings directory, drops to the dune user (Unreal refuses to run
+    # as root) and binds IGW to $POD_IP, which Funcom's Kubernetes packaging
+    # sets and nothing here does -- so sh -c sets it to this container's own
+    # address on the pod network first. Every flag below reaches run.sh as
+    # its own argument, unchanged ("$@"), the same three containers alike.
     # Every flag here is confirmed from a real community Docker Compose
     # project's own service definition for its "Survival_1" partition --
     # not yet seen in this seed's own boot output, since it has never
@@ -402,7 +409,7 @@ containers:
     # instance rather than the Overmap or a named social hub -- see the
     # optional map-slot containers below for those.
     command: >-
-      ./run_server.sh
+      sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
@@ -451,7 +458,7 @@ containers:
     depends_on:
       - { role: game, condition: started }
     command: >-
-      ./run_server.sh
+      sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
@@ -481,7 +488,7 @@ containers:
     depends_on:
       - { role: game, condition: started }
     command: >-
-      ./run_server.sh
+      sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail

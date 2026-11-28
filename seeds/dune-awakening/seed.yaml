@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.1"
+version: "0.4.2"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -266,8 +266,19 @@ containers:
     # is confirmed to be the stock official image, which makes POSTGRES_USER
     # (dune) the one and only superuser it ever creates, so project and admin
     # credentials are the same role here.
+    #
+    # --postgres-installation /usr: even against a remote database the tool
+    # requires a local PostgreSQL "installation" for its client binaries,
+    # found at <dir>/bin, and when it finds none it tries to unpack Funcom's
+    # bundled one -- which exists only for Windows (KeyError: 'linux', seen
+    # live on build 2181988). The image ships psql at /usr/bin/psql, so /usr
+    # is that installation. --no-backup: the image has no pg_dump, so the
+    # tool's own pre-update dump would fail; the backup hook on the postgres
+    # container above is what backs this database up.
     command: >-
       updatedb.py --unattended
+      --postgres-installation /usr
+      --no-backup
       --host postgres:5432
       --project-database {{shellquote .Vars.db_name}}
       --project-user dune

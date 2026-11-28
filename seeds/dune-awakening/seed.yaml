@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.4"
+version: "0.4.5"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -405,6 +405,12 @@ containers:
     # directly anyway: game is the service actually writing player data, and
     # a reader should not have to trace three hops of transitivity to see
     # that it needs a migrated schema before it starts.
+    # The map path comes first. Unreal takes the first argument without a
+    # leading dash as the map URL, and the RabbitMQ flags below are written
+    # "--Name value", leaving the bare value (game-rmq) ahead of anything
+    # later: build 2181988 tried to enter "game-rmq" as its map and crashed.
+    # Survival_1's path is the one the server named itself as its default in
+    # that same boot log.
     # The launcher is the image's own /home/dune/run.sh (its default command
     # since build 2181988, which dropped ./run_server.sh). It sets up the
     # UserSettings directory, drops to the dune user (Unreal refuses to run
@@ -420,6 +426,7 @@ containers:
     # optional map-slot containers below for those.
     command: >-
       sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
+      /Game/Dune/Maps/Arrakis/SOC_1/Survival_1
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
@@ -470,6 +477,7 @@ containers:
       - { role: game, condition: started }
     command: >-
       sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
+      /Game/Dune/Systems/Overmap/Overmap.Overmap
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
@@ -484,7 +492,6 @@ containers:
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
-      /Game/Dune/Systems/Overmap/Overmap.Overmap
       -PartitionIndex=2
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
@@ -501,6 +508,7 @@ containers:
       - { role: game, condition: started }
     command: >-
       sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
+      /Game/Dune/Maps/SocialHubs/Arrakeen/SH_Arrakeen.SH_Arrakeen
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
@@ -515,7 +523,6 @@ containers:
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
-      /Game/Dune/Maps/SocialHubs/Arrakeen/SH_Arrakeen.SH_Arrakeen
       -PartitionIndex=3
     env:
       WORLD_NAME: "{{.Vars.world_name}}"

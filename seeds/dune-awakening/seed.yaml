@@ -11,7 +11,7 @@ description: >
   one container. Built to match Funcom's own setup (scripts/setup in the
   depot), which runs the same images under Kubernetes operators; see the
   block comment above `containers:`.
-version: "0.6.1"
+version: "0.6.2"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -442,12 +442,17 @@ containers:
       DuneDatabaseInterfacePSQL_DatabaseName: "{{.Vars.db_name}}"
       # Without these the router crashed at start, in
       # DatabaseConnectionInfo.GetPortFromAddress: the address normally comes
-      # from Funcom's operator, and the fallback is this section.
+      # from Funcom's operator, and the fallback is this section. With only
+      # Database__database it fell back to the version-named database
+      # (dune_sb_1_5_20_0), so the name is given in the same three spellings
+      # the director's is; the director connects to it with these.
       Database__address: postgres
       Database__port: "5432"
       Database__user: dune
       Database__password: "{{.Vars.db_password}}"
       Database__database: "{{.Vars.db_name}}"
+      Database__dbname: "{{.Vars.db_name}}"
+      Database__name: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'

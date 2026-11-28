@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.5"
+version: "0.5.0"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -310,7 +310,7 @@ containers:
       FuncomLiveServices__RmqTlsEnabled: "true"
       FuncomLiveServices__BattlegroupAuthorizationPreset: BattlegroupInternal
       FuncomLiveServices__DefaultFlsEnvironment: retail
-      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       gateway_farm_api_key: "{{.Vars.fls_token}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -348,8 +348,9 @@ containers:
       Database__dbname: "{{.Vars.db_name}}"
       Database__name: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
-      BATTLEGROUP_DISPLAY_NAME: "{{.Vars.world_unique_name}}"
-      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
       FuncomLiveServices__RmqTlsEnabled: "true"
@@ -375,8 +376,8 @@ containers:
       DuneDatabaseInterfacePSQL_DatabasePassword: "{{.Vars.db_password}}"
       DuneDatabaseInterfacePSQL_DatabaseName: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
-      BATTLEGROUP_DISPLAY_NAME: "{{.Vars.world_unique_name}}"
-      OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
+      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       BATTLEGROUP_REGION_NAME: "{{.Vars.region}}"
       BATTLEGROUP_LANGUAGE: en-US
@@ -430,7 +431,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -481,7 +482,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -512,7 +513,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote .Vars.world_unique_name}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -577,20 +578,33 @@ variables:
     default: World
     editable: true
 
-  - name: world_unique_name
-    label: Unique server name
+  - name: battlegroup_id
+    label: Battlegroup ID (override)
     description: >-
-      Registered with Funcom Live Services and must be unique across every
-      self-hosted Dune Awakening server, not just this fleet's own. Exact
-      naming rules not yet confirmed.
-    required: true
+      Leave blank. Funcom Live Services lets a self-host token manage only the
+      battlegroup named sh-<HostId>-<suffix>, where the HostId is read from the
+      token itself; this server derives it, as Funcom's own setup script does,
+      with a suffix taken from the server's id. Set this only to keep the
+      identity of a battlegroup registered elsewhere (an AMP or Funcom-script
+      install), in that exact form.
+    default: ""
     editable: true
 
   - name: region
     label: Region
-    description: Passed as -FarmRegion. Exact accepted values not yet confirmed.
-    default: "us-east"
+    description: >-
+      The region Funcom Live Services lists this battlegroup under, passed as
+      -FarmRegion and BATTLEGROUP_REGION_NAME. One of the five regions Funcom's
+      own setup script offers.
+    type: select
+    default: North America
     editable: true
+    options:
+      - { value: North America, label: North America }
+      - { value: South America, label: South America }
+      - { value: Europe, label: Europe }
+      - { value: Asia, label: Asia }
+      - { value: Oceania, label: Oceania }
 
   - name: datacenter_id
     label: Datacenter ID

@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (8)
+
+- **dune-awakening 0.6.1**: rebuilding from 0.5.0 or 0.6.0 reuses the server's game files instead of downloading them again; the Director panel add-on starts from wherever its program was unpacked.
+
 ## 2026-11-28 (7)
 
 - **dune-awakening 0.6.0**: built to match Funcom's own setup scripts. The battlegroup ID's suffix is six letters (Funcom refuses a digit); a new step fills the world partitions from Funcom's template, so the map servers stop looping on "no partition definition"; the game broker serves TLS and both brokers authenticate through the text router, which no longer crashes at start; the director gets Funcom's director.ini; the gateway tells players where the game broker is; the map servers listen on their allocated ports; the Director panel add-on can find its program. Needs yggd 0.85.0.

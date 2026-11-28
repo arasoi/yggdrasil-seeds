@@ -11,7 +11,7 @@ description: >
   one container. Built to match Funcom's own setup (scripts/setup in the
   depot), which runs the same images under Kubernetes operators; see the
   block comment above `containers:`.
-version: "0.6.0"
+version: "0.6.1"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -96,7 +96,6 @@ install:
     - op: extract
       from: dune-admin.tar.gz
       archive: targz
-      into: dune-admin
       strip_components: 0
 
 server:
@@ -641,14 +640,19 @@ containers:
     # The panel's binary is in the install, which only the primary used to
     # mount; this is the exit 127 every earlier version of this seed hit.
     mount_install: true
-    workdir: /game/dune-admin
+    # Run from wherever the archive put the binary: a dune-admin directory,
+    # or /game/dune-admin itself. The install block is left exactly as 0.5.0
+    # had it, so changing this needs no new download of the game files.
+    workdir: /game
     # -setup normally runs interactively on first install; this addon has
     # no way to run that wizard, so its config has to be supplied entirely
     # through environment variables (the "docker" provider mode's own
     # supported path) rather than the generated config.yaml a real install
     # would produce. Confirmed field names from the tool's own published
     # documentation, not yet from a real boot.
-    command: "./dune-admin"
+    command: >-
+      sh -c 'if [ -d /game/dune-admin ]; then cd /game/dune-admin; fi; exec ./dune-admin'
+
     env:
       CONTROL: docker
       DB_HOST: postgres

@@ -8,10 +8,10 @@ description: >
   director, chat routing, PostgreSQL and two RabbitMQ brokers) ships as
   Funcom's own pre-built container image inside the SteamCMD-downloaded
   self-host package, rather than as raw game files this seed installs into
-  one container. See the block comment above `containers:` below for how
-  those images actually reach a node -- confirmed live and no longer this
-  seed's blocker, though the seed itself has still never been provisioned.
-version: "0.5.0"
+  one container. Built to match Funcom's own setup (scripts/setup in the
+  depot), which runs the same images under Kubernetes operators; see the
+  block comment above `containers:`.
+version: "0.6.0"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -96,6 +96,7 @@ install:
     - op: extract
       from: dune-admin.tar.gz
       archive: targz
+      into: dune-admin
       strip_components: 0
 
 server:
@@ -107,49 +108,34 @@ server:
     - { from: saved, to: /home/dune/server/DuneSandbox/Saved }
 
 # ---------------------------------------------------------------------------
-# HOW THESE IMAGES ACTUALLY REACH A NODE -- RESOLVED, CONFIRMED LIVE
+# HOW THIS SEED MIRRORS FUNCOM'S OWN SETUP
 #
-# A real community Docker Compose deployment (snapetech/DuneAwakeningSelfHost)
-# showed every core service below referencing an image under Funcom's own
-# private registry, e.g. registry.funcom.com/funcom/self-hosting/seabass-
-# server:${DUNE_IMAGE_TAG}. registry.funcom.com does not resolve in public
-# DNS at all -- confirmed directly, not inferred -- so these were never meant
-# to be pulled from anywhere at runtime. The theory was that the SteamCMD
-# package bundles real `docker save` tarballs for each one, meant to be
-# `docker load`-ed locally rather than pulled.
+# The depot (app 4754530) ships every service as a `docker save` tarball under
+# images/, loaded by the load_image steps above, plus Funcom's own setup under
+# scripts/. Funcom's setup.sh installs k3s and four Kubernetes operators;
+# scripts/setup/world.sh then fills scripts/setup/templates/world-template.yaml
+# (a BattleGroup resource) and the operators turn it into these containers.
+# Yggdrasil runs the containers itself, so this seed does what the template
+# and the operators do:
 #
-# That theory is now proven, not just plausible. Pulling this seed's own app
-# id (4754530) with SteamCMD produced real files under images/ --
-# images/battlegroup/{server,server-gateway,server-rabbitmq,server-text-
-# router,server-bg-director,server-db-utils}.tar and
-# images/prerequisites/igw-postgres.tar -- and `podman load -i` on each of
-# the seven loaded cleanly and reported real, working image names, matching
-# the registry.funcom.com refs above exactly (igw-postgres's already-pinned
-# tag matched precisely) and resolving every build tag to one shared value:
-# 2064155-0-shipping (a Perforce changelist plus an Unreal build-config
-# suffix, coherent across every battlegroup service). The six
-# images/operators/*.tar and six images/prerequisites/*.tar beyond
-# igw-postgres are Funcom's own official k3s-based packaging, confirmed
-# unnecessary for this path -- both the community deployment and CubeCoders
-# AMP run the battlegroup services directly under plain Docker Compose, no
-# Kubernetes involved.
+#   - battlegroup name: world.sh's sh-<token HostId, lowercase>-<6 random a-z>.
+#     Derived here from the token, the suffix from the server id mapped onto
+#     letters; FLS refuses a suffix with a digit (seen live).
+#   - region: world.sh offers Asia, Europe, North America, Oceania, South
+#     America; it goes to -FarmRegion and BATTLEGROUP_REGION_NAME.
+#   - world partitions: the template's worldPartitions list, which Funcom's
+#     database operator writes into world_partition. The partitions container
+#     reads it from the installed template on every start.
+#   - message queues: the template's admin and game MessageQueue configs, the
+#     game one TLS only, both authenticating logins against the text router.
+#   - director.ini: copied from the template; the partitions step warns in
+#     its log when Funcom's copy changes.
+#   - the authorization preset BattlegroupInternal on every service, and the
+#     gateway's public broker address (the operator's "Public" queue mode).
 #
-# yggdrasil itself had the two real gaps this seed's install steps needed
-# (ADR-155, merged): no op to load a tarball into the local image store, and
-# no way for a container's `image:` to reference one without an attempted
-# pull. Both now exist -- `op: load_image` below, and `loaded: true` on
-# every container that consumes one -- proven end to end in yggdrasil's own
-# conformance suite against a real Docker daemon, not merely designed.
-#
-# images/battlegroup/server-db-utils.tar is now understood and wired in
-# below as db-init: pulled apart and read directly, it is Funcom's own
-# PostgreSQL schema tool (initdb/startdb/updatedb, ~90 real .sql files that
-# are this game's actual schema), confirmed idempotent by its own
-# docstrings -- exactly the shape yggdrasil's ADR-156 (once: true, a
-# completed dependency condition) exists for. What is still open: none of
-# this has been proven against a real provision of *this* seed --
-# `ygg-seed validate`/`lint` pass, but no pod has actually been built and
-# started from it.
+# Image tags are pinned to the build the depot shipped (images/battlegroup/
+# version.txt: 2181988). A depot update that changes them needs this seed's
+# refs moved with it, or provisioning fails with "not present locally".
 # ---------------------------------------------------------------------------
 
 containers:
@@ -206,8 +192,19 @@ containers:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       FuncomLiveServices__RmqTlsEnabled: "false"
+    # Funcom's MessageQueue config (configs/rabbitmq-*.conf, written by
+    # config.files below) is copied into the image's own conf.d as root
+    # before the image's entrypoint drops to the rabbitmq user: the agent
+    # writes the file readable by root alone. sh as the first word keeps
+    # docker-entrypoint.sh from dropping privileges until the exec.
+    command: >-
+      sh -c 'cp /ygg/ygg.conf /etc/rabbitmq/conf.d/90-ygg.conf &&
+      cp /ygg/enabled_plugins /etc/rabbitmq/enabled_plugins &&
+      chmod 644 /etc/rabbitmq/conf.d/90-ygg.conf /etc/rabbitmq/enabled_plugins &&
+      exec docker-entrypoint.sh rabbitmq-server'
     volumes:
       - { from: data, to: /var/lib/rabbitmq }
+      - { from: ygg, to: /ygg }
     healthcheck:
       command: "rabbitmq-diagnostics -q check_running"
       interval: 10s
@@ -221,8 +218,19 @@ containers:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       FuncomLiveServices__RmqTlsEnabled: "true"
+    # Funcom's MessageQueue config (configs/rabbitmq-*.conf, written by
+    # config.files below) is copied into the image's own conf.d as root
+    # before the image's entrypoint drops to the rabbitmq user: the agent
+    # writes the file readable by root alone. sh as the first word keeps
+    # docker-entrypoint.sh from dropping privileges until the exec.
+    command: >-
+      sh -c 'cp /ygg/ygg.conf /etc/rabbitmq/conf.d/90-ygg.conf &&
+      cp /ygg/enabled_plugins /etc/rabbitmq/enabled_plugins &&
+      chmod 644 /etc/rabbitmq/conf.d/90-ygg.conf /etc/rabbitmq/enabled_plugins &&
+      exec docker-entrypoint.sh rabbitmq-server'
     volumes:
       - { from: data, to: /var/lib/rabbitmq }
+      - { from: ygg, to: /ygg }
     healthcheck:
       command: "rabbitmq-diagnostics -q check_running"
       interval: 10s
@@ -234,8 +242,11 @@ containers:
       # all: a reference deployment binds it to loopback only, and this
       # platform has no equivalent of a loopback-only allocation -- every
       # allocated port is reachable, so the safer default is not to publish
-      # an admin surface nothing here needs.
-      - { name: rmq-client, protocol: tcp, default: 31982, kind: other }
+      # an admin surface nothing here needs. The broker always listens on
+      # 5672 inside (TLS only, see configs/rabbitmq-game.conf), so the
+      # allocated port is published to that; the gateway hands players the
+      # allocated number.
+      - { name: rmq-client, protocol: tcp, default: 31982, kind: other, container_port: 5672 }
 
   # --- Database schema bootstrap -------------------------------------------
 
@@ -287,6 +298,35 @@ containers:
       --admin-password {{shellquote .Vars.db_password}}
       --admin-database {{shellquote .Vars.db_name}}
 
+  - role: partitions
+    name: World partitions
+    description: >-
+      Fills the world_partition table from the worldPartitions list in
+      Funcom's own scripts/setup/templates/world-template.yaml, which Funcom's
+      database operator does in its Kubernetes setup. A map server with no
+      partition row loops on "no partition definition". Reads the template
+      from the install on every start, so a Funcom update that adds a
+      partition needs no seed change; only inserts what is missing. Also
+      warns in its log when Funcom's director.ini has changed from the copy
+      this seed ships.
+    once: true
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:2181988-0-shipping", loaded: true }
+    mount_install: true
+    depends_on:
+      - { role: db-init, condition: completed }
+    # The image's entrypoint is python; this is its argument.
+    command: /ygg/sync_partitions.py
+    env:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: dune
+      PGPASSWORD: "{{.Vars.db_password}}"
+      PGDATABASE: "{{.Vars.db_name}}"
+      DUNE_WORLD_TEMPLATE: /game/scripts/setup/templates/world-template.yaml
+      DUNE_SEED_DIRECTOR_INI: /ygg/director.ini
+    volumes:
+      - { from: ygg, to: /ygg }
+
   # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
 
   - role: gateway
@@ -295,11 +335,24 @@ containers:
       - { role: postgres, condition: healthy }
       - { role: game-rmq, condition: healthy }
       - { role: db-init, condition: completed }
+      # Logins to either broker are checked by the text router (see
+      # configs/rabbitmq-*.conf).
+      - { role: text-router, condition: started }
     # A reference deployment starts this with a hardcoded `sleep 30` before
     # execing the real process, presumably because plain Docker Compose
     # depends_on there does not wait for health. This platform's own
     # condition: healthy above should make that unnecessary -- flagged as
     # something to confirm live, not assumed away.
+    #
+    # The image's own command, plus what Funcom's operator appends for a
+    # message queue in Public mode: where players' clients reach the game
+    # broker. Without it the gateway has no broker address to hand out.
+    command: >-
+      python -m service -c /Tools/Battlegroups/GatewayService/service/configs/service.conf
+      {{if .NodeAddress}}--RMQGameHostname {{.NodeAddress}} --RMQGamePort {{index .Ports "rmq-client"}}{{end}}
+    volumes:
+      # configs/gateway.ini, written by config.files below.
+      - { from: conf, to: /etc/app/conf.d }
     env:
       DuneDatabaseInterfacePSQL_DatabaseHost: postgres
       DuneDatabaseInterfacePSQL_DatabasePort: "5432"
@@ -310,7 +363,8 @@ containers:
       FuncomLiveServices__RmqTlsEnabled: "true"
       FuncomLiveServices__BattlegroupAuthorizationPreset: BattlegroupInternal
       FuncomLiveServices__DefaultFlsEnvironment: retail
-      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       gateway_farm_api_key: "{{.Vars.fls_token}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -324,6 +378,8 @@ containers:
       - { role: admin-rmq, condition: healthy }
       - { role: game-rmq, condition: healthy }
       - { role: db-init, condition: completed }
+      - { role: partitions, condition: completed }
+      - { role: text-router, condition: started }
     # A reference deployment's own comment records that Director currently
     # terminates on a malformed login envelope rather than rejecting it --
     # an upstream Funcom bug, not this seed's doing. This platform's own
@@ -332,6 +388,15 @@ containers:
     command: >-
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+    volumes:
+      # Funcom's own director.ini (configs/director.ini, written by
+      # config.files below), where Funcom's operator mounts it. It sets the
+      # BattlegroupInternal authorization preset every Funcom service runs
+      # with, the instancing modes and the per-map server limits. The image
+      # keeps ./Director as its entrypoint, so the file cannot be extracted
+      # from the template at start; the partitions step warns when Funcom's
+      # copy changes.
+      - { from: conf, to: /etc/app/conf.d }
     env:
       Database__address: postgres
       Database__port: "5432"
@@ -348,12 +413,13 @@ containers:
       Database__dbname: "{{.Vars.db_name}}"
       Database__name: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
-      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
-      BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
-      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
       FuncomLiveServices__RmqTlsEnabled: "true"
+      FuncomLiveServices__BattlegroupAuthorizationPreset: BattlegroupInternal
       FuncomLiveServices__DefaultFlsEnvironment: retail
       BATTLEGROUP_REGION_NAME: "{{.Vars.region}}"
       HOST_DATACENTER_ID: "{{.Vars.datacenter_id}}"
@@ -375,14 +441,24 @@ containers:
       DuneDatabaseInterfacePSQL_DatabaseUser: dune
       DuneDatabaseInterfacePSQL_DatabasePassword: "{{.Vars.db_password}}"
       DuneDatabaseInterfacePSQL_DatabaseName: "{{.Vars.db_name}}"
+      # Without these the router crashed at start, in
+      # DatabaseConnectionInfo.GetPortFromAddress: the address normally comes
+      # from Funcom's operator, and the fallback is this section.
+      Database__address: postgres
+      Database__port: "5432"
+      Database__user: dune
+      Database__password: "{{.Vars.db_password}}"
+      Database__database: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
-      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
-      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6))}}'
+      BATTLEGROUP: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP_DISPLAY_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      OPT_SERVERNAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       OPT_DISPLAY_NAME: "{{.Vars.world_name}}"
       BATTLEGROUP_REGION_NAME: "{{.Vars.region}}"
       BATTLEGROUP_LANGUAGE: en-US
       FuncomLiveServices__ServiceAuthToken: "{{.Vars.fls_token}}"
       FuncomLiveServices__RmqTlsEnabled: "true"
+      FuncomLiveServices__BattlegroupAuthorizationPreset: BattlegroupInternal
       FuncomLiveServices__DefaultFlsEnvironment: retail
       HOST_DATACENTER_ID: "{{.Vars.datacenter_id}}"
       HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
@@ -397,6 +473,7 @@ containers:
       - { role: admin-rmq, condition: healthy }
       - { role: game-rmq, condition: healthy }
       - { role: db-init, condition: completed }
+      - { role: partitions, condition: completed }
       - { role: director, condition: started }
       - { role: gateway, condition: started }
       - { role: text-router, condition: started }
@@ -431,7 +508,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6))))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -442,9 +519,15 @@ containers:
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      -Port={{.Ports.game}} -IGWPort={{index .Ports "game-igw"}}
+      -MultiHome=$POD_IP
       -PartitionIndex=1
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # What Funcom's server operator sets on every map server.
+      BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP_TITLE: "{{.Vars.world_name}}"
     ports:
       - { name: game, protocol: udp, default: 7777, kind: game }
       # A second UDP channel published alongside the main game port on every
@@ -482,7 +565,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6))))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -493,9 +576,15 @@ containers:
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      -Port={{index .Ports "overmap-port"}} -IGWPort={{index .Ports "overmap-igw"}}
+      -MultiHome=$POD_IP
       -PartitionIndex=2
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # What Funcom's server operator sets on every map server.
+      BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP_TITLE: "{{.Vars.world_name}}"
     ports:
       - { name: overmap-port, protocol: udp, default: 7778, kind: other }
       - { name: overmap-igw, protocol: udp, default: 7889, kind: other }
@@ -513,7 +602,7 @@ containers:
       -FarmRegion={{shellquote .Vars.region}}
       -ini:engine:[FuncomLiveServices]:ServiceAuthToken={{shellquote .Vars.fls_token}}
       -ini:engine:[FuncomLiveServices]:DefaultFlsEnvironment=retail
-      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (slice .ServerID 0 6)))}}
+      -ini:engine:[OnlineSubsystem]:ServerName={{shellquote (or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6))))}}
       -ini:engine:[ConsoleVariables]:Bgd.ServerLoginPassword={{shellquote .Vars.server_login_password}}
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
@@ -524,9 +613,15 @@ containers:
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
       --RMQGameHostname game-rmq --RMQGamePort 5672
       --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      -Port={{index .Ports "arrakeen-port"}} -IGWPort={{index .Ports "arrakeen-igw"}}
+      -MultiHome=$POD_IP
       -PartitionIndex=3
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # What Funcom's server operator sets on every map server.
+      BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
+      BATTLEGROUP_TITLE: "{{.Vars.world_name}}"
     ports:
       - { name: arrakeen-port, protocol: udp, default: 7779, kind: other }
       - { name: arrakeen-igw, protocol: udp, default: 7890, kind: other }
@@ -543,6 +638,9 @@ containers:
       talks to it and to the database/brokers directly.
     optional: true
     image: { base: linux }
+    # The panel's binary is in the install, which only the primary used to
+    # mount; this is the exit 127 every earlier version of this seed hit.
+    mount_install: true
     workdir: /game/dune-admin
     # -setup normally runs interactively on first install; this addon has
     # no way to run that wizard, so its config has to be supplied entirely
@@ -582,9 +680,10 @@ variables:
     label: Battlegroup ID (override)
     description: >-
       Leave blank. Funcom Live Services lets a self-host token manage only the
-      battlegroup named sh-<HostId>-<suffix>, where the HostId is read from the
-      token itself; this server derives it, as Funcom's own setup script does,
-      with a suffix taken from the server's id. Set this only to keep the
+      battlegroup named sh-<HostId>-<six lowercase letters>, where the HostId
+      is read from the token itself; this server derives it, as Funcom's own
+      setup script does, with the letters taken from the server's id. A digit
+      in the suffix is refused. Set this only to keep the
       identity of a battlegroup registered elsewhere (an AMP or Funcom-script
       install), in that exact form.
     default: ""
@@ -665,6 +764,20 @@ variables:
 # what a variable is for -- nothing found yet is genuinely single-file,
 # single-key game configuration in the way settings: exists to express.
 
+# Files Funcom's Kubernetes operators would otherwise have mounted into each
+# service. Sidecar volumes live under the server's own directory at
+# volumes/<role>/<from>, which is where these are written.
+config:
+  files:
+    - { path: volumes/admin-rmq/ygg/ygg.conf, source_path: configs/rabbitmq-admin.conf, manage: always }
+    - { path: volumes/admin-rmq/ygg/enabled_plugins, source_path: configs/rabbitmq-enabled-plugins, manage: always }
+    - { path: volumes/game-rmq/ygg/ygg.conf, source_path: configs/rabbitmq-game.conf, manage: always }
+    - { path: volumes/game-rmq/ygg/enabled_plugins, source_path: configs/rabbitmq-enabled-plugins, manage: always }
+    - { path: volumes/director/conf/director.ini, source_path: configs/director.ini, manage: always }
+    - { path: volumes/gateway/conf/gateway.ini, source_path: configs/gateway.ini, manage: always }
+    - { path: volumes/partitions/ygg/sync_partitions.py, source_path: configs/sync_partitions.py, manage: always }
+    - { path: volumes/partitions/ygg/director.ini, source_path: configs/director.ini, manage: always }
+
 stop:
   # Confirmed from real deployment: SIGTERM with a long timeout, not a
   # console command -- no evidence this game accepts one over stdin.
@@ -683,53 +796,21 @@ backup:
   include: [saved]
 
 # ---------------------------------------------------------------------------
-# What has actually been checked, and what has not
+# What has been seen working, and what has not
 #
-# Checked against real, independently-published sources (a real community
-# Docker Compose file, CubeCoders AMP's own template and support forum, and
-# the dune-admin tool's own documentation), cross-referenced across at least
-# two of them wherever stated as confirmed above:
-#   - the service topology (postgres, two RabbitMQ brokers, gateway,
-#     director, text-router, the playable map itself)
-#   - every container's real command-line flags and environment variables
-#   - real port numbers (7777 game, 7888 IGW, 31982 RabbitMQ client)
-#   - the database is PostgreSQL only, "dune" as the ordinary username
-#   - the actual game binary runs natively on Linux, no Proton/VM
+# Seen live on a real node (0.5.x and 0.6.0's own tests):
+#   - every image loads from the depot and the pod provisions
+#   - db-init applies Funcom's schema; the partitions step fills all 35
+#     partitions from the template and adds none on a second run (tested
+#     against Funcom's real db-utils and postgres images)
+#   - the game broker's TLS listener on 5672 and its auth plugins (tested
+#     against Funcom's real RabbitMQ image)
+#   - FLS accepts the director for sh-<HostId>-<six letters> and refuses a
+#     suffix with a digit
 #
-# Checked live and confirmed since the previous version of this seed:
-#   - the SteamCMD package genuinely contains real docker-save tarballs
-#     under images/, at the exact paths every load_image step above names
-#   - every container image tag, by loading each tarball for real and
-#     reading back what the daemon reported -- 2064155-0-shipping shared
-#     across every battlegroup service, igw-postgres's own tag confirmed
-#     an exact match to what was already declared
-#   - what images/battlegroup/server-db-utils.tar is for: pulled the real
-#     tool out of the loaded image and read its source directly rather than
-#     inferring from behaviour. It is Funcom's own PostgreSQL schema CLI
-#     (initdb/startdb/updatedb, ~90 real .sql files), genuinely idempotent
-#     by its own docstrings, and now wired in as db-init (once: true,
-#     yggdrasil ADR-156) gating gateway/director/text-router/game on
-#     depends_on's completed condition
-#   - igw-postgres is the stock, unmodified official PostgreSQL Docker
-#     image (docker-entrypoint.sh, no custom /docker-entrypoint-initdb.d
-#     scripts) -- which is what let POSTGRES_SUPER_PASSWORD be resolved
-#     rather than left open: grepping the real image found no handling of
-#     it anywhere, so it was removed along with the db_super_password
-#     variable that generated it, and db-init's admin operations use the
-#     same "dune" role the project connection already does
-#   - this seed now validates and lints clean (`ygg-seed validate`,
-#     `ygg-seed lint`) against yggdrasil's own loader, which is the same
-#     one a control plane uses
-#
-# NOT checked -- real gaps, not just imperfections:
-#   - whether rmq-auth-shim is genuinely required infrastructure or a
-#     specific third party's own convenience script -- not declared as a
-#     container above pending that answer
-#   - this seed has never actually been provisioned. Validating and
-#     linting clean proves the document is well-formed, not that a real
-#     node can boot a pod from it -- that is the next real step, not this
-#     one. db-init's exact command-line invocation (updatedb.py --unattended
-#     with CLI-flag connection overrides) is confirmed correct by reading
-#     the tool's own source, not by watching it actually run against this
-#     seed's postgres container
+# Not yet seen: a player connecting; the map servers getting past partition
+# loading with the director initialised; the dune-admin panel's own config.
+# The director logs "Missing required environment variable for IGWO": IGWO is
+# Funcom's Kubernetes API, used to scale map servers, and community Docker
+# deployments run without it.
 # ---------------------------------------------------------------------------

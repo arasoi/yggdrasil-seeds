@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (10)
+
+- **dune-awakening 0.6.3**: the map servers connect to the message brokers (they were given the broker addresses in a form they ignore), so the sietch is published under the battlegroup in the in-game server browser.
+
 ## 2026-11-28 (9)
 
 - **dune-awakening 0.6.2**: the text router connects to the battlegroup's database instead of a version-named one that does not exist, so it starts and both message brokers accept logins.

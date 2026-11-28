@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (5)
+
+- **dune-awakening 0.4.5**: each map server is given its map first on the command line, so the game no longer mistakes the RabbitMQ host name for the map to load and crash.
+
 ## 2026-11-28 (4)
 
 - **dune-awakening 0.4.4**: the battlegroup director and the map servers are told the database's name, instead of the director looking for a version-named database that is never created.

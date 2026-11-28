@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (4)
+
+- **dune-awakening 0.4.4**: the battlegroup director and the map servers are told the database's name, instead of the director looking for a version-named database that is never created.
+
 ## 2026-11-28 (3)
 
 - **dune-awakening 0.4.3**: the map servers start through the image's own launcher (/home/dune/run.sh), which Funcom's current build uses in place of the removed run_server.sh, with the pod address it expects set first.

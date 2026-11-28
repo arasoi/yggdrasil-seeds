@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.3"
+version: "0.4.4"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -337,6 +337,16 @@ containers:
       Database__port: "5432"
       Database__user: dune
       Database__password: "{{.Vars.db_password}}"
+      # The database's name. director_config.ini's [Database] declares no
+      # key for it: the name normally comes from Funcom's Kubernetes operator
+      # (IGWO), and without one the director falls back to a version-derived
+      # name (dune_sb_1_5_20_0 on build 2181988) that db-init never creates.
+      # The key the fallback reads is not visible from outside the assemblies,
+      # so the three spellings it could be are all set; the others are
+      # ignored. Unverified until the director is seen connecting.
+      Database__database: "{{.Vars.db_name}}"
+      Database__dbname: "{{.Vars.db_name}}"
+      Database__name: "{{.Vars.db_name}}"
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       BATTLEGROUP_DISPLAY_NAME: "{{.Vars.world_unique_name}}"
       OPT_SERVERNAME: "{{.Vars.world_unique_name}}"
@@ -418,6 +428,7 @@ containers:
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseName={{shellquote .Vars.db_name}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
@@ -467,6 +478,7 @@ containers:
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseName={{shellquote .Vars.db_name}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
@@ -497,6 +509,7 @@ containers:
       -ini:engine:[OnlineSubsystem]:DatacenterId={{shellquote .Vars.datacenter_id}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseHost=postgres:5432
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseUser=dune
+      -ini:game:[DuneDatabaseInterfacePSQL]:DatabaseName={{shellquote .Vars.db_name}}
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}

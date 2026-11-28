@@ -11,7 +11,7 @@ description: >
   one container. Built to match Funcom's own setup (scripts/setup in the
   depot), which runs the same images under Kubernetes operators; see the
   block comment above `containers:`.
-version: "0.6.2"
+version: "0.6.3"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -506,6 +506,11 @@ containers:
     # booted. PartitionIndex=1 is what makes this the primary survival
     # instance rather than the Overmap or a named social hub -- see the
     # optional map-slot containers below for those.
+    # The broker arguments are --Name=value: the map server's Unreal command
+    # line parser reads only that form. With "--RMQGameHostname game-rmq" its
+    # battlegroup-director subsystem logged "RMQ config hostname is empty",
+    # never reported its state, and the battlegroup listed no sietch. The
+    # director and text router (.NET) take either form.
     command: >-
       sh -c 'POD_IP="$(hostname -i 2>/dev/null | cut -d" " -f1)"; export POD_IP; exec /home/dune/run.sh "$@"' run.sh
       /Game/Dune/Maps/Arrakis/SOC_1/Survival_1
@@ -521,13 +526,16 @@ containers:
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
-      --RMQGameHostname game-rmq --RMQGamePort 5672
-      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      --RMQGameHostname=game-rmq --RMQGamePort=5672
+      --RMQAdminHostname=admin-rmq --RMQAdminPort=5672
       -Port={{.Ports.game}} -IGWPort={{index .Ports "game-igw"}}
       -MultiHome=$POD_IP
       -PartitionIndex=1
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # Funcom's template gives every service this secret (rmq-game-secret);
+      # the map servers need it to log in to the brokers.
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       # What Funcom's server operator sets on every map server.
       BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
@@ -578,13 +586,16 @@ containers:
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
-      --RMQGameHostname game-rmq --RMQGamePort 5672
-      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      --RMQGameHostname=game-rmq --RMQGamePort=5672
+      --RMQAdminHostname=admin-rmq --RMQAdminPort=5672
       -Port={{index .Ports "overmap-port"}} -IGWPort={{index .Ports "overmap-igw"}}
       -MultiHome=$POD_IP
       -PartitionIndex=2
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # Funcom's template gives every service this secret (rmq-game-secret);
+      # the map servers need it to log in to the brokers.
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       # What Funcom's server operator sets on every map server.
       BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
@@ -615,13 +626,16 @@ containers:
       -ini:game:[DuneDatabaseInterfacePSQL]:DatabasePassword={{shellquote .Vars.db_password}}
       -RMQGameTlsEnabled=true
       {{if .NodeAddress}}-ExternalAddress={{.NodeAddress}}{{end}}
-      --RMQGameHostname game-rmq --RMQGamePort 5672
-      --RMQAdminHostname admin-rmq --RMQAdminPort 5672
+      --RMQGameHostname=game-rmq --RMQGamePort=5672
+      --RMQAdminHostname=admin-rmq --RMQAdminPort=5672
       -Port={{index .Ports "arrakeen-port"}} -IGWPort={{index .Ports "arrakeen-igw"}}
       -MultiHome=$POD_IP
       -PartitionIndex=3
     env:
       WORLD_NAME: "{{.Vars.world_name}}"
+      # Funcom's template gives every service this secret (rmq-game-secret);
+      # the map servers need it to log in to the brokers.
+      RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
       # What Funcom's server operator sets on every map server.
       BATTLEGROUP_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'
       FARM_NAME: '{{or .Vars.battlegroup_id (printf "sh-%s-%s" (lower (jwtclaim .Vars.fls_token "HostId")) (tr "0123456789abcdef" "abcdefghijklmnop" (slice .ServerID 0 6)))}}'

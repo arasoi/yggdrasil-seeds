@@ -11,7 +11,7 @@ description: >
   one container. See the block comment above `containers:` below for how
   those images actually reach a node -- confirmed live and no longer this
   seed's blocker, though the seed itself has still never been provisioned.
-version: "0.4.0"
+version: "0.4.1"
 
 branding:
   # The base game's own Steam app id, for branding only -- distinct from the
@@ -53,6 +53,13 @@ install:
     # loaded once and shared by both admin-rmq and game-rmq -- loading is a
     # node-local image-store operation, not a per-container one, so a second
     # container referencing the same ref needs no second step.
+    # The battlegroup images' tag follows Funcom's build: Steam build
+    # 26591491 ships them as 2181988-0-shipping (read back with `docker
+    # images` on a node after a real install, 2026-11-28), where the build
+    # this seed was first written against shipped 2064155-0-shipping. A load
+    # step loads whatever tag the tarball carries, so when Funcom updates the
+    # depot, every `ref:` below must move with it or provisioning fails with
+    # "not present locally". igw-postgres keeps its own pinned tag.
     - op: load_image
       from: images/prerequisites/igw-postgres.tar
       name: "PostgreSQL image (igw-postgres)"
@@ -194,7 +201,7 @@ containers:
 
   - role: admin-rmq
     name: Admin RabbitMQ
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2181988-0-shipping", loaded: true }
     env:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -209,7 +216,7 @@ containers:
 
   - role: game-rmq
     name: Game RabbitMQ
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-rabbitmq:2181988-0-shipping", loaded: true }
     env:
       RMQ_AUTH_BACKEND_1: cache
       RMQ_HTTP_TOKEN_AUTH_SECRET: "{{.Vars.rmq_secret}}"
@@ -243,7 +250,7 @@ containers:
       genuinely idempotent, which is exactly what yggdrasil's Once
       (ADR-156) needs and asserts nothing beyond.
     once: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-db-utils:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
     # updatedb.py both initializes (delegates through database.ensure_
@@ -272,7 +279,7 @@ containers:
   # --- Battlegroup services: gateway, director, chat, RMQ auth ------------
 
   - role: gateway
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-gateway:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-gateway:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: game-rmq, condition: healthy }
@@ -300,7 +307,7 @@ containers:
       HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
 
   - role: director
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-bg-director:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -331,7 +338,7 @@ containers:
       HOST_DATACENTER_IP_ADDRESS: "{{.NodeAddress}}"
 
   - role: text-router
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-text-router:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server-text-router:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -362,7 +369,7 @@ containers:
 
   - role: game
     primary: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: postgres, condition: healthy }
       - { role: admin-rmq, condition: healthy }
@@ -429,7 +436,7 @@ containers:
       Whether a battlegroup actually needs this running for ordinary play,
       or only for cross-zone travel, is not yet confirmed.
     optional: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: game, condition: started }
     command: >-
@@ -459,7 +466,7 @@ containers:
     name: Arrakeen
     description: The Arrakeen social hub -- a fixed, named map zone rather than a repeated Survival dimension.
     optional: true
-    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2064155-0-shipping", loaded: true }
+    image: { ref: "registry.funcom.com/funcom/self-hosting/seabass-server:2181988-0-shipping", loaded: true }
     depends_on:
       - { role: game, condition: started }
     command: >-

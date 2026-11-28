@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28
+
+- **dune-awakening 0.4.1**: the battlegroup images are pinned to the tag Funcom's current depot ships (2181988-0-shipping). Servers installed from today's depot failed to start because the images loaded under that tag while the seed asked for the old one. Install the update, then rebuild the server.
+
 ## 2026-11-27 (3)
 
 - **fivem 1.6.0**: txAdmin gets a tab on the server's page, reached through Yggdrasil rather than the node's address. It needs yggdrasil 0.81.0 with a wildcard addon origin (`addon_public_url: https://*.<domain>`); without one the tab explains what to set up.

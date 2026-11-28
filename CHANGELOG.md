@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (9)
+
+- **dune-awakening 0.6.2**: the text router connects to the battlegroup's database instead of a version-named one that does not exist, so it starts and both message brokers accept logins.
+
 ## 2026-11-28 (8)
 
 - **dune-awakening 0.6.1**: rebuilding from 0.5.0 or 0.6.0 reuses the server's game files instead of downloading them again; the Director panel add-on starts from wherever its program was unpacked.

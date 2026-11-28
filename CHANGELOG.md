@@ -7,6 +7,10 @@ Add the entry in the same change that bumps a seed's `version:`. Heading format 
 `## <date>`; the publish workflow copies the three newest entries into the GitHub
 release notes.
 
+## 2026-11-28 (6)
+
+- **dune-awakening 0.5.0**: the battlegroup ID is derived from the Funcom token (`sh-<HostId>-<suffix>`, as Funcom's own setup does) instead of a typed "unique server name", which Funcom refused; Region is now one of Funcom's five named regions (an existing `us-east` becomes North America). Needs yggd 0.84.0.
+
 ## 2026-11-28 (5)
 
 - **dune-awakening 0.4.5**: each map server is given its map first on the command line, so the game no longer mistakes the RabbitMQ host name for the map to load and crash.
